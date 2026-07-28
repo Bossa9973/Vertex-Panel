@@ -1,0 +1,201 @@
+<?php
+
+namespace Convoy\Http\Controllers\Admin;
+
+use Convoy\Enums\Server\Status;
+use Convoy\Enums\Server\SuspensionAction;
+use Convoy\Exceptions\Repository\Proxmox\ProxmoxConnectionException;
+use Convoy\Http\Controllers\ApiController;
+use Convoy\Http\Requests\Admin\Servers\Settings\UpdateBuildRequest;
+use Convoy\Http\Requests\Admin\Servers\Settings\UpdateGeneralInfoRequest;
+use Convoy\Http\Requests\Admin\Servers\StoreServerRequest;
+use Convoy\Models\Filters\FiltersServerByAddressPoolId;
+use Convoy\Models\Filters\FiltersServerWildcard;
+use Convoy\Models\Server;
+use Convoy\Services\Servers\CloudinitService;
+use Convoy\Services\Servers\NetworkService;
+use Convoy\Services\Servers\ServerCreationService;
+use Convoy\Services\Servers\ServerDeletionService;
+use Convoy\Services\Servers\ServerSuspensionService;
+use Convoy\Services\Servers\SyncBuildService;
+use Convoy\Transformers\Admin\ServerBuildTransformer;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Http\Request;
+use Spatie\QueryBuilder\AllowedFilter;
+use Spatie\QueryBuilder\QueryBuilder;
+use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
+
+class ServerController extends ApiController
+{
+    public function __construct(
+        private ConnectionInterface     $connection,
+        private ServerDeletionService   $deletionService,
+        private NetworkService          $networkService,
+        private ServerSuspensionService $suspensionService,
+        private ServerCreationService   $creationService,
+        private CloudinitService        $cloudinitService,
+        private SyncBuildService        $buildModificationService,
+    )
+    {
+    }
+
+    public function index(Request $request)
+    {
+        $servers = QueryBuilder::for(Server::query())
+                               ->with(['addresses', 'user', 'node'])
+                               ->defaultSort('-id')
+                               ->allowedFilters(
+                                   [
+                                       AllowedFilter::custom(
+                                           '*', new FiltersServerWildcard(),
+                                       ),
+                                       AllowedFilter::custom(
+                                           'address_pool_id',
+                                           new FiltersServerByAddressPoolId(),
+                                       ),
+                                       AllowedFilter::exact('node_id'),
+                                       AllowedFilter::exact('user_id'),
+                                       'name',
+                                   ],
+                               )
+                               ->paginate(min($request->query('per_page', 50), 100))->appends(
+                $request->query(),
+            );
+
+        return fractal($servers, new ServerBuildTransformer())->parseIncludes($request->include)
+                                                              ->respond();
+    }
+
+    public function show(Request $request, Server $server)
+    {
+        $server->load(['addresses', 'user', 'node']);
+
+        return fractal($server, new ServerBuildTransformer())->parseIncludes($request->include)
+                                                             ->respond();
+    }
+
+    public function store(StoreServerRequest $request)
+    {
+        $server = $this->creationService->handle($request->validated());
+
+        $server->load(['addresses', 'user', 'node']);
+
+        return fractal($server, new ServerBuildTransformer())->parseIncludes(['user', 'node'])
+                                                             ->respond();
+    }
+
+    public function update(UpdateGeneralInfoRequest $request, Server $server)
+    {
+        $this->connection->transaction(function () use ($request, $server) {
+            if ($request->hostname !== $server->hostname && !empty($request->hostname)) {
+                try {
+                    $this->cloudinitService->updateHostname($server, $request->hostname);
+                } catch (ProxmoxConnectionException) {
+                    throw new ServiceUnavailableHttpException(
+                        message: "Server {$server->uuid} failed to sync hostname.",
+                    );
+                }
+            }
+
+            $server->update($request->validated());
+        });
+
+        $server->load(['addresses', 'user', 'node']);
+
+        return fractal($server, new ServerBuildTransformer())->parseIncludes(['user', 'node'])
+                                                             ->respond();
+    }
+
+    public function updateBuild(UpdateBuildRequest $request, Server $server)
+    {
+        $server->update($request->safe()->except('address_ids'));
+
+        $this->networkService->updateAddresses($server, $request->address_ids ?? []);
+
+        try {
+            $this->buildModificationService->handle($server);
+        } catch (ProxmoxConnectionException $e) {
+            // do nothing
+        }
+
+        $server->load(['addresses', 'user', 'node']);
+
+        return fractal($server, new ServerBuildTransformer())->parseIncludes(['user', 'node'])
+                                                             ->respond();
+    }
+
+    public function suspend(Server $server)
+    {
+        $this->suspensionService->toggle($server);
+
+        return $this->returnNoContent();
+    }
+
+    public function unsuspend(Server $server)
+    {
+        $this->suspensionService->toggle($server, SuspensionAction::UNSUSPEND);
+
+        return $this->returnNoContent();
+    }
+
+    public function destroy(Request $request, Server $server)
+    {
+        $this->connection->transaction(function () use ($server, $request) {
+            $server->update(['status' => Status::DELETING->value]);
+
+            $this->deletionService->handle($server, $request->input('no_purge', false));
+        });
+
+        return $this->returnNoContent();
+    }
+
+    public function bulkDelete(Request $request)
+    {
+        $validated = $request->validate([
+            'server_ids'   => 'required|array|min:1',
+            'server_ids.*' => 'required|integer|exists:servers,id',
+            // force=false  → dispatch real deletion job chain (Proxmox + DB, failure → deletion_failed)
+            // force=true   → skip Proxmox entirely, wipe DB + release IPs immediately
+            'force'        => 'nullable|boolean',
+        ]);
+
+        $force = (bool) ($validated['force'] ?? false);
+        $dispatched = 0;
+        $wiped = 0;
+
+        $servers = Server::whereIn('id', $validated['server_ids'])->get();
+
+        foreach ($servers as $server) {
+            if ($force) {
+                // ── Failed Uninstalls path: DB wipe only, no Proxmox ──────────
+                $server->addresses()->update(['server_id' => null]);
+                $server->delete();
+                $wiped++;
+            } else {
+                // ── Normal path: dispatch ServerDeletionService job chain ──────
+                // validateStatus() throws if server is in a conflicting state, so
+                // reset the status first to allow deletion dispatch.
+                $server->update(['status' => null]);
+
+                try {
+                    $this->deletionService->handle($server);
+                    $dispatched++;
+                } catch (\Throwable $e) {
+                    // Could not queue — mark as deletion_failed so it surfaces in the Failed Uninstalls tab
+                    $server->update(['status' => \Convoy\Enums\Server\Status::DELETION_FAILED->value]);
+                }
+            }
+        }
+
+        $message = $force
+            ? "Force-wiped {$wiped} server(s) from the database."
+            : "Queued deletion for {$dispatched} server(s). Failed servers will appear in the Failed Uninstalls tab.";
+
+        return response()->json([
+            'success'     => true,
+            'message'     => $message,
+            'dispatched'  => $dispatched,
+            'wiped'       => $wiped,
+        ]);
+    }
+}

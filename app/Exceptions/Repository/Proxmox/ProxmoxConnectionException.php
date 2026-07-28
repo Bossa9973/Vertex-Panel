@@ -1,0 +1,15 @@
+<?php
+
+namespace Convoy\Exceptions\Repository\Proxmox;
+
+use Illuminate\Http\Client\Response;
+use Illuminate\Http\Client\RequestException;
+use Convoy\Exceptions\Repository\RepositoryException;
+
+class ProxmoxConnectionException extends RepositoryException
+{
+   public function __construct(Response $response, RequestException $exception)
+   {
+       parent::__construct($response->reason() . PHP_EOL . $exception->getMessage() . PHP_EOL . $exception->getTraceAsString(), $exception->getCode(), $exception);
+   }
+}
