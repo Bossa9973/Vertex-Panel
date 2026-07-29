@@ -35,6 +35,9 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         'credits',
         'discord_id',
         'discord_username',
+        'google_id',
+        'google_email',
+        'primary_auth_provider',
         'password',
         'root_admin',
     ];
@@ -80,6 +83,9 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         $data['credits'] = (float) ($this->credits ?? 0);
         $data['discord_id'] = $this->discord_id;
         $data['discord_username'] = $this->discord_username;
+        $data['google_id'] = $this->google_id;
+        $data['google_email'] = $this->google_email;
+        $data['primary_auth_provider'] = $this->primary_auth_provider ?? 'email';
         return $data;
     }
 

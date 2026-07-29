@@ -1,6 +1,6 @@
 import { useStoreState } from '@/state'
 import { getInitials } from '@/util/helpers'
-import { CpuChipIcon, ArrowLeftOnRectangleIcon } from '@heroicons/react/24/outline'
+import { CpuChipIcon, ArrowLeftOnRectangleIcon, UserIcon } from '@heroicons/react/24/outline'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import { Avatar } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
@@ -53,11 +53,27 @@ const UserDropdown = ({ logout }: Props) => {
                     </button>
                 </Menu.Target>
                 <Menu.Dropdown>
-                    {/* User Header Details */}
-                    <div className={`px-3 py-2 mb-1 border-b ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
-                        <p className={`text-xs font-bold tracking-tight truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{user.name}</p>
+                    {/* User Header Details - Clicking user name opens /account */}
+                    <div
+                        onClick={() => navigate('/account')}
+                        className={`px-3 py-2mb-1 border-b cursor-pointer transition-colors ${isDark ? 'border-white/10 hover:bg-white/5' : 'border-slate-200 hover:bg-slate-50'}`}
+                        title='Click to manage profile and linked accounts'
+                    >
+                        <div className='flex items-center justify-between'>
+                            <p className={`text-xs font-bold tracking-tight truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{user.name}</p>
+                            <span className='text-[9px] font-extrabold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20'>Profile</span>
+                        </div>
                         <p className={`text-[11px] font-medium truncate ${isDark ? 'text-stone-400' : 'text-slate-500'}`}>{user.email}</p>
                     </div>
+
+                    <Menu.Item
+                        icon={<UserIcon className='w-4 h-4 text-blue-400 shrink-0' />}
+                        onClick={() => navigate('/account')}
+                    >
+                        <div className='flex items-center justify-between w-full'>
+                            <span className={`font-semibold ${isDark ? 'text-stone-200' : 'text-slate-800'}`}>Account Management</span>
+                        </div>
+                    </Menu.Item>
 
                     <Menu.Item
                         icon={<BoltSvgIcon className='w-4 h-4 text-amber-400 shrink-0' />}

@@ -18,6 +18,12 @@ Route::prefix('/earn')->group(function () {
     Route::post('/connect-discord', [Client\EarnBoltsController::class, 'connectDiscord']);
 });
 
+Route::prefix('/account')->group(function () {
+    Route::get('/', [Client\AccountController::class, 'index']);
+    Route::post('/profile', [Client\AccountController::class, 'updateProfile']);
+    Route::post('/unlink', [Client\AccountController::class, 'unlinkProvider']);
+});
+
 Route::get('/plans', [Client\ServerDeployController::class, 'getOptions']);
 Route::post('/deploy', [Client\ServerDeployController::class, 'deploy']);
 Route::delete('/servers/{uuid}', [Client\ServerDeployController::class, 'destroy']);

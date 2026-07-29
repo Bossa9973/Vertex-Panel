@@ -119,6 +119,8 @@ class SocialLoginController extends Controller
                 $socialUser = [
                     'email' => strtolower($googleData['email'] ?? ''),
                     'name' => $googleData['name'] ?? $googleData['email'],
+                    'google_id' => (string) ($googleData['sub'] ?? ''),
+                    'google_email' => strtolower($googleData['email'] ?? ''),
                 ];
             }
 
@@ -178,11 +180,12 @@ class SocialLoginController extends Controller
 
             if (!$user) {
                 $user = User::create([
-                    'name'     => $socialUser['name'],
-                    'email'    => $socialUser['email'],
-                    'password' => Hash::make(Str::random(32)),
-                    'credits'  => 10.00,
-                    'root_admin' => false,
+                    'name'                  => $socialUser['name'],
+                    'email'                 => $socialUser['email'],
+                    'password'              => Hash::make(Str::random(32)),
+                    'credits'               => 10.00,
+                    'primary_auth_provider' => $provider,
+                    'root_admin'            => false,
                 ]);
 
                 $user->creditTransactions()->create([
@@ -193,10 +196,16 @@ class SocialLoginController extends Controller
                 ]);
             }
 
-            // Always update Discord link fields when authenticating via Discord
+            // Update social link fields for whichever provider was authenticated
             if ($provider === 'discord' && !empty($socialUser['discord_id'])) {
                 $user->discord_id       = $socialUser['discord_id'];
                 $user->discord_username = $socialUser['discord_username'];
+                $user->save();
+            }
+
+            if ($provider === 'google' && !empty($socialUser['google_id'])) {
+                $user->google_id    = $socialUser['google_id'];
+                $user->google_email = $socialUser['google_email'];
                 $user->save();
             }
 

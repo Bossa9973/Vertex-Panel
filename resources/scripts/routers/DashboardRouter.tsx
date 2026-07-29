@@ -22,6 +22,10 @@ export const routes: Route[] = [
         path: 'earn',
         element: lazyLoad(lazy(() => import('@/components/dashboard/EarnBoltsContainer'))),
     },
+    {
+        path: 'account',
+        element: lazyLoad(lazy(() => import('@/components/dashboard/AccountContainer'))),
+    },
     ...serverRoutes,
 ]
 
