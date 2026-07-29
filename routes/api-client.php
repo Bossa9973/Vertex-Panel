@@ -12,6 +12,11 @@ Route::prefix('/credits')->group(function () {
     Route::post('/topup', [Client\CreditsController::class, 'topup']);
 });
 
+Route::prefix('/earn')->group(function () {
+    Route::get('/status', [Client\EarnBoltsController::class, 'status']);
+    Route::post('/claim', [Client\EarnBoltsController::class, 'claimReward']);
+});
+
 Route::get('/plans', [Client\ServerDeployController::class, 'getOptions']);
 Route::post('/deploy', [Client\ServerDeployController::class, 'deploy']);
 Route::delete('/servers/{uuid}', [Client\ServerDeployController::class, 'destroy']);

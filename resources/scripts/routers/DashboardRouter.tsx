@@ -9,7 +9,6 @@ import { NavigationBarContext } from '@/components/elements/navigation/Navigatio
 
 import DashboardContainer from '@/components/dashboard/DashboardContainer'
 
-
 export const routes: Route[] = [
     {
         index: true,
@@ -18,6 +17,10 @@ export const routes: Route[] = [
     {
         path: 'credits',
         element: lazyLoad(lazy(() => import('@/components/dashboard/CreditsContainer'))),
+    },
+    {
+        path: 'earn',
+        element: lazyLoad(lazy(() => import('@/components/dashboard/EarnBoltsContainer'))),
     },
     ...serverRoutes,
 ]
@@ -35,6 +38,10 @@ const DashboardRouter = () => {
         {
             name: 'Billing & BOLTs',
             path: '/credits',
+        },
+        {
+            name: 'Earn BOLTs',
+            path: '/earn',
         },
     ]
 
