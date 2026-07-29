@@ -194,6 +194,10 @@ class SocialLoginController extends Controller
             Auth::login($user);
             $request->session()->regenerate();
 
+            if ($provider === 'discord') {
+                return redirect('/earn');
+            }
+
             return redirect('/');
         } catch (\Throwable $e) {
             return redirect("/auth/{$mode}?error=" . urlencode($e->getMessage()));
