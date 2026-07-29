@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { Modal } from '@mantine/core'
 import { BorderBeam } from '@/components/ui/BorderBeam'
 import http from '@/api/http'
 import {
@@ -27,6 +26,8 @@ export const ConnectDiscordModal: React.FC<Props> = ({
     const [discordInput, setDiscordInput] = useState(currentDiscordId || '')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    if (!opened) return null
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -59,32 +60,9 @@ export const ConnectDiscordModal: React.FC<Props> = ({
     }
 
     return (
-        <Modal
-            opened={opened}
-            onClose={() => {
-                if (!isBlocked) onClose()
-            }}
-            withCloseButton={false}
-            closeOnClickOutside={!isBlocked}
-            closeOnEscape={!isBlocked}
-            centered
-            size='lg'
-            overlayProps={{
-                opacity: 0.85,
-                blur: 16,
-            }}
-            styles={{
-                content: {
-                    background: 'transparent',
-                    boxShadow: 'none',
-                },
-                body: {
-                    padding: 0,
-                },
-            }}
-        >
-            <div className='relative overflow-hidden rounded-3xl bg-neutral-900/95 border border-white/20 backdrop-blur-3xl p-6 md:p-8 text-white shadow-[0_0_80px_rgba(88,101,242,0.4)] font-sans'>
-                <BorderBeam size={300} duration={10} delay={0} colorFrom='#5865F2' colorTo='#3b82f6' borderWidth={2} />
+        <div className='fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-fade-in'>
+            <div className='relative w-full max-w-lg overflow-hidden rounded-3xl bg-neutral-900/95 border border-white/20 backdrop-blur-3xl p-6 md:p-8 text-white shadow-[0_0_90px_rgba(88,101,242,0.45)] font-sans'>
+                <BorderBeam size={320} duration={10} delay={0} colorFrom='#5865F2' colorTo='#3b82f6' borderWidth={2} />
 
                 {/* Close Button only if not blocked */}
                 {!isBlocked && (
@@ -191,7 +169,7 @@ export const ConnectDiscordModal: React.FC<Props> = ({
                     </form>
                 </div>
             </div>
-        </Modal>
+        </div>
     )
 }
 
