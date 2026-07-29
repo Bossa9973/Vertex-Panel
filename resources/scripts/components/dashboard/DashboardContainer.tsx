@@ -84,14 +84,20 @@ export const DashboardContainer: React.FC = () => {
                         }
                     }
 
+                    const nodeData = typeof srv.node === 'object' ? srv.node : null
                     const loc =
-                        srv.node?.name ||
+                        nodeData?.location_name ||
+                        nodeData?.name ||
                         (typeof srv.node === 'string' ? srv.node : null) ||
                         (srv.description?.includes('Plan:')
-                            ? srv.description.split('(')[1]?.replace(')', '') || 'New York, USA'
-                            : ['New York, USA', 'London, UK', 'Node: DE-1', 'Tokyo, Japan'][idx % 4])
+                            ? srv.description.split('(')[1]?.replace(')', '') || 'Node: DE-1'
+                            : ['Node: DE-1', 'London, UK', 'New York, USA', 'Tokyo, Japan'][idx % 4])
 
-                    const flag = LOCATION_FLAGS[loc] || LOCATION_FLAGS['New York, USA']
+                    const flag =
+                        nodeData?.flag ||
+                        LOCATION_FLAGS[loc] ||
+                        LOCATION_FLAGS[nodeData?.name || ''] ||
+                        'https://flagcdn.com/w40/de.png'
                     const expiresAt = srv.expires_at ? new Date(srv.expires_at) : new Date(Date.now() + (29 - (idx % 5) * 3) * 86400000)
                     const now = new Date()
                     const diffDays = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 3600 * 24))

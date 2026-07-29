@@ -9,6 +9,20 @@ class NodeTransformer extends TransformerAbstract
 {
     public function transform(Node $node): array
     {
+        $locCode = $node->location ? strtoupper($node->location->short_code) : 'DE';
+        $flag = 'https://flagcdn.com/w40/de.png';
+        if (\Illuminate\Support\Str::contains(strtolower($locCode), 'us')) {
+            $flag = 'https://flagcdn.com/w40/us.png';
+        } elseif (\Illuminate\Support\Str::contains(strtolower($locCode), ['uk', 'gb'])) {
+            $flag = 'https://flagcdn.com/w40/gb.png';
+        } elseif (\Illuminate\Support\Str::contains(strtolower($locCode), 'jp')) {
+            $flag = 'https://flagcdn.com/w40/jp.png';
+        } elseif (\Illuminate\Support\Str::contains(strtolower($locCode), 'sg')) {
+            $flag = 'https://flagcdn.com/w40/sg.png';
+        } elseif (\Illuminate\Support\Str::contains(strtolower($locCode), 'au')) {
+            $flag = 'https://flagcdn.com/w40/au.png';
+        }
+
         return [
             'id' => $node->id,
             'location_id' => $node->location_id,
@@ -29,6 +43,9 @@ class NodeTransformer extends TransformerAbstract
             'network' => $node->network,
             'coterm_id' => $node->coterm_id,
             'servers_count' => (int)$node->servers_count,
+            'flag' => $flag,
+            'location_code' => $locCode,
+            'location_name' => $node->location ? $node->location->description : $node->name,
         ];
     }
 }
