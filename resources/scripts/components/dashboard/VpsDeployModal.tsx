@@ -563,13 +563,13 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             initial={{ opacity: 0, y: 15 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ duration: 0.4 }}
-                                            className='flex flex-col items-center justify-between h-full max-w-md w-full pt-2 pb-5 space-y-3'
+                                            className='flex flex-col items-center justify-center h-full max-w-md w-full my-auto py-1 space-y-3'
                                         >
-                                            <div className='space-y-1.5 -mt-1'>
-                                                <div className='w-11 h-11 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/60 ring-2 ring-emerald-500/30'>
-                                                    <CheckCircleIcon className='w-6 h-6' />
+                                            <div className='space-y-1 text-center shrink-0'>
+                                                <div className='w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/60 ring-2 ring-emerald-500/30'>
+                                                    <CheckCircleIcon className='w-5 h-5' />
                                                 </div>
-                                                <h3 className='text-xl font-bold text-white tracking-tight'>
+                                                <h3 className='text-lg font-bold text-white tracking-tight'>
                                                     Server Instance Online!
                                                 </h3>
                                                 <p className='text-xs text-gray-300 max-w-xs mx-auto leading-relaxed'>
@@ -577,11 +577,11 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                 </p>
                                             </div>
 
-                                            <div className='w-full -mt-1 mb-1'>
+                                            <div className='w-full shrink-0'>
                                                 <OnboardCard isCompletedAll={true} />
                                             </div>
 
-                                            <div className='flex items-center justify-center gap-3 pb-3 shrink-0'>
+                                            <div className='flex items-center justify-center gap-3 pt-1 shrink-0'>
                                                 <button
                                                     type='button'
                                                     onClick={() => {

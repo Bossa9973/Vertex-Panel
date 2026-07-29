@@ -65,7 +65,7 @@ const OnboardCard = ({
     return (
         <div
             className={cn(
-                'relative flex flex-col items-center justify-center gap-2 p-1 overflow-hidden min-h-[250px] w-full max-w-[380px] mx-auto'
+                'relative flex flex-col items-center justify-center gap-1.5 p-1 overflow-hidden min-h-[190px] w-full max-w-[380px] mx-auto'
             )}
         >
             <AnimatePresence mode='popLayout'>
