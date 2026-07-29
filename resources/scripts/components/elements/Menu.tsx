@@ -12,7 +12,7 @@ interface Menu extends FC<MenuProps> {
 
 const StyledMenuDropdown = styled(MantineMenu.Dropdown)`
     &.mantine-Menu-dropdown {
-        ${tw`p-2 bg-neutral-900/95 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl text-stone-100 font-sans z-[9999]`}
+        ${tw`p-2 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-2xl border border-slate-200 dark:border-white/20 rounded-2xl shadow-xl dark:shadow-2xl text-slate-800 dark:text-stone-100 font-sans z-[9999]`}
     }
 `
 
@@ -27,8 +27,8 @@ const StyledMenuItem = styled(MantineMenu.Item)<
 
         ${({ color }) =>
             color === 'red'
-                ? tw`text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 active:scale-95`
-                : tw`text-stone-200 hover:bg-white/10 hover:text-white active:scale-95`}
+                ? tw`text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/20 hover:text-rose-700 dark:hover:text-rose-300 active:scale-95`
+                : tw`text-slate-700 dark:text-stone-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white active:scale-95`}
     }
 
     &.mantine-Menu-item .mantine-Menu-itemIcon {
@@ -37,7 +37,7 @@ const StyledMenuItem = styled(MantineMenu.Item)<
 `
 
 const StyledDivider = styled(MantineMenu.Divider)`
-    ${tw`my-1.5 mx-auto w-[94%] border-t border-white/10`}
+    ${tw`my-1.5 mx-auto w-[94%] border-t border-slate-200 dark:border-white/10`}
 `
 
 const Menu: Menu = props => (

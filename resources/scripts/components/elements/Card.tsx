@@ -6,7 +6,7 @@ interface Props {
 }
 
 const Card = styled.div<Props>`
-    ${tw`border border-white/10 bg-neutral-900/70 text-white rounded-2xl shadow-2xl shadow-black/60 backdrop-blur-xl transition-all font-sans hover:border-white/20`}
+    ${tw`border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-neutral-900/70 text-slate-900 dark:text-white rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-black/60 backdrop-blur-xl transition-all font-sans hover:border-slate-300 dark:hover:border-white/20`}
 
     ${props => !props.overridePadding && tw`p-6`}
 `
