@@ -10,17 +10,17 @@ class NodeTransformer extends TransformerAbstract
     public function transform(Node $node): array
     {
         $locCode = $node->location ? strtoupper($node->location->short_code) : 'DE';
-        $flag = 'https://flagcdn.com/w40/de.png';
+        $flag = 'https://flagcdn.com/de.svg';
         if (\Illuminate\Support\Str::contains(strtolower($locCode), 'us')) {
-            $flag = 'https://flagcdn.com/w40/us.png';
+            $flag = 'https://flagcdn.com/us.svg';
         } elseif (\Illuminate\Support\Str::contains(strtolower($locCode), ['uk', 'gb'])) {
-            $flag = 'https://flagcdn.com/w40/gb.png';
+            $flag = 'https://flagcdn.com/gb.svg';
         } elseif (\Illuminate\Support\Str::contains(strtolower($locCode), 'jp')) {
-            $flag = 'https://flagcdn.com/w40/jp.png';
+            $flag = 'https://flagcdn.com/jp.svg';
         } elseif (\Illuminate\Support\Str::contains(strtolower($locCode), 'sg')) {
-            $flag = 'https://flagcdn.com/w40/sg.png';
+            $flag = 'https://flagcdn.com/sg.svg';
         } elseif (\Illuminate\Support\Str::contains(strtolower($locCode), 'au')) {
-            $flag = 'https://flagcdn.com/w40/au.png';
+            $flag = 'https://flagcdn.com/au.svg';
         }
 
         return [

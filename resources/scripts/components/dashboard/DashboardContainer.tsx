@@ -9,20 +9,20 @@ import PromoBannersRow from '@/components/dashboard/PromoBannersRow'
 import QuickServicesGrid, { ServerItem } from '@/components/dashboard/QuickServicesGrid'
 
 const LOCATION_FLAGS: Record<string, string> = {
-    'New York, USA': '🇺🇸',
-    'London, UK': '🇬🇧',
-    'Frankfurt, DE': '🇩🇪',
-    'Node: DE-1': '🇩🇪',
-    'Node: US-1': '🇺🇸',
-    'Node: UK-1': '🇬🇧',
-    'DE-1': '🇩🇪',
-    'US-1': '🇺🇸',
-    'UK-1': '🇬🇧',
-    'Germany': '🇩🇪',
-    'Tokyo, Japan': '🇯🇵',
-    'Tokyo, JP': '🇯🇵',
-    'Singapore, SG': '🇸🇬',
-    'Sydney, AU': '🇦🇺',
+    'New York, USA': 'https://flagcdn.com/us.svg',
+    'London, UK': 'https://flagcdn.com/gb.svg',
+    'Frankfurt, DE': 'https://flagcdn.com/de.svg',
+    'Node: DE-1': 'https://flagcdn.com/de.svg',
+    'Node: US-1': 'https://flagcdn.com/us.svg',
+    'Node: UK-1': 'https://flagcdn.com/gb.svg',
+    'DE-1': 'https://flagcdn.com/de.svg',
+    'US-1': 'https://flagcdn.com/us.svg',
+    'UK-1': 'https://flagcdn.com/gb.svg',
+    'Germany': 'https://flagcdn.com/de.svg',
+    'Tokyo, Japan': 'https://flagcdn.com/jp.svg',
+    'Tokyo, JP': 'https://flagcdn.com/jp.svg',
+    'Singapore, SG': 'https://flagcdn.com/sg.svg',
+    'Sydney, AU': 'https://flagcdn.com/au.svg',
 }
 
 const extractIpAddress = (srv: any, idx: number): string => {
