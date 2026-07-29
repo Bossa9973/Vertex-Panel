@@ -154,23 +154,23 @@ const CreditsContainer = () => {
         <PageContentBlock title='Billing & BOLTs' showFlashKey='credits'>
             <div className='grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 font-sans'>
                 {/* Credit Balance Card with BorderBeam */}
-                <div className='md:col-span-2 relative overflow-hidden bg-neutral-900/70 border border-white/10 rounded-2xl p-6 shadow-2xl shadow-blue-950/20 backdrop-blur-xl flex flex-col justify-between group hover:border-white/20 transition-all'>
+                <div className='md:col-span-2 relative overflow-hidden bg-white/80 dark:bg-neutral-900/70 border border-slate-200/80 dark:border-white/10 rounded-2xl p-6 shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-blue-950/20 backdrop-blur-xl flex flex-col justify-between group hover:border-slate-300 dark:hover:border-white/20 transition-all'>
                     <BorderBeam size={250} duration={12} delay={0} colorFrom='#f59e0b' colorTo='#3b82f6' borderWidth={1.5} />
 
                     <div className='relative z-10'>
                         {/* Header Row: Label on Left, Account Active Pill on Right */}
                         <div className='flex items-center justify-between gap-4 mb-3'>
-                            <span className='text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-sans'>
+                            <span className='text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-sans'>
                                 <BoltSvgIcon className='w-4 h-4 text-amber-400' /> Available BOLT Balance
                             </span>
-                            <span className='text-xs text-emerald-400 font-sans font-semibold flex items-center gap-1.5 bg-[#192f25] border border-[#22c55e]/30 px-3 py-1 rounded-full shrink-0 shadow-xs'>
+                            <span className='text-xs text-emerald-500 dark:text-emerald-400 font-sans font-semibold flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-full shrink-0 shadow-xs'>
                                 <ShieldCheckIcon className='w-3.5 h-3.5' /> Account Active
                             </span>
                         </div>
 
                         {/* Large Clean Balance Readout */}
                         <div className='flex items-baseline gap-2.5 my-2'>
-                            <span className='text-4xl md:text-5xl font-extrabold text-white tracking-tight font-mono'>
+                            <span className='text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight font-mono'>
                                 {(user?.credits ?? 0).toFixed(2)}
                             </span>
                             <span className='text-xl font-bold text-amber-400 font-sans tracking-tight'>
@@ -200,35 +200,35 @@ const CreditsContainer = () => {
                 </div>
 
                 {/* Quick Info Card */}
-                <div className='relative overflow-hidden bg-neutral-900/70 border border-blue-500/30 text-white rounded-2xl p-6 flex flex-col justify-between shadow-2xl shadow-blue-950/30 backdrop-blur-xl font-sans hover:border-blue-400/50 transition-all'>
+                <div className='relative overflow-hidden bg-white/80 dark:bg-neutral-900/70 border border-blue-400/40 dark:border-blue-500/30 text-slate-900 dark:text-white rounded-2xl p-6 flex flex-col justify-between shadow-xl shadow-blue-500/10 dark:shadow-2xl dark:shadow-blue-950/30 backdrop-blur-xl font-sans hover:border-blue-500/60 dark:hover:border-blue-400/50 transition-all'>
                     <div>
-                        <div className='flex items-center gap-2 text-blue-400 font-bold text-xs uppercase tracking-wider mb-2'>
+                        <div className='flex items-center gap-2 text-blue-500 dark:text-blue-400 font-bold text-xs uppercase tracking-wider mb-2'>
                             <SparklesIcon className='w-4 h-4' /> Client Referral & Bonus
                         </div>
-                        <h4 className='text-lg font-bold text-white mb-2 tracking-tight'>
+                        <h4 className='text-lg font-bold text-slate-900 dark:text-white mb-2 tracking-tight'>
                             Welcome Bonus Applied!
                         </h4>
-                        <p className='text-xs text-slate-300 leading-relaxed font-sans'>
+                        <p className='text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans'>
                             Every new account receives 10.00 BOLTs initial bonus. Need additional server capacity? Add BOLTs anytime.
                         </p>
                     </div>
-                    <div className='mt-6 bg-[#0d0e11] rounded-xl p-3.5 text-xs text-slate-300 border border-white/[0.08] backdrop-blur-xs font-sans'>
+                    <div className='mt-6 bg-slate-100/80 dark:bg-[#0d0e11] rounded-xl p-3.5 text-xs text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] backdrop-blur-xs font-sans'>
                         Automated billing automatically deducts from your active BOLT balance.
                     </div>
                 </div>
             </div>
 
             {/* Modernized BOLT Activity & Transactions Table */}
-            <div className='relative overflow-hidden bg-neutral-900/70 border border-white/10 rounded-2xl shadow-2xl shadow-blue-950/20 backdrop-blur-xl font-sans hover:border-white/20 transition-all'>
+            <div className='relative overflow-hidden bg-white/80 dark:bg-neutral-900/70 border border-slate-200/80 dark:border-white/10 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-blue-950/20 backdrop-blur-xl font-sans hover:border-slate-300 dark:hover:border-white/20 transition-all'>
                 {/* Header & Filter Controls */}
-                <div className='p-6 border-b border-white/[0.08] flex flex-wrap items-center justify-between gap-4'>
+                <div className='p-6 border-b border-slate-200/80 dark:border-white/[0.08] flex flex-wrap items-center justify-between gap-4'>
                     <div className='flex items-center gap-3.5'>
-                        <div className='w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)]'>
+                        <div className='w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-500 dark:text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)]'>
                             <ReceiptPercentIcon className='w-5 h-5' />
                         </div>
                         <div>
                             <div className='flex items-center gap-2.5'>
-                                <h3 className='font-bold text-lg text-white tracking-tight'>
+                                <h3 className='font-bold text-lg text-slate-900 dark:text-white tracking-tight'>
                                     BOLT Activity & Transactions
                                 </h3>
                                 <span className='px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-mono font-bold'>

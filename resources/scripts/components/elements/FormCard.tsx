@@ -12,7 +12,7 @@ interface FormCard
 const FormCard: FormCard = ({ children, className }) => {
     return (
         <div
-            className={`rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-neutral-900/70 backdrop-blur-xl shadow-xl shadow-slate-200/50 dark:shadow-black/60 overflow-hidden ${className || ''}`}
+            className={`rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white/85 dark:bg-neutral-900/70 backdrop-blur-xl shadow-xl shadow-slate-200/50 dark:shadow-black/60 overflow-hidden ${className || ''}`}
         >
             {children}
         </div>
@@ -27,7 +27,7 @@ FormCard.Body = styled.div`
     ${tw`p-6 rounded-t bg-transparent`}
 `
 FormCard.Footer = styled.div`
-    ${tw`px-6 py-4 rounded-b border-t border-slate-200/80 dark:border-white/10 bg-slate-100/80 dark:bg-black/40 flex justify-center md:justify-end gap-3`}
+    ${tw`px-6 py-4 rounded-b border-t border-slate-200/80 dark:border-white/10 bg-slate-50/80 dark:bg-black/40 flex justify-center md:justify-end gap-3`}
 `
 
 export default FormCard

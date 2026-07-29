@@ -89,19 +89,19 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div className='relative overflow-hidden bg-neutral-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl shadow-blue-950/20 mb-8 backdrop-blur-xl font-sans hover:border-white/20 transition-all'>
+        <div className='relative overflow-hidden bg-white/80 dark:bg-neutral-900/60 border border-slate-200/80 dark:border-white/10 rounded-2xl p-6 shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-blue-950/20 mb-8 backdrop-blur-xl font-sans hover:border-slate-300 dark:hover:border-white/20 transition-all'>
             {/* Border Beam Accent Animation */}
             <BorderBeam size={280} duration={14} delay={0} colorFrom='#3b82f6' colorTo='#8b5cf6' borderWidth={1.5} />
 
             {/* Section Header */}
-            <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-white/[0.08]'>
+            <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200/80 dark:border-white/[0.08]'>
                 <div className='flex items-center gap-3.5'>
-                    <div className='w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]'>
-                        <ServerSvgIcon className='w-5 h-5 text-blue-400' />
+                    <div className='w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-center text-blue-500 dark:text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]'>
+                        <ServerSvgIcon className='w-5 h-5 text-blue-500 dark:text-blue-400' />
                     </div>
                     <div>
                         <div className='flex items-center gap-2.5'>
-                            <h2 className='text-lg font-bold text-white tracking-tight font-sans'>Active Services</h2>
+                            <h2 className='text-lg font-bold text-slate-900 dark:text-white tracking-tight font-sans'>Active Services</h2>
                             <span className='px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-mono font-bold'>
                                 {servers.length}
                             </span>

@@ -29,10 +29,10 @@ const UserDropdown = ({ logout }: Props) => {
             {/* BOLT Balance Badge */}
             <Link
                 to='/credits'
-                className='flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 dark:bg-gradient-to-r dark:from-amber-500/15 dark:to-amber-600/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-extrabold text-xs transition-all border border-amber-500/30 shadow-xs hover:border-amber-400/50 cursor-pointer active:scale-95'
+                className='flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500/15 to-amber-600/10 hover:from-amber-500/25 hover:to-amber-600/20 text-amber-400 font-extrabold text-xs transition-all border border-amber-500/30 shadow-md hover:border-amber-400/50 cursor-pointer active:scale-95'
                 title='Click to top up account BOLTs'
             >
-                <BoltSvgIcon className='w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0' />
+                <BoltSvgIcon className='w-4 h-4 text-amber-400 shrink-0' />
                 <span className='font-mono tracking-tight'>{(user.credits ?? 0).toFixed(2)} BOLTs</span>
             </Link>
 
@@ -63,7 +63,7 @@ const UserDropdown = ({ logout }: Props) => {
                         onClick={() => navigate('/credits')}
                     >
                         <div className='flex items-center justify-between w-full'>
-                            <span>Billing & BOLTs</span>
+                            <span className='text-slate-800 dark:text-stone-200 font-semibold'>Billing & BOLTs</span>
                             <span className='text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20'>
                                 {(user.credits ?? 0).toFixed(2)}
                             </span>

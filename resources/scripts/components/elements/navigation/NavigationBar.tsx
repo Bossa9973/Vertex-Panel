@@ -110,7 +110,7 @@ const NavigationBar = () => {
     }
 
     return (
-        <div className='bg-white/80 dark:bg-neutral-950/70 backdrop-blur-2xl w-full border-b border-slate-200/80 dark:border-white/10 font-sans shadow-xs dark:shadow-lg dark:shadow-blue-950/20 transition-colors duration-200'>
+        <div className='bg-white/80 dark:bg-neutral-950/70 backdrop-blur-2xl w-full border-b border-slate-200/80 dark:border-white/10 font-sans shadow-md dark:shadow-lg dark:shadow-blue-950/20'>
             {isAdminArea && <AdminBanner />}
             <LoadingOverlay visible={isLoggingOut} zIndex={4000} />
             <ContentContainer ref={topBar} className='pt-3 pb-1.5 relative'>
@@ -130,7 +130,7 @@ const NavigationBar = () => {
                                 <div className='py-1.5 h-full'>
                                     <div className='rotate-[25deg] w-[2px] h-full bg-slate-300 dark:bg-white/10 rounded-full' />
                                 </div>
-                                <p className='shrink font-semibold text-xs text-slate-700 dark:text-stone-300 font-sans truncate text-ellipsis overflow-hidden whitespace-nowrap bg-slate-100/90 dark:bg-neutral-900/80 border border-slate-200 dark:border-white/10 px-3 py-1 rounded-lg backdrop-blur-md'>
+                                <p className='shrink font-semibold text-xs text-slate-700 dark:text-stone-300 font-sans truncate text-ellipsis overflow-hidden whitespace-nowrap bg-slate-100/80 dark:bg-neutral-900/80 border border-slate-200/80 dark:border-white/10 px-3 py-1 rounded-lg backdrop-blur-md'>
                                     {breadcrumb}
                                 </p>
                             </>
@@ -154,7 +154,7 @@ const NavigationBar = () => {
             />
             <div
                 ref={bottomBar}
-                className='bg-white/70 dark:bg-neutral-900/60 backdrop-blur-xl shadow-none transition-shadow w-full border-t border-b border-slate-200/80 dark:border-white/10 z-[2000]'
+                className='bg-slate-100/70 dark:bg-neutral-900/60 backdrop-blur-xl shadow-none transition-shadow w-full border-t border-b border-slate-200/80 dark:border-white/10 z-[2000]'
             >
                 <ContentContainer className='flex w-full'>
                     <div
@@ -164,7 +164,7 @@ const NavigationBar = () => {
                             transition: 'width 0.25s ease',
                         }}
                     >
-                        <Logo className='w-5 h-5 text-blue-500 dark:text-blue-400' />
+                        <Logo className='w-5 h-5 text-blue-400' />
                     </div>
                     <div className='flex z-[2000] overflow-x-auto scrollbar-hide font-sans text-xs font-semibold'>
                         {routes.map(route => (
@@ -184,7 +184,7 @@ const NavigationBar = () => {
             </div>
             <div
                 ref={placeholder}
-                className='hidden h-[49px] w-full bg-white dark:bg-[#0d0e11]'
+                className='hidden h-[49px] w-full bg-[#0d0e11]'
             />
         </div>
     )

@@ -80,7 +80,7 @@ const router = createBrowserRouter([
             <AuthenticatedRoutes>
                 <NavigationBarProvider>
                     <GlobalBackground />
-                    <div className='relative z-10 min-h-screen text-stone-100 selection:bg-blue-500/30'>
+                    <div className='relative z-10 min-h-screen text-slate-900 dark:text-stone-100 selection:bg-blue-500/30'>
                         <NavigationBar />
                         <Outlet />
                     </div>
