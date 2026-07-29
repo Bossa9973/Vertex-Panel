@@ -12,7 +12,7 @@ interface FormCard
 const FormCard: FormCard = ({ children, className }) => {
     return (
         <div
-            className={`rounded border border-accent-200 bg-background dark:shadow-none ${className}`}
+            className={`rounded-2xl border border-white/10 bg-neutral-900/70 backdrop-blur-xl shadow-xl shadow-black/60 overflow-hidden ${className || ''}`}
         >
             {children}
         </div>
@@ -20,14 +20,14 @@ const FormCard: FormCard = ({ children, className }) => {
 }
 
 FormCard.Title = styled.h4`
-    ${tw`text-foreground text-xl font-semibold`}
+    ${tw`text-white text-xl font-bold tracking-tight`}
 `
 
 FormCard.Body = styled.div`
-    ${tw`p-6 rounded-t bg-background`}
+    ${tw`p-6 rounded-t bg-transparent`}
 `
 FormCard.Footer = styled.div`
-    ${tw`px-6 py-3 rounded-b border-t border-accent-200 bg-accent-100 flex justify-center md:justify-end`}
+    ${tw`px-6 py-4 rounded-b border-t border-white/10 bg-black/40 flex justify-center md:justify-end gap-3`}
 `
 
 export default FormCard

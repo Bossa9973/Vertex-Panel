@@ -89,7 +89,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div className='relative overflow-hidden bg-gradient-to-b from-[#141619] via-[#121417] to-[#0c0d10] border border-white/[0.08] rounded-2xl p-6 shadow-2xl shadow-black/60 mb-8 backdrop-blur-md font-sans'>
+        <div className='relative overflow-hidden bg-neutral-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl shadow-blue-950/20 mb-8 backdrop-blur-xl font-sans hover:border-white/20 transition-all'>
             {/* Border Beam Accent Animation */}
             <BorderBeam size={280} duration={14} delay={0} colorFrom='#3b82f6' colorTo='#8b5cf6' borderWidth={1.5} />
 

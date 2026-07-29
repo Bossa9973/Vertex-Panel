@@ -110,7 +110,7 @@ const NavigationBar = () => {
     }
 
     return (
-        <div className='bg-[#0d0e11] w-full border-b border-stone-800/80 font-sans'>
+        <div className='bg-neutral-950/70 backdrop-blur-2xl w-full border-b border-white/10 font-sans shadow-lg shadow-blue-950/20'>
             {isAdminArea && <AdminBanner />}
             <LoadingOverlay visible={isLoggingOut} zIndex={4000} />
             <ContentContainer ref={topBar} className='pt-3 pb-1.5 relative'>
@@ -128,9 +128,9 @@ const NavigationBar = () => {
                         {breadcrumb && (
                             <>
                                 <div className='py-1.5 h-full'>
-                                    <div className='rotate-[25deg] w-[2px] h-full bg-stone-800 rounded-full' />
+                                    <div className='rotate-[25deg] w-[2px] h-full bg-white/10 rounded-full' />
                                 </div>
-                                <p className='shrink font-semibold text-xs text-stone-300 font-sans truncate text-ellipsis overflow-hidden whitespace-nowrap bg-stone-900/80 border border-stone-800 px-3 py-1 rounded-lg'>
+                                <p className='shrink font-semibold text-xs text-stone-300 font-sans truncate text-ellipsis overflow-hidden whitespace-nowrap bg-neutral-900/80 border border-white/10 px-3 py-1 rounded-lg backdrop-blur-md'>
                                     {breadcrumb}
                                 </p>
                             </>
@@ -154,7 +154,7 @@ const NavigationBar = () => {
             />
             <div
                 ref={bottomBar}
-                className='bg-[#090a0c] shadow-none transition-shadow w-full border-t border-b border-stone-800/80 z-[2000]'
+                className='bg-neutral-900/60 backdrop-blur-xl shadow-none transition-shadow w-full border-t border-b border-white/10 z-[2000]'
             >
                 <ContentContainer className='flex w-full'>
                     <div

@@ -154,7 +154,7 @@ const CreditsContainer = () => {
         <PageContentBlock title='Billing & BOLTs' showFlashKey='credits'>
             <div className='grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 font-sans'>
                 {/* Credit Balance Card with BorderBeam */}
-                <div className='md:col-span-2 relative overflow-hidden bg-gradient-to-b from-[#141619] via-[#121417] to-[#0c0d10] border border-white/[0.08] rounded-2xl p-6 shadow-2xl shadow-black/60 backdrop-blur-md flex flex-col justify-between group'>
+                <div className='md:col-span-2 relative overflow-hidden bg-neutral-900/70 border border-white/10 rounded-2xl p-6 shadow-2xl shadow-blue-950/20 backdrop-blur-xl flex flex-col justify-between group hover:border-white/20 transition-all'>
                     <BorderBeam size={250} duration={12} delay={0} colorFrom='#f59e0b' colorTo='#3b82f6' borderWidth={1.5} />
 
                     <div className='relative z-10'>
@@ -200,7 +200,7 @@ const CreditsContainer = () => {
                 </div>
 
                 {/* Quick Info Card */}
-                <div className='relative overflow-hidden bg-gradient-to-b from-[#161d2d] via-[#111624] to-[#0c0f1a] border border-blue-500/30 text-white rounded-2xl p-6 flex flex-col justify-between shadow-2xl backdrop-blur-md font-sans'>
+                <div className='relative overflow-hidden bg-neutral-900/70 border border-blue-500/30 text-white rounded-2xl p-6 flex flex-col justify-between shadow-2xl shadow-blue-950/30 backdrop-blur-xl font-sans hover:border-blue-400/50 transition-all'>
                     <div>
                         <div className='flex items-center gap-2 text-blue-400 font-bold text-xs uppercase tracking-wider mb-2'>
                             <SparklesIcon className='w-4 h-4' /> Client Referral & Bonus
@@ -219,7 +219,7 @@ const CreditsContainer = () => {
             </div>
 
             {/* Modernized BOLT Activity & Transactions Table */}
-            <div className='relative overflow-hidden bg-gradient-to-b from-[#141619] via-[#121417] to-[#0c0d10] border border-white/[0.08] rounded-2xl shadow-2xl shadow-black/60 backdrop-blur-md font-sans'>
+            <div className='relative overflow-hidden bg-neutral-900/70 border border-white/10 rounded-2xl shadow-2xl shadow-blue-950/20 backdrop-blur-xl font-sans hover:border-white/20 transition-all'>
                 {/* Header & Filter Controls */}
                 <div className='p-6 border-b border-white/[0.08] flex flex-wrap items-center justify-between gap-4'>
                     <div className='flex items-center gap-3.5'>

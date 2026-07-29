@@ -13,9 +13,9 @@ import Card from '@/components/elements/Card'
 
 
 export const StatRow = styled.div`
-    ${tw`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border border-stone-800/80 shadow-2xl shadow-black/60 rounded-2xl bg-gradient-to-b from-[#141619] via-[#121417] to-[#0c0d10] font-sans backdrop-blur-md overflow-hidden`}
+    ${tw`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border border-white/10 shadow-2xl shadow-black/60 rounded-2xl bg-neutral-900/70 font-sans backdrop-blur-xl overflow-hidden`}
     & > div {
-        ${tw`border-stone-800/80 p-6`}
+        ${tw`border-white/10 p-6`}
     }
 
     & > div > p {
@@ -23,7 +23,7 @@ export const StatRow = styled.div`
     }
 
     & > div:not(:last-child) {
-        ${tw`md:border-r border-stone-800/80`}
+        ${tw`md:border-r border-white/10`}
     }
 
     & > div:nth-of-type(-n + 2) {

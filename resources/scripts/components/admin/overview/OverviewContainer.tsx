@@ -1,4 +1,4 @@
-﻿import { bytesToString } from '@/util/helpers'
+import { bytesToString } from '@/util/helpers'
 import {
     CircleStackIcon,
     CpuChipIcon,
@@ -48,7 +48,7 @@ const StatCard = ({
     tone = 'default',
 }: StatCardProps) => {
     const content = (
-        <div className='flex items-start justify-between gap-4 p-5 bg-[#141619] border border-gray-800 rounded-2xl shadow-xl transition-all hover:border-gray-700 h-full'>
+        <div className='flex items-start justify-between gap-4 p-5 bg-neutral-900/70 border border-white/10 rounded-2xl shadow-xl shadow-blue-950/20 backdrop-blur-xl transition-all hover:border-white/20 h-full'>
             <div>
                 <p className='text-[11px] font-bold uppercase tracking-wider text-gray-400'>{title}</p>
                 <p className='mt-2 text-3xl font-extrabold text-white tracking-tight'>
@@ -220,7 +220,7 @@ const OverviewContainer = () => {
                         }
                     />
 
-                    <div className='col-span-12 lg:col-span-7 bg-[#141619] border border-gray-800 rounded-2xl p-6 shadow-xl'>
+                    <div className='col-span-12 lg:col-span-7 bg-neutral-900/70 border border-white/10 rounded-2xl p-6 shadow-xl shadow-blue-950/20 backdrop-blur-xl hover:border-white/20 transition-all'>
                         <div className='flex items-center justify-between gap-3 border-b border-gray-800 pb-4'>
                             <div>
                                 <h2 className='text-lg font-bold text-white'>Capacity & Allocations</h2>
@@ -275,7 +275,7 @@ const OverviewContainer = () => {
                         </div>
                     </div>
 
-                    <div className='col-span-12 lg:col-span-5 bg-[#141619] border border-gray-800 rounded-2xl p-6 shadow-xl'>
+                    <div className='col-span-12 lg:col-span-5 bg-neutral-900/70 border border-white/10 rounded-2xl p-6 shadow-xl shadow-blue-950/20 backdrop-blur-xl hover:border-white/20 transition-all'>
                         <div className='flex items-center justify-between gap-3 border-b border-gray-800 pb-4'>
                             <div>
                                 <h2 className='text-lg font-bold text-white'>Server Operational States</h2>

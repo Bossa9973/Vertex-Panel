@@ -12,6 +12,8 @@ import NavigationBar from '@/components/elements/navigation/NavigationBar'
 import NavigationBarProvider from '@/components/NavigationBarProvider'
 
 
+import GlobalBackground from '@/components/ui/GlobalBackground'
+
 export type Route = {
     handle?: Handle
     children?: Route[]
@@ -29,7 +31,10 @@ const router = createBrowserRouter([
         path: '/auth',
         element: (
             <GuestRoutes>
-                <Outlet />
+                <GlobalBackground />
+                <div className='relative z-10 min-h-screen'>
+                    <Outlet />
+                </div>
             </GuestRoutes>
         ),
         children: [
@@ -51,7 +56,10 @@ const router = createBrowserRouter([
         path: '/login',
         element: (
             <GuestRoutes>
-                {lazyLoad(lazy(() => import('@/components/auth/LoginContainer')))}
+                <GlobalBackground />
+                <div className='relative z-10 min-h-screen'>
+                    {lazyLoad(lazy(() => import('@/components/auth/LoginContainer')))}
+                </div>
             </GuestRoutes>
         ),
     },
@@ -59,7 +67,10 @@ const router = createBrowserRouter([
         path: '/register',
         element: (
             <GuestRoutes>
-                {lazyLoad(lazy(() => import('@/components/auth/RegisterContainer')))}
+                <GlobalBackground />
+                <div className='relative z-10 min-h-screen'>
+                    {lazyLoad(lazy(() => import('@/components/auth/RegisterContainer')))}
+                </div>
             </GuestRoutes>
         ),
     },
@@ -68,8 +79,11 @@ const router = createBrowserRouter([
         element: (
             <AuthenticatedRoutes>
                 <NavigationBarProvider>
-                    <NavigationBar />
-                    <Outlet />
+                    <GlobalBackground />
+                    <div className='relative z-10 min-h-screen text-stone-100 selection:bg-blue-500/30'>
+                        <NavigationBar />
+                        <Outlet />
+                    </div>
                 </NavigationBarProvider>
             </AuthenticatedRoutes>
         ),
