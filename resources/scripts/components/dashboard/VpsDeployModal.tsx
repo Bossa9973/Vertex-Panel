@@ -405,7 +405,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
             }}
         >
             {/* ── Outer wrapper with 100% pricing-section-4 background & atmospheric elements ── */}
-            <div className='relative bg-black min-h-[620px] max-h-[82vh] overflow-y-auto custom-vps-scrollbar text-white rounded-[24px]' ref={modalRef}>
+            <div className='relative bg-black min-h-[620px] overflow-hidden text-white rounded-[24px]' ref={modalRef}>
                 <style>{`
                     .custom-vps-scrollbar::-webkit-scrollbar {
                         width: 6px;
@@ -631,7 +631,8 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                     <div className='space-y-4 max-w-4xl mx-auto'>
                                         <PricingSwitch isYearly={isYearly} onToggle={setIsYearly} />
 
-                                        <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'>
+                                        <div className='max-h-[440px] overflow-y-auto custom-vps-scrollbar pr-1'>
+                                            <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'>
                                                 {plans.map((plan) => {
                                                     const isSelected = selectedPlanId === plan.id
                                                     const planPriceValue = isYearly ? Math.round(plan.price * 12 * 0.85) : plan.price
@@ -713,6 +714,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                     )
                                                 })}
                                             </div>
+                                        </div>
 
                                         <div className='flex justify-end pt-2 pb-4'>
                                             <button
