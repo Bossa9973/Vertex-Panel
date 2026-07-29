@@ -405,7 +405,13 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
             }}
         >
             {/* ── Outer wrapper with 100% pricing-section-4 background & atmospheric elements ── */}
-            <div className='relative bg-black min-h-[620px] overflow-hidden text-white rounded-[24px]' ref={modalRef}>
+            <div
+                className={cn(
+                    'relative bg-black min-h-[620px] text-white rounded-[24px]',
+                    step === 1 ? 'max-h-[82vh] overflow-y-auto custom-vps-scrollbar' : 'overflow-hidden'
+                )}
+                ref={modalRef}
+            >
                 <style>{`
                     .custom-vps-scrollbar::-webkit-scrollbar {
                         width: 6px;
@@ -631,89 +637,87 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                     <div className='space-y-4 max-w-4xl mx-auto'>
                                         <PricingSwitch isYearly={isYearly} onToggle={setIsYearly} />
 
-                                        <div className='max-h-[440px] overflow-y-auto custom-vps-scrollbar pr-1'>
-                                            <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'>
-                                                {plans.map((plan) => {
-                                                    const isSelected = selectedPlanId === plan.id
-                                                    const planPriceValue = isYearly ? Math.round(plan.price * 12 * 0.85) : plan.price
+                                        <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'>
+                                            {plans.map((plan) => {
+                                                const isSelected = selectedPlanId === plan.id
+                                                const planPriceValue = isYearly ? Math.round(plan.price * 12 * 0.85) : plan.price
 
-                                                    return (
-                                                        <Card
-                                                            key={plan.id}
-                                                            onClick={() => setSelectedPlanId(plan.id)}
-                                                            className={cn(
-                                                                'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
-                                                                isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0900ff] z-20 border-blue-500 ring-2 ring-blue-500/40'
-                                                                    : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
-                                                            )}
-                                                        >
-                                                            <CardHeader className='text-left p-5 pb-3'>
-                                                                <div className='flex justify-between items-center mb-1'>
-                                                                    <h3 className='text-xl font-bold text-white'>{plan.name}</h3>
-                                                                    {isSelected && (
-                                                                        <CheckCircleIcon className='w-5 h-5 text-blue-400 shrink-0' />
-                                                                    )}
+                                                return (
+                                                    <Card
+                                                        key={plan.id}
+                                                        onClick={() => setSelectedPlanId(plan.id)}
+                                                        className={cn(
+                                                            'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
+                                                            isSelected
+                                                                ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0900ff] z-20 border-blue-500 ring-2 ring-blue-500/40'
+                                                                : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
+                                                        )}
+                                                    >
+                                                        <CardHeader className='text-left p-5 pb-3'>
+                                                            <div className='flex justify-between items-center mb-1'>
+                                                                <h3 className='text-xl font-bold text-white'>{plan.name}</h3>
+                                                                {isSelected && (
+                                                                    <CheckCircleIcon className='w-5 h-5 text-blue-400 shrink-0' />
+                                                                )}
+                                                            </div>
+                                                            <div className='flex items-baseline my-2'>
+                                                                <span className='text-3xl font-semibold flex items-center gap-1 text-amber-400'>
+                                                                    <BoltIcon className='w-5 h-5 fill-amber-400/20 text-amber-400 shrink-0' />
+                                                                    <NumberFlow
+                                                                        value={planPriceValue}
+                                                                        className='text-3xl font-semibold text-amber-400'
+                                                                    />
+                                                                </span>
+                                                                <span className='text-gray-300 text-xs ml-1.5 font-medium'>
+                                                                    BOLTs/{isYearly ? 'yr' : 'mo'}
+                                                                </span>
+                                                            </div>
+                                                            <p className='text-xs text-gray-400 line-clamp-2 min-h-[32px]'>
+                                                                {plan.description || 'Optimized cloud instance for high concurrency workloads.'}
+                                                            </p>
+                                                        </CardHeader>
+
+                                                        <CardContent className='p-5 pt-0 mt-auto'>
+                                                            <button
+                                                                type='button'
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    setSelectedPlanId(plan.id)
+                                                                    goToStep(2)
+                                                                }}
+                                                                className={cn(
+                                                                    'w-full py-2.5 px-4 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2',
+                                                                    isSelected
+                                                                        ? 'bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white'
+                                                                        : 'bg-gradient-to-t from-neutral-950 to-neutral-700 shadow-lg shadow-neutral-900 border border-neutral-800 text-white hover:border-neutral-600'
+                                                                )}
+                                                            >
+                                                                {isSelected ? 'Selected' : 'Select Plan'}
+                                                            </button>
+
+                                                            <div className='space-y-2 pt-4 border-t border-neutral-700/80 mt-4 text-xs'>
+                                                                <div className='flex items-center gap-2 text-gray-300'>
+                                                                    <span className='h-2 w-2 bg-blue-500 rounded-full shrink-0' />
+                                                                    <CpuChipIcon className='w-3.5 h-3.5 text-blue-400 shrink-0' />
+                                                                    <span>{plan.cpu} vCPU Cores</span>
                                                                 </div>
-                                                                <div className='flex items-baseline my-2'>
-                                                                    <span className='text-3xl font-semibold flex items-center gap-1 text-amber-400'>
-                                                                        <BoltIcon className='w-5 h-5 fill-amber-400/20 text-amber-400 shrink-0' />
-                                                                        <NumberFlow
-                                                                            value={planPriceValue}
-                                                                            className='text-3xl font-semibold text-amber-400'
-                                                                        />
+                                                                <div className='flex items-center gap-2 text-gray-300'>
+                                                                    <span className='h-2 w-2 bg-emerald-500 rounded-full shrink-0' />
+                                                                    <ServerIcon className='w-3.5 h-3.5 text-emerald-400 shrink-0' />
+                                                                    <span>
+                                                                        {plan.ram >= 1024 ? `${(plan.ram / 1024).toFixed(0)} GB` : `${plan.ram} MB`} RAM
                                                                     </span>
-                                                                    <span className='text-gray-300 text-xs ml-1.5 font-medium'>
-                                                                        BOLTs/{isYearly ? 'yr' : 'mo'}
-                                                                    </span>
                                                                 </div>
-                                                                <p className='text-xs text-gray-400 line-clamp-2 min-h-[32px]'>
-                                                                    {plan.description || 'Optimized cloud instance for high concurrency workloads.'}
-                                                                </p>
-                                                            </CardHeader>
-
-                                                            <CardContent className='p-5 pt-0 mt-auto'>
-                                                                <button
-                                                                    type='button'
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        setSelectedPlanId(plan.id)
-                                                                        goToStep(2)
-                                                                    }}
-                                                                    className={cn(
-                                                                        'w-full py-2.5 px-4 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2',
-                                                                        isSelected
-                                                                            ? 'bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white'
-                                                                            : 'bg-gradient-to-t from-neutral-950 to-neutral-700 shadow-lg shadow-neutral-900 border border-neutral-800 text-white hover:border-neutral-600'
-                                                                    )}
-                                                                >
-                                                                    {isSelected ? 'Selected' : 'Select Plan'}
-                                                                </button>
-
-                                                                <div className='space-y-2 pt-4 border-t border-neutral-700/80 mt-4 text-xs'>
-                                                                    <div className='flex items-center gap-2 text-gray-300'>
-                                                                        <span className='h-2 w-2 bg-blue-500 rounded-full shrink-0' />
-                                                                        <CpuChipIcon className='w-3.5 h-3.5 text-blue-400 shrink-0' />
-                                                                        <span>{plan.cpu} vCPU Cores</span>
-                                                                    </div>
-                                                                    <div className='flex items-center gap-2 text-gray-300'>
-                                                                        <span className='h-2 w-2 bg-emerald-500 rounded-full shrink-0' />
-                                                                        <ServerIcon className='w-3.5 h-3.5 text-emerald-400 shrink-0' />
-                                                                        <span>
-                                                                            {plan.ram >= 1024 ? `${(plan.ram / 1024).toFixed(0)} GB` : `${plan.ram} MB`} RAM
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className='flex items-center gap-2 text-gray-300'>
-                                                                        <span className='h-2 w-2 bg-indigo-500 rounded-full shrink-0' />
-                                                                        <CircleStackIcon className='w-3.5 h-3.5 text-indigo-400 shrink-0' />
-                                                                        <span>{plan.disk} GB NVMe SSD</span>
-                                                                    </div>
+                                                                <div className='flex items-center gap-2 text-gray-300'>
+                                                                    <span className='h-2 w-2 bg-indigo-500 rounded-full shrink-0' />
+                                                                    <CircleStackIcon className='w-3.5 h-3.5 text-indigo-400 shrink-0' />
+                                                                    <span>{plan.disk} GB NVMe SSD</span>
                                                                 </div>
-                                                            </CardContent>
-                                                        </Card>
-                                                    )
-                                                })}
-                                            </div>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                )
+                                            })}
                                         </div>
 
                                         <div className='flex justify-end pt-2 pb-4'>
