@@ -33,6 +33,8 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         'name',
         'email',
         'credits',
+        'discord_id',
+        'discord_username',
         'password',
         'root_admin',
     ];
@@ -76,6 +78,8 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
     {
         $data = Collection::make($this->toArray())->except(['id'])->toArray();
         $data['credits'] = (float) ($this->credits ?? 0);
+        $data['discord_id'] = $this->discord_id;
+        $data['discord_username'] = $this->discord_username;
         return $data;
     }
 

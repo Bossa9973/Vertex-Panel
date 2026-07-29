@@ -78,7 +78,7 @@ class EarnBoltsController extends ApiController
             $formattedTasks[] = array_merge($task, [
                 'is_claimed' => !is_null($claim),
                 'claimed_at' => $claim ? $claim->claimed_at->toIso8601String() : null,
-                'discord_id' => $claim ? $claim->discord_id : null,
+                'discord_id' => $claim ? $claim->discord_id : $user->discord_id,
             ]);
         }
 
@@ -86,7 +86,36 @@ class EarnBoltsController extends ApiController
             'success' => true,
             'data' => [
                 'user_credits' => (float) $user->credits,
+                'discord_id' => $user->discord_id,
+                'discord_username' => $user->discord_username,
                 'tasks' => $formattedTasks,
+            ],
+        ]);
+    }
+
+    /**
+     * Link / connect user's Discord account.
+     */
+    public function connectDiscord(Request $request): JsonResponse
+    {
+        $request->validate([
+            'discord_id' => 'required|string|min:3',
+        ]);
+
+        $user = $request->user();
+        $discordId = trim($request->input('discord_id'));
+        $discordUsername = trim($request->input('discord_username', $discordId));
+
+        $user->discord_id = $discordId;
+        $user->discord_username = $discordUsername;
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Discord account successfully linked to your profile!',
+            'data' => [
+                'discord_id' => $user->discord_id,
+                'discord_username' => $user->discord_username,
             ],
         ]);
     }
@@ -98,11 +127,18 @@ class EarnBoltsController extends ApiController
     {
         $request->validate([
             'task_key' => 'required|string',
-            'discord_id' => 'required|string|min:3',
         ]);
 
         $taskKey = $request->input('task_key');
-        $discordId = trim($request->input('discord_id'));
+        $user = $request->user();
+        $discordId = trim($request->input('discord_id', $user->discord_id ?? ''));
+
+        if (empty($discordId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please link your Discord account before claiming task rewards.',
+            ], 400);
+        }
 
         if (!isset($this->tasks[$taskKey])) {
             return response()->json([
@@ -111,7 +147,6 @@ class EarnBoltsController extends ApiController
             ], 422);
         }
 
-        $user = $request->user();
         $existingClaim = DiscordClaim::where('user_id', $user->id)
             ->where('task_key', $taskKey)
             ->first();
@@ -126,7 +161,11 @@ class EarnBoltsController extends ApiController
         $task = $this->tasks[$taskKey];
         $rewardBolts = (float) $task['reward_bolts'];
 
-        // Perform Verification (Verifies Discord user ID format and awards reward)
+        // Save linked discord_id on user if not set
+        if (!$user->discord_id) {
+            $user->discord_id = $discordId;
+        }
+
         $user->credits += $rewardBolts;
         $user->save();
 

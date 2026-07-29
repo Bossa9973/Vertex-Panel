@@ -15,6 +15,7 @@ Route::prefix('/credits')->group(function () {
 Route::prefix('/earn')->group(function () {
     Route::get('/status', [Client\EarnBoltsController::class, 'status']);
     Route::post('/claim', [Client\EarnBoltsController::class, 'claimReward']);
+    Route::post('/connect-discord', [Client\EarnBoltsController::class, 'connectDiscord']);
 });
 
 Route::get('/plans', [Client\ServerDeployController::class, 'getOptions']);

@@ -5,6 +5,7 @@ import PageContentBlock from '@/components/elements/PageContentBlock'
 import http from '@/api/http'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import { BorderBeam } from '@/components/ui/BorderBeam'
+import ConnectDiscordModal from '@/components/dashboard/ConnectDiscordModal'
 import {
     UserGroupIcon,
     SparklesIcon,
@@ -12,6 +13,7 @@ import {
     CheckCircleIcon,
     ArrowRightIcon,
     ShieldCheckIcon,
+    LinkIcon,
 } from '@heroicons/react/24/outline'
 
 interface EarnTask {
@@ -33,9 +35,11 @@ export const EarnBoltsContainer: React.FC = () => {
 
     const [tasks, setTasks] = useState<EarnTask[]>([])
     const [loading, setLoading] = useState(true)
-    const [discordIdInput, setDiscordIdInput] = useState('')
+    const [discordId, setDiscordId] = useState<string | null>(user?.discord_id || null)
+    const [discordUsername, setDiscordUsername] = useState<string | null>(user?.discord_username || null)
     const [claimingKey, setClaimingKey] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'all' | 'invites' | 'boosts' | 'messages'>('all')
+    const [connectModalOpen, setConnectModalOpen] = useState(false)
 
     const userCredits = user?.credits ?? 0
 
@@ -43,13 +47,11 @@ export const EarnBoltsContainer: React.FC = () => {
         setLoading(true)
         try {
             const res = await http.get('/api/client/earn/status')
-            if (res.data?.data?.tasks) {
-                setTasks(res.data.data.tasks)
-                // Set default discord id from first claimed task if available
-                const claimed = res.data.data.tasks.find((t: EarnTask) => t.discord_id)
-                if (claimed?.discord_id) {
-                    setDiscordIdInput(claimed.discord_id)
-                }
+            if (res.data?.data) {
+                const data = res.data.data
+                if (data.tasks) setTasks(data.tasks)
+                if (data.discord_id) setDiscordId(data.discord_id)
+                if (data.discord_username) setDiscordUsername(data.discord_username)
             }
         } catch (err) {
             console.error('Failed to load earn tasks:', err)
@@ -65,8 +67,8 @@ export const EarnBoltsContainer: React.FC = () => {
     const handleClaim = async (task: EarnTask) => {
         if (task.is_claimed || claimingKey) return
 
-        if (!discordIdInput.trim()) {
-            alert('Please enter your Discord User ID or Username in the verifier input field above before claiming!')
+        if (!discordId) {
+            setConnectModalOpen(true)
             return
         }
 
@@ -74,7 +76,7 @@ export const EarnBoltsContainer: React.FC = () => {
         try {
             const res = await http.post('/api/client/earn/claim', {
                 task_key: task.key,
-                discord_id: discordIdInput.trim(),
+                discord_id: discordId,
             })
 
             if (res.data?.success) {
@@ -93,7 +95,6 @@ export const EarnBoltsContainer: React.FC = () => {
     }
 
     const filteredTasks = tasks.filter(t => activeTab === 'all' || t.category === activeTab)
-
     const totalAvailableBolts = tasks.filter(t => !t.is_claimed).reduce((sum, t) => sum + t.reward_bolts, 0)
     const claimedCount = tasks.filter(t => t.is_claimed).length
 
@@ -116,7 +117,7 @@ export const EarnBoltsContainer: React.FC = () => {
 
                 <div className='relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-6 items-center'>
                     <div className='lg:col-span-2'>
-                        <div className='flex items-center gap-2.5 mb-3'>
+                        <div className='flex flex-wrap items-center gap-2.5 mb-3'>
                             <span className='px-3 py-1 rounded-full text-xs font-bold bg-[#5865F2]/15 text-[#5865F2] border border-[#5865F2]/30 flex items-center gap-1.5'>
                                 <SparklesIcon className='w-4 h-4' /> Discord Community Rewards
                             </span>
@@ -159,34 +160,44 @@ export const EarnBoltsContainer: React.FC = () => {
                 </div>
             </div>
 
-            {/* Discord Verifier Bar */}
+            {/* Discord Account Verifier Status Banner */}
             <div className={`rounded-2xl p-5 mb-8 border backdrop-blur-xl shadow-lg transition-all ${isDark ? 'bg-neutral-900/70 border-white/10' : 'bg-white/80 border-slate-200/80'}`}>
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
-                    <div className='flex items-center gap-3'>
-                        <div className='w-10 h-10 rounded-xl bg-[#5865F2]/15 border border-[#5865F2]/30 flex items-center justify-center text-[#5865F2] shrink-0'>
+                    <div className='flex items-center gap-3.5'>
+                        <div className='w-11 h-11 rounded-2xl bg-[#5865F2]/15 border border-[#5865F2]/30 flex items-center justify-center text-[#5865F2] shrink-0 shadow-[0_0_15px_rgba(88,101,242,0.2)]'>
                             <UserGroupIcon className='w-5 h-5' />
                         </div>
                         <div>
-                            <h4 className={`text-sm font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                                Discord Account Verifier
-                            </h4>
-                            <p className='text-xs text-slate-400 font-sans'>
-                                Enter your Discord User ID (or Tag) to verify requirements and claim task rewards.
+                            <div className='flex items-center gap-2'>
+                                <h4 className={`text-sm font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                    Discord Account Connection
+                                </h4>
+                                {discordId ? (
+                                    <span className='px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1'>
+                                        <CheckCircleIcon className='w-3.5 h-3.5' /> Connected
+                                    </span>
+                                ) : (
+                                    <span className='px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30'>
+                                        Action Needed
+                                    </span>
+                                )}
+                            </div>
+                            <p className='text-xs text-slate-400 font-sans mt-0.5'>
+                                {discordId
+                                    ? `Linked Discord: ${discordUsername || discordId} (${discordId})`
+                                    : 'Please link your Discord account to verify invites, boosts, and chat messages.'}
                             </p>
                         </div>
                     </div>
 
-                    <div className='flex items-center gap-2 w-full md:w-auto'>
-                        <input
-                            type='text'
-                            value={discordIdInput}
-                            onChange={e => setDiscordIdInput(e.target.value)}
-                            placeholder='Discord ID (e.g. 102938475610293847 or @username)'
-                            className={`px-4 py-2.5 rounded-xl text-xs font-mono border outline-none transition-all w-full md:w-72 ${isDark ? 'bg-black/60 border-white/15 text-white focus:border-blue-500' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-blue-500'}`}
-                        />
-                        <span className='px-3 py-2.5 rounded-xl text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0'>
-                            Verifier Active
-                        </span>
+                    <div className='flex items-center gap-3'>
+                        <button
+                            onClick={() => setConnectModalOpen(true)}
+                            className='px-5 py-2.5 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold text-xs shadow-lg shadow-[#5865F2]/25 transition-all cursor-pointer flex items-center gap-2 active:scale-95'
+                        >
+                            <LinkIcon className='w-4 h-4' />
+                            {discordId ? 'Manage Discord Link' : 'Connect Discord Account'}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -318,6 +329,18 @@ export const EarnBoltsContainer: React.FC = () => {
                     })}
                 </div>
             )}
+
+            {/* Connect Discord Liquid Glass Pop-Up Modal */}
+            <ConnectDiscordModal
+                opened={connectModalOpen}
+                onClose={() => setConnectModalOpen(false)}
+                currentDiscordId={discordId}
+                onSuccess={(newId, newUsername) => {
+                    setDiscordId(newId)
+                    setDiscordUsername(newUsername)
+                    fetchStatus()
+                }}
+            />
         </PageContentBlock>
     )
 }
