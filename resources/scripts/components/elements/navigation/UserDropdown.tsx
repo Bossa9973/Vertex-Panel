@@ -15,6 +15,7 @@ interface Props {
 
 const UserDropdown = ({ logout }: Props) => {
     const user = useStoreState(state => state.user.data)
+    const isDark = useStoreState(state => state.settings.data?.theme !== 'light')
     const navigate = useNavigate()
     const { t: tAuth } = useTranslation('auth')
     const { t: tStrings } = useTranslation('strings')
@@ -42,8 +43,8 @@ const UserDropdown = ({ logout }: Props) => {
             {/* User Dropdown */}
             <Menu width={240} position='bottom-end' withinPortal zIndex={9999} shadow='xl'>
                 <Menu.Target>
-                    <button className='group flex items-center space-x-3 bg-white/80 dark:bg-neutral-900/60 hover:bg-slate-100 dark:hover:bg-neutral-800/80 border border-slate-200/80 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 backdrop-blur-md rounded-2xl px-3 py-1.5 transition-all duration-200 cursor-pointer active:scale-95 shadow-xs dark:shadow-md'>
-                        <span className='text-slate-800 dark:text-stone-200 group-hover:text-slate-900 dark:group-hover:text-white font-bold text-xs tracking-tight transition-colors'>
+                    <button className={`group flex items-center space-x-3 backdrop-blur-md rounded-2xl px-3 py-1.5 transition-all duration-200 cursor-pointer active:scale-95 ${isDark ? 'bg-neutral-900/60 hover:bg-neutral-800/80 border border-white/10 hover:border-white/20 shadow-md' : 'bg-white/80 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 shadow-xs'}`}>
+                        <span className={`font-bold text-xs tracking-tight transition-colors ${isDark ? 'text-stone-200 group-hover:text-white' : 'text-slate-800 group-hover:text-slate-900'}`}>
                             {user.name}
                         </span>
                         <Avatar color='blue' size='sm' radius='xl' className='font-bold shadow-sm ring-2 ring-blue-500/40'>
@@ -53,18 +54,18 @@ const UserDropdown = ({ logout }: Props) => {
                 </Menu.Target>
                 <Menu.Dropdown>
                     {/* User Header Details */}
-                    <div className='px-3 py-2 mb-1 border-b border-slate-200/80 dark:border-white/10'>
-                        <p className='text-xs font-bold text-slate-900 dark:text-white tracking-tight truncate'>{user.name}</p>
-                        <p className='text-[11px] font-medium text-slate-500 dark:text-stone-400 truncate'>{user.email}</p>
+                    <div className={`px-3 py-2 mb-1 border-b ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                        <p className={`text-xs font-bold tracking-tight truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{user.name}</p>
+                        <p className={`text-[11px] font-medium truncate ${isDark ? 'text-stone-400' : 'text-slate-500'}`}>{user.email}</p>
                     </div>
 
                     <Menu.Item
-                        icon={<BoltSvgIcon className='w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0' />}
+                        icon={<BoltSvgIcon className='w-4 h-4 text-amber-400 shrink-0' />}
                         onClick={() => navigate('/credits')}
                     >
                         <div className='flex items-center justify-between w-full'>
-                            <span className='text-slate-800 dark:text-stone-200 font-semibold'>Billing & BOLTs</span>
-                            <span className='text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20'>
+                            <span className={`font-semibold ${isDark ? 'text-stone-200' : 'text-slate-800'}`}>Billing & BOLTs</span>
+                            <span className='text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20'>
                                 {(user.credits ?? 0).toFixed(2)}
                             </span>
                         </div>
@@ -74,10 +75,10 @@ const UserDropdown = ({ logout }: Props) => {
                         <>
                             <Menu.Divider />
                             <Menu.Item
-                                icon={<CpuChipIcon className='w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0' />}
+                                icon={<CpuChipIcon className='w-4 h-4 text-blue-400 shrink-0' />}
                                 onClick={() => navigate('/admin')}
                             >
-                                <span className='text-slate-800 dark:text-stone-200 font-bold'>{adminLabel}</span>
+                                <span className={`font-bold ${isDark ? 'text-stone-200' : 'text-slate-800'}`}>{adminLabel}</span>
                             </Menu.Item>
                         </>
                     )}

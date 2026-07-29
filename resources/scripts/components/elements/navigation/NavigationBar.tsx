@@ -10,6 +10,7 @@ import {
     useState,
 } from 'react'
 import { Link, useMatch, useMatches } from 'react-router-dom'
+import { useStoreState } from '@/state'
 
 import http from '@/api/http'
 
@@ -51,6 +52,7 @@ const NavigationBar = () => {
     const logo = useRef<HTMLDivElement>(null)
     const isAdminArea = useMatch('/admin/*')
     const matches = useMatches()
+    const isDark = useStoreState(state => state.settings.data?.theme !== 'light')
 
     const visibilityObserver = useMemo(
         () =>
@@ -110,7 +112,7 @@ const NavigationBar = () => {
     }
 
     return (
-        <div className='bg-white dark:bg-neutral-950/90 backdrop-blur-2xl w-full border-b border-slate-200/80 dark:border-white/10 font-sans shadow-md dark:shadow-lg dark:shadow-blue-950/20'>
+        <div className={isDark ? 'bg-neutral-950/95 backdrop-blur-2xl w-full border-b border-white/10 font-sans shadow-lg shadow-blue-950/20' : 'bg-white/95 backdrop-blur-2xl w-full border-b border-slate-200/80 font-sans shadow-md'}>
             {isAdminArea && <AdminBanner />}
             <LoadingOverlay visible={isLoggingOut} zIndex={4000} />
             <ContentContainer ref={topBar} className='pt-3 pb-1.5 relative'>
@@ -120,17 +122,17 @@ const NavigationBar = () => {
                             to={isAdminArea ? '/admin' : '/'}
                             className='flex items-center space-x-3 group'
                         >
-                            <Logo className='w-6 h-6 text-blue-500 dark:text-blue-400 group-hover:scale-105 transition-transform' />
-                            <h1 className='font-bold text-lg text-slate-900 dark:text-white tracking-tight font-sans'>
+                            <Logo className={`w-6 h-6 group-hover:scale-105 transition-transform ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
+                            <h1 className={`font-bold text-lg tracking-tight font-sans ${isDark ? 'text-white' : 'text-slate-900'}`}>
                                 Convoy
                             </h1>
                         </Link>
                         {breadcrumb && (
                             <>
                                 <div className='py-1.5 h-full'>
-                                    <div className='rotate-[25deg] w-[2px] h-full bg-slate-300 dark:bg-white/10 rounded-full' />
+                                    <div className={`rotate-[25deg] w-[2px] h-full rounded-full ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
                                 </div>
-                                <p className='shrink font-semibold text-xs text-slate-700 dark:text-stone-300 font-sans truncate text-ellipsis overflow-hidden whitespace-nowrap bg-slate-100/80 dark:bg-neutral-900/80 border border-slate-200/80 dark:border-white/10 px-3 py-1 rounded-lg backdrop-blur-md'>
+                                <p className={`shrink font-semibold text-xs font-sans truncate text-ellipsis overflow-hidden whitespace-nowrap px-3 py-1 rounded-lg backdrop-blur-md ${isDark ? 'text-stone-300 bg-neutral-900/80 border border-white/10' : 'text-slate-700 bg-slate-100/80 border border-slate-200/80'}`}>
                                     {breadcrumb}
                                 </p>
                             </>
@@ -154,7 +156,7 @@ const NavigationBar = () => {
             />
             <div
                 ref={bottomBar}
-                className='bg-slate-100 dark:bg-neutral-900/90 backdrop-blur-xl shadow-none transition-shadow w-full border-t border-b border-slate-200/80 dark:border-white/10 z-[2000]'
+                className={`backdrop-blur-xl shadow-none transition-shadow w-full border-t border-b z-[2000] ${isDark ? 'bg-neutral-900/90 border-white/10' : 'bg-slate-100/90 border-slate-200/80'}`}
             >
                 <ContentContainer className='flex w-full'>
                     <div
