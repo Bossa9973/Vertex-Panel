@@ -13,13 +13,13 @@ interface Props {
 }
 
 const ThemeProvider = ({ children }: Props) => {
-    const theme = useStoreState(state => state.settings.data?.theme)
+    const theme = useStoreState(state => state.settings.data?.theme ?? 'dark')
 
     useEffect(() => {
-        if (theme === 'dark') {
-            document.documentElement.classList.add('dark')
-        } else {
+        if (theme === 'light') {
             document.documentElement.classList.remove('dark')
+        } else {
+            document.documentElement.classList.add('dark')
         }
     }, [theme])
 
@@ -27,7 +27,7 @@ const ThemeProvider = ({ children }: Props) => {
         <MantineProvider
             emotionCache={emotionCache}
             theme={{
-                colorScheme: theme === 'dark' ? 'dark' : 'light',
+                colorScheme: theme === 'light' ? 'light' : 'dark',
                 fontFamily: `Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";`,
             }}
         >

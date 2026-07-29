@@ -3,7 +3,8 @@ import { Sparkles } from '@/components/ui/sparkles'
 import { useStoreState } from '@/state'
 
 export const GlobalBackground: React.FC = () => {
-    const isDark = useStoreState(state => state.settings.data?.theme === 'dark')
+    const theme = useStoreState(state => state.settings.data?.theme)
+    const isDark = theme !== 'light'
 
     return (
         <div className='fixed inset-0 pointer-events-none z-0 overflow-hidden select-none transition-colors duration-500 bg-slate-50 dark:bg-black'>

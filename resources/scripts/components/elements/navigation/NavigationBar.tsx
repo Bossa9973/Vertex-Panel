@@ -110,7 +110,7 @@ const NavigationBar = () => {
     }
 
     return (
-        <div className='bg-white/80 dark:bg-neutral-950/70 backdrop-blur-2xl w-full border-b border-slate-200/80 dark:border-white/10 font-sans shadow-md dark:shadow-lg dark:shadow-blue-950/20'>
+        <div className='bg-white dark:bg-neutral-950/90 backdrop-blur-2xl w-full border-b border-slate-200/80 dark:border-white/10 font-sans shadow-md dark:shadow-lg dark:shadow-blue-950/20'>
             {isAdminArea && <AdminBanner />}
             <LoadingOverlay visible={isLoggingOut} zIndex={4000} />
             <ContentContainer ref={topBar} className='pt-3 pb-1.5 relative'>
@@ -154,7 +154,7 @@ const NavigationBar = () => {
             />
             <div
                 ref={bottomBar}
-                className='bg-slate-100/70 dark:bg-neutral-900/60 backdrop-blur-xl shadow-none transition-shadow w-full border-t border-b border-slate-200/80 dark:border-white/10 z-[2000]'
+                className='bg-slate-100 dark:bg-neutral-900/90 backdrop-blur-xl shadow-none transition-shadow w-full border-t border-b border-slate-200/80 dark:border-white/10 z-[2000]'
             >
                 <ContentContainer className='flex w-full'>
                     <div
