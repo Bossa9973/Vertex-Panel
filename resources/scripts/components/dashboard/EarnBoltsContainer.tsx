@@ -40,7 +40,7 @@ export const EarnBoltsContainer: React.FC = () => {
     const [discordUsername, setDiscordUsername] = useState<string | null>(user?.discord_username || null)
     const [claimingKey, setClaimingKey] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'all' | 'invites' | 'boosts' | 'messages'>('all')
-    const [connectModalOpen, setConnectModalOpen] = useState(false)
+    const [connectModalOpen, setConnectModalOpen] = useState(!user?.discord_id)
 
     const userCredits = user?.credits ?? 0
 
@@ -51,7 +51,11 @@ export const EarnBoltsContainer: React.FC = () => {
             if (res.data?.data) {
                 const data = res.data.data
                 if (data.tasks) setTasks(data.tasks)
-                if (data.discord_id) setDiscordId(data.discord_id)
+                if (data.discord_id) {
+                    setDiscordId(data.discord_id)
+                } else {
+                    setConnectModalOpen(true)
+                }
                 if (data.discord_username) setDiscordUsername(data.discord_username)
             }
         } catch (err) {
@@ -161,7 +165,7 @@ export const EarnBoltsContainer: React.FC = () => {
                 </div>
             </div>
 
-            {/* Discord Account Verifier Banner */}
+            {/* Discord Account Connection Banner */}
             <div className={`rounded-2xl p-5 mb-8 border backdrop-blur-xl shadow-lg transition-all ${isDark ? 'bg-neutral-900/70 border-white/10' : 'bg-white/80 border-slate-200/80'}`}>
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
                     <div className='flex items-center gap-3.5'>
@@ -236,106 +240,109 @@ export const EarnBoltsContainer: React.FC = () => {
                 </a>
             </div>
 
-            {/* Tasks Grid */}
-            {loading ? (
-                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-                    {[1, 2, 3, 4, 5, 6].map(i => (
-                        <div key={i} className='h-48 rounded-2xl bg-neutral-900/50 border border-white/10 animate-pulse' />
-                    ))}
-                </div>
-            ) : (
-                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans mb-8'>
-                    {filteredTasks.map(task => {
-                        const isClaimed = task.is_claimed
-                        const isClaiming = claimingKey === task.key
+            {/* Tasks Section with Liquid Glass Blur when unconnected */}
+            <div className={!discordId ? 'relative rounded-3xl overflow-hidden p-1 filter blur-[3px] select-none pointer-events-none opacity-60 transition-all duration-500' : ''}>
+                {loading ? (
+                    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+                        {[1, 2, 3, 4, 5, 6].map(i => (
+                            <div key={i} className='h-48 rounded-2xl bg-neutral-900/50 border border-white/10 animate-pulse' />
+                        ))}
+                    </div>
+                ) : (
+                    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans mb-8'>
+                        {filteredTasks.map(task => {
+                            const isClaimed = task.is_claimed
+                            const isClaiming = claimingKey === task.key
 
-                        let icon = <UserGroupIcon className='w-5 h-5 text-blue-400' />
-                        if (task.category === 'boosts') {
-                            icon = <SparklesIcon className='w-5 h-5 text-purple-400' />
-                        } else if (task.category === 'messages') {
-                            icon = <ChatBubbleLeftRightIcon className='w-5 h-5 text-emerald-400' />
-                        }
+                            let icon = <UserGroupIcon className='w-5 h-5 text-blue-400' />
+                            if (task.category === 'boosts') {
+                                icon = <SparklesIcon className='w-5 h-5 text-purple-400' />
+                            } else if (task.category === 'messages') {
+                                icon = <ChatBubbleLeftRightIcon className='w-5 h-5 text-emerald-400' />
+                            }
 
-                        return (
-                            <div
-                                key={task.key}
-                                className={`relative overflow-hidden rounded-2xl p-6 border backdrop-blur-xl transition-all flex flex-col justify-between group hover:scale-[1.01] ${
-                                    isClaimed
-                                        ? isDark
-                                            ? 'bg-neutral-950/50 border-emerald-500/20 opacity-85'
-                                            : 'bg-emerald-50/40 border-emerald-200'
-                                        : isDark
-                                        ? 'bg-neutral-900/70 border-white/10 hover:border-blue-500/40 shadow-xl'
-                                        : 'bg-white/80 border-slate-200/80 hover:border-blue-400 shadow-xl'
-                                }`}
-                            >
-                                <div>
-                                    {/* Task Header */}
-                                    <div className='flex items-center justify-between gap-3 mb-4'>
-                                        <div className='w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0'>
-                                            {icon}
-                                        </div>
-                                        <span className='flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-amber-500/10 text-amber-400 border border-amber-500/30 shadow-xs'>
-                                            <BoltSvgIcon className='w-3.5 h-3.5' /> +{task.reward_bolts.toLocaleString()} BOLTs
-                                        </span>
-                                    </div>
-
-                                    {/* Title & Requirements */}
-                                    <h3 className={`text-lg font-bold tracking-tight mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                                        {task.title}
-                                    </h3>
-                                    <p className={`text-xs leading-relaxed mb-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                        {task.requirement_text}
-                                    </p>
-
-                                    {/* Progress Indicator */}
-                                    <div className='space-y-1.5 mb-6'>
-                                        <div className='flex justify-between text-[11px] font-semibold text-slate-400'>
-                                            <span>Requirement Target:</span>
-                                            <span className='font-mono text-stone-200 font-bold'>
-                                                {isClaimed ? task.target_count : 0} / {task.target_count}
+                            return (
+                                <div
+                                    key={task.key}
+                                    className={`relative overflow-hidden rounded-2xl p-6 border backdrop-blur-xl transition-all flex flex-col justify-between group hover:scale-[1.01] ${
+                                        isClaimed
+                                            ? isDark
+                                                ? 'bg-neutral-950/50 border-emerald-500/20 opacity-85'
+                                                : 'bg-emerald-50/40 border-emerald-200'
+                                            : isDark
+                                            ? 'bg-neutral-900/70 border-white/10 hover:border-blue-500/40 shadow-xl'
+                                            : 'bg-white/80 border-slate-200/80 hover:border-blue-400 shadow-xl'
+                                    }`}
+                                >
+                                    <div>
+                                        {/* Task Header */}
+                                        <div className='flex items-center justify-between gap-3 mb-4'>
+                                            <div className='w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0'>
+                                                {icon}
+                                            </div>
+                                            <span className='flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-amber-500/10 text-amber-400 border border-amber-500/30 shadow-xs'>
+                                                <BoltSvgIcon className='w-3.5 h-3.5' /> +{task.reward_bolts.toLocaleString()} BOLTs
                                             </span>
                                         </div>
-                                        <div className='w-full h-2 rounded-full bg-black/40 border border-white/5 overflow-hidden'>
-                                            <div
-                                                className={`h-full rounded-full transition-all duration-500 ${
-                                                    isClaimed ? 'bg-emerald-500 w-full' : 'bg-blue-600 w-1/4'
-                                                }`}
-                                            />
+
+                                        {/* Title & Requirements */}
+                                        <h3 className={`text-lg font-bold tracking-tight mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                            {task.title}
+                                        </h3>
+                                        <p className={`text-xs leading-relaxed mb-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                            {task.requirement_text}
+                                        </p>
+
+                                        {/* Progress Indicator */}
+                                        <div className='space-y-1.5 mb-6'>
+                                            <div className='flex justify-between text-[11px] font-semibold text-slate-400'>
+                                                <span>Requirement Target:</span>
+                                                <span className='font-mono text-stone-200 font-bold'>
+                                                    {isClaimed ? task.target_count : 0} / {task.target_count}
+                                                </span>
+                                            </div>
+                                            <div className='w-full h-2 rounded-full bg-black/40 border border-white/5 overflow-hidden'>
+                                                <div
+                                                    className={`h-full rounded-full transition-all duration-500 ${
+                                                        isClaimed ? 'bg-emerald-500 w-full' : 'bg-blue-600 w-1/4'
+                                                    }`}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Action Button */}
-                                <div>
-                                    {isClaimed ? (
-                                        <button
-                                            disabled
-                                            className='w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 cursor-default'
-                                        >
-                                            <CheckCircleIcon className='w-4 h-4' /> Reward Claimed ({task.reward_bolts.toLocaleString()} BOLTs)
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={() => handleClaim(task)}
-                                            disabled={isClaiming}
-                                            className='w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/25 transition-all cursor-pointer active:scale-95 disabled:opacity-50'
-                                        >
-                                            {isClaiming ? 'Verifying...' : `Verify & Claim +${task.reward_bolts.toLocaleString()} BOLTs`}
-                                        </button>
-                                    )}
+                                    {/* Action Button */}
+                                    <div>
+                                        {isClaimed ? (
+                                            <button
+                                                disabled
+                                                className='w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 cursor-default'
+                                            >
+                                                <CheckCircleIcon className='w-4 h-4' /> Reward Claimed ({task.reward_bolts.toLocaleString()} BOLTs)
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleClaim(task)}
+                                                disabled={isClaiming}
+                                                className='w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/25 transition-all cursor-pointer active:scale-95 disabled:opacity-50'
+                                            >
+                                                {isClaiming ? 'Verifying...' : `Verify & Claim +${task.reward_bolts.toLocaleString()} BOLTs`}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        )
-                    })}
-                </div>
-            )}
+                            )
+                        })}
+                    </div>
+                )}
+            </div>
 
             {/* Connect Discord Mantine Modal */}
             <ConnectDiscordModal
-                opened={connectModalOpen}
+                opened={connectModalOpen || !discordId}
                 onClose={() => setConnectModalOpen(false)}
                 currentDiscordId={discordId}
+                isBlocked={!discordId}
                 onSuccess={(newId, newUsername) => {
                     setDiscordId(newId)
                     setDiscordUsername(newUsername)

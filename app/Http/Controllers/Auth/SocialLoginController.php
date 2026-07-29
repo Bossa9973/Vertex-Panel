@@ -53,7 +53,8 @@ class SocialLoginController extends Controller
             $redirectUri = config('services.discord.redirect', env('DISCORD_REDIRECT_URI', "{$baseUrl}/auth/social/discord/callback"));
 
             if (empty($clientId)) {
-                return redirect('/auth/login')->with('error', 'Discord Client ID is not configured in .env file.');
+                $target = Auth::check() ? '/earn?error=Discord+Client+ID+is+missing+in+.env+file' : '/auth/login?error=Discord+Client+ID+is+missing+in+.env+file';
+                return redirect($target);
             }
 
             $query = http_build_query([
