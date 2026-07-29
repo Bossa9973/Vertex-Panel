@@ -170,15 +170,21 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 </div>
                                             </td>
 
-                                            {/* Location (Circular Flag + Text) */}
+                                            {/* Location (Circular Flag / Emoji + Text) */}
                                             <td className='py-4 px-3.5 align-middle'>
                                                 <div className='flex items-center gap-2.5'>
-                                                    <img
-                                                        src={srv.flag}
-                                                        alt={srv.location}
-                                                        className='w-5 h-5 rounded-full object-cover shadow-xs border border-white/10 shrink-0'
-                                                    />
-                                                    <span className='text-slate-300 font-medium text-xs font-sans tracking-tight'>{srv.location}</span>
+                                                    {srv.flag && (srv.flag.startsWith('http://') || srv.flag.startsWith('https://') || srv.flag.startsWith('/')) ? (
+                                                        <img
+                                                            src={srv.flag}
+                                                            alt={srv.location}
+                                                            className='w-5 h-5 rounded-full object-cover shadow-xs border border-white/10 shrink-0'
+                                                        />
+                                                    ) : (
+                                                        <span className='text-sm leading-none shrink-0 flex items-center justify-center w-5.5 h-5.5 rounded-full bg-white/10 border border-white/15 shadow-xs font-sans'>
+                                                            {srv.flag || '🌐'}
+                                                        </span>
+                                                    )}
+                                                    <span className='text-slate-300 font-semibold text-xs font-sans tracking-tight'>{srv.location}</span>
                                                 </div>
                                             </td>
 
