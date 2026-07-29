@@ -117,7 +117,7 @@ const StepPillSwitch = ({
     onSelectStep: (step: number) => void
 }) => {
     return (
-        <div className='flex justify-center mt-1 mb-2'>
+        <div className='flex justify-center my-3'>
             <div className='relative z-10 mx-auto flex w-fit rounded-full bg-neutral-900/90 border border-gray-700/80 p-1 backdrop-blur-md'>
                 {stepTitles.map(s => {
                     const isActive = currentStep === s.num
@@ -471,7 +471,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                 />
 
                 {/* ── Content Container (z-10) ── */}
-                <div className='relative z-10 px-6 pt-3 pb-6 sm:px-8 sm:pt-4 sm:pb-6 flex flex-col justify-between min-h-[620px]'>
+                <div className='relative z-10 px-5 pt-3 pb-6 sm:px-7 sm:pt-4 sm:pb-6 flex flex-col justify-between min-h-[620px]'>
 
                     {/* Modal Close Button & Title Section */}
                     <div>
@@ -487,7 +487,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                         </div>
 
                         {/* Title using VerticalCutReveal */}
-                        <div className='text-center max-w-xl mx-auto mt-0 mb-1.5 space-y-0.5'>
+                        <div className='text-center max-w-xl mx-auto mt-0 mb-2 space-y-1'>
                             <h2 className='text-2xl sm:text-3xl font-medium text-white flex justify-center'>
                                 <VerticalCutReveal
                                     splitBy='words'
@@ -529,7 +529,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                     </AnimatePresence>
 
                     {/* Step Body */}
-                    <div className='relative mt-1 mb-2 flex-1 flex flex-col justify-center'>
+                    <div className='relative mt-2 mb-3 flex-1 flex flex-col justify-center'>
                         <LoadingOverlay visible={loading} radius='lg' />
 
                         <AnimatePresence>
@@ -563,9 +563,9 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             initial={{ opacity: 0, y: 15 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ duration: 0.4 }}
-                                            className='flex flex-col items-center justify-between h-full max-w-md w-full pt-0 pb-4 space-y-2'
+                                            className='flex flex-col items-center justify-between h-full max-w-md w-full pt-2 pb-5 space-y-3'
                                         >
-                                            <div className='space-y-1 -mt-2'>
+                                            <div className='space-y-1.5 -mt-1'>
                                                 <div className='w-11 h-11 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/60 ring-2 ring-emerald-500/30'>
                                                     <CheckCircleIcon className='w-6 h-6' />
                                                 </div>
@@ -581,7 +581,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                 <OnboardCard isCompletedAll={true} />
                                             </div>
 
-                                            <div className='flex items-center justify-center gap-3 pb-2 shrink-0'>
+                                            <div className='flex items-center justify-center gap-3 pb-3 shrink-0'>
                                                 <button
                                                     type='button'
                                                     onClick={() => {
