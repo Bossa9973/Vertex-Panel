@@ -33,6 +33,12 @@ class RouteServiceProvider extends ServiceProvider
             Route::middleware('web')->group(function () {
                 Route::get('/locales/locale.json', \Convoy\Http\Controllers\Base\LocaleController::class)->where('namespace', '.*');
 
+                // Social Auth Routes (Accessible to all users for linking / OAuth login)
+                Route::get('/auth/login/{provider}', [\Convoy\Http\Controllers\Auth\SocialLoginController::class, 'redirect']);
+                Route::get('/auth/login/{provider}/callback', [\Convoy\Http\Controllers\Auth\SocialLoginController::class, 'callback']);
+                Route::get('/auth/social/{provider}/redirect', [\Convoy\Http\Controllers\Auth\SocialLoginController::class, 'redirect']);
+                Route::get('/auth/social/{provider}/callback', [\Convoy\Http\Controllers\Auth\SocialLoginController::class, 'callback']);
+
                 Route::middleware('guest')->group(base_path('routes/auth.php'));
 
                 Route::middleware(['auth.session'])
