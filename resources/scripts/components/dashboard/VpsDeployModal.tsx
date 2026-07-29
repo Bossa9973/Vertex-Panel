@@ -1,6 +1,7 @@
 import { useStoreActions, useStoreState } from '@/state'
 import { Modal, LoadingOverlay } from '@mantine/core'
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import http from '@/api/http'
 import NumberFlow from '@number-flow/react'
@@ -21,11 +22,19 @@ import {
     ShieldCheckIcon,
     ServerStackIcon,
     RocketLaunchIcon,
+    XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { Sparkles as SparklesComp } from '@/components/ui/sparkles'
 import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import OnboardCard from '@/components/ui/onboard-card'
 import { cn } from '@/lib/utils'
+
+const PasswordIcon = ({ className = 'w-4 h-4 text-amber-400' }: { className?: string }) => (
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor' className={className}>
+        <path fillRule='evenodd' d='M12 3.75a6.715 6.715 0 0 0-3.722 1.118.75.75 0 1 1-.828-1.25 8.25 8.25 0 0 1 12.8 6.883c0 3.014-.574 5.897-1.62 8.543a.75.75 0 0 1-1.395-.551A21.69 21.69 0 0 0 18.75 10.5 6.75 6.75 0 0 0 12 3.75ZM6.157 5.739a.75.75 0 0 1 .21 1.04A6.715 6.715 0 0 0 5.25 10.5c0 1.613-.463 3.12-1.265 4.393a.75.75 0 0 1-1.27-.8A6.715 6.715 0 0 0 3.75 10.5c0-1.68.503-3.246 1.367-4.55a.75.75 0 0 1 1.04-.211ZM12 7.5a3 3 0 0 0-3 3c0 3.1-1.176 5.927-3.105 8.056a.75.75 0 1 1-1.112-1.008A10.459 10.459 0 0 0 7.5 10.5a4.5 4.5 0 1 1 9 0c0 .547-.022 1.09-.067 1.626a.75.75 0 0 1-1.495-.123c.041-.495.062-.996.062-1.503a3 3 0 0 0-3-3Zm0 2.25a.75.75 0 0 1 .75.75c0 3.908-1.424 7.485-3.781 10.238a.75.75 0 0 1-1.14-.975A14.19 14.19 0 0 0 11.25 10.5a.75.75 0 0 1 .75-.75Zm3.239 5.183a.75.75 0 0 1 .515.927 19.417 19.417 0 0 1-2.585 5.544.75.75 0 0 1-1.243-.84 17.915 17.915 0 0 0 2.386-5.116.75.75 0 0 1 .927-.515Z' clipRule='evenodd' />
+    </svg>
+)
 
 interface VpsPlan {
     id: number
@@ -213,6 +222,11 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
+    const [createdServer, setCreatedServer] = useState<{ id: string; name: string } | null>(null)
+    const [provisionStep, setProvisionStep] = useState<number>(0)
+    const [isProvisioned, setIsProvisioned] = useState<boolean>(false)
+
+    const navigate = useNavigate()
     const modalRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -244,6 +258,58 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
         setDir(next > step ? 1 : -1)
         setStep(next)
     }
+
+    // Real backend Horizon job polling with steady step progression
+    useEffect(() => {
+        if (!submitting || !createdServer?.id || isProvisioned) return
+
+        let currentStepIdx = 0
+        let backendReady = false
+
+        // Ticks steps smoothly every 3.2 seconds so progress is unhurried and clear
+        const stepTimer = setInterval(() => {
+            currentStepIdx += 1
+            if (currentStepIdx <= 5) {
+                setProvisionStep(currentStepIdx)
+            }
+
+            if (currentStepIdx >= 5 && backendReady) {
+                clearInterval(stepTimer)
+                setIsProvisioned(true)
+            }
+        }, 3200)
+
+        // Polls backend status to confirm hypervisor completion
+        const pollInterval = setInterval(async () => {
+            try {
+                const res = await http.get(`/api/client/servers/${createdServer.id}`)
+                const serverData = res.data?.data || res.data
+                const status = serverData?.status
+
+                if (status === null || status === '' || status === 'active') {
+                    backendReady = true
+                    clearInterval(pollInterval)
+
+                    if (currentStepIdx >= 5) {
+                        clearInterval(stepTimer)
+                        setIsProvisioned(true)
+                    }
+                } else if (status === 'install_failed') {
+                    clearInterval(pollInterval)
+                    clearInterval(stepTimer)
+                    setError('Server provision job failed on target hypervisor. Please contact support.')
+                    setSubmitting(false)
+                }
+            } catch (e) {
+                // Ignore transient network poll errors
+            }
+        }, 2000)
+
+        return () => {
+            clearInterval(stepTimer)
+            clearInterval(pollInterval)
+        }
+    }, [submitting, createdServer?.id, isProvisioned])
 
     const handleServerNameChange = (val: string) => {
         setServerName(val)
@@ -279,6 +345,8 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
 
         setSubmitting(true)
         setError(null)
+        setProvisionStep(0)
+        setIsProvisioned(false)
 
         try {
             const res = await http.post('/api/client/deploy', {
@@ -290,12 +358,17 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                 account_password: rootPassword,
                 start_on_completion: startOnCompletion,
             })
+
             if (res.data.user_credits !== undefined) updateCredits(res.data.user_credits)
+            if (res.data.server) {
+                setCreatedServer({
+                    id: res.data.server.id,
+                    name: res.data.server.name,
+                })
+            }
             onSuccess()
-            onClose()
         } catch (e: any) {
             setError(e.response?.data?.message || 'Failed to deploy server instance.')
-        } finally {
             setSubmitting(false)
         }
     }
@@ -317,6 +390,14 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                     boxShadow: '0px 0px 80px 0px rgba(9, 0, 255, 0.3)',
                     overflow: 'hidden',
                 },
+                inner: {
+                    overflow: 'hidden',
+                    padding: 0,
+                },
+                body: {
+                    overflow: 'hidden',
+                    padding: 0,
+                },
                 overlay: {
                     backgroundColor: 'rgba(0,0,0,0.85)',
                     backdropFilter: 'blur(16px)',
@@ -324,12 +405,29 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
             }}
         >
             {/* ── Outer wrapper with 100% pricing-section-4 background & atmospheric elements ── */}
-            <div className='relative bg-black min-h-[620px] overflow-x-hidden text-white rounded-[24px]' ref={modalRef}>
+            <div className='relative bg-black min-h-[620px] max-h-[82vh] overflow-y-auto custom-vps-scrollbar text-white rounded-[24px]' ref={modalRef}>
+                <style>{`
+                    .custom-vps-scrollbar::-webkit-scrollbar {
+                        width: 6px;
+                    }
+                    .custom-vps-scrollbar::-webkit-scrollbar-track {
+                        background: rgba(0, 0, 0, 0.25);
+                        border-radius: 9999px;
+                    }
+                    .custom-vps-scrollbar::-webkit-scrollbar-thumb {
+                        background: rgba(59, 130, 246, 0.4);
+                        border-radius: 9999px;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                    }
+                    .custom-vps-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: rgba(59, 130, 246, 0.75);
+                    }
+                `}</style>
 
-                {/* 1. Sparkles & Grid Mask Top Layer */}
+                {/* 1. Sparkles Top Layer */}
                 <div className='absolute top-0 left-0 right-0 h-96 w-full overflow-hidden [mask-image:radial-gradient(50%_50%,white,transparent)] pointer-events-none z-0'>
-                    <div className='absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#ffffff2c_1px,transparent_1px),linear-gradient(to_bottom,#3a3a3a01_1px,transparent_1px)] bg-[size:70px_80px]' />
                     <SparklesComp
+                        id='vps-modal-sparkles'
                         density={1800}
                         direction='bottom'
                         speed={1}
@@ -377,19 +475,14 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
 
                     {/* Modal Close Button & Title Section */}
                     <div>
-                        <div className='flex items-center justify-between mb-2'>
-                            <div className='flex items-center gap-2'>
-                                <div className='w-8 h-8 rounded-full bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.5)]'>
-                                    <RocketLaunchIcon className='w-4 h-4' />
-                                </div>
-                                <span className='text-xs font-bold text-blue-400 uppercase tracking-widest'>Deploy Instance</span>
-                            </div>
+                        <div className='flex items-center justify-end mb-1'>
                             <button
                                 type='button'
                                 onClick={onClose}
-                                className='w-8 h-8 rounded-full bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-stone-400 hover:text-white transition flex items-center justify-center text-lg font-light cursor-pointer'
+                                className='group w-8 h-8 rounded-full bg-neutral-900/60 hover:bg-neutral-800/80 border border-neutral-800 hover:border-neutral-700 text-gray-400 hover:text-white backdrop-blur-md shadow-md transition-all duration-200 flex items-center justify-center cursor-pointer active:scale-95'
+                                aria-label='Close modal'
                             >
-                                ×
+                                <XMarkIcon className='w-4 h-4 text-gray-300 group-hover:text-white transition-transform duration-200 group-hover:rotate-90' />
                             </button>
                         </div>
 
@@ -437,7 +530,90 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
 
                     {/* Step Body */}
                     <div className='relative my-4 flex-1 flex flex-col justify-center'>
-                        <LoadingOverlay visible={loading || submitting} radius='lg' />
+                        <LoadingOverlay visible={loading} radius='lg' />
+
+                        <AnimatePresence>
+                            {submitting && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.97 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.97 }}
+                                    className='absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-blue-950/90 via-neutral-950/80 to-blue-950/90 backdrop-blur-xl px-6 py-6 text-center rounded-2xl border border-blue-500/20 shadow-xl'
+                                >
+                                    {!isProvisioned ? (
+                                        <div className='flex flex-col items-center justify-center gap-4 w-full my-auto'>
+                                            <div className='space-y-1.5 max-w-sm'>
+                                                <h3 className='text-lg sm:text-xl font-bold text-white tracking-wide flex items-center justify-center gap-2'>
+                                                    <SparklesIcon className='w-5 h-5 text-blue-400 animate-pulse' />
+                                                    Provisioning VPS Instance...
+                                                </h3>
+                                                <p className='text-xs text-gray-400'>
+                                                    Executing Horizon jobs on <span className='text-blue-400 font-semibold'>{selectedNode?.name}</span>
+                                                </p>
+                                            </div>
+
+                                            <OnboardCard
+                                                duration={2500}
+                                                currentStep={provisionStep}
+                                                isCompletedAll={isProvisioned}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 15 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ duration: 0.4 }}
+                                            className='flex flex-col items-center justify-between h-full max-w-md w-full py-2 space-y-2'
+                                        >
+                                            <div className='space-y-1.5 mt-2'>
+                                                <div className='w-11 h-11 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/60 ring-2 ring-emerald-500/30'>
+                                                    <CheckCircleIcon className='w-6 h-6' />
+                                                </div>
+                                                <h3 className='text-xl font-bold text-white tracking-tight'>
+                                                    Server Instance Online!
+                                                </h3>
+                                                <p className='text-xs text-gray-300 max-w-xs mx-auto leading-relaxed'>
+                                                    <span className='font-bold text-emerald-400'>{serverName}</span> has been successfully provisioned and booted on <span className='text-blue-400 font-semibold'>{selectedNode?.name}</span>.
+                                                </p>
+                                            </div>
+
+                                            <div className='my-auto w-full'>
+                                                <OnboardCard isCompletedAll={true} />
+                                            </div>
+
+                                            <div className='flex items-center justify-center gap-3 mb-2 shrink-0'>
+                                                <button
+                                                    type='button'
+                                                    onClick={() => {
+                                                        setSubmitting(false)
+                                                        setIsProvisioned(false)
+                                                        onClose()
+                                                    }}
+                                                    className='py-2.5 px-6 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs cursor-pointer transition shadow-md'
+                                                >
+                                                    OK
+                                                </button>
+                                                <button
+                                                    type='button'
+                                                    onClick={() => {
+                                                        const targetId = createdServer?.id
+                                                        setSubmitting(false)
+                                                        setIsProvisioned(false)
+                                                        onClose()
+                                                        if (targetId) {
+                                                            navigate(`/servers/${targetId}`)
+                                                        }
+                                                    }}
+                                                    className='py-2.5 px-7 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 shadow-lg shadow-blue-800/50 border border-blue-400 text-white font-bold text-xs flex items-center gap-2 transition cursor-pointer active:scale-95'
+                                                >
+                                                    Manage Server <ArrowRightIcon className='w-4 h-4' />
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         <AnimatePresence mode='wait' custom={dir}>
                             <motion.div
@@ -456,89 +632,89 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                         <PricingSwitch isYearly={isYearly} onToggle={setIsYearly} />
 
                                         <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'>
-                                            {plans.map((plan) => {
-                                                const isSelected = selectedPlanId === plan.id
-                                                const planPriceValue = isYearly ? Math.round(plan.price * 12 * 0.85) : plan.price
+                                                {plans.map((plan) => {
+                                                    const isSelected = selectedPlanId === plan.id
+                                                    const planPriceValue = isYearly ? Math.round(plan.price * 12 * 0.85) : plan.price
 
-                                                return (
-                                                    <Card
-                                                        key={plan.id}
-                                                        onClick={() => setSelectedPlanId(plan.id)}
-                                                        className={cn(
-                                                            'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
-                                                            isSelected
-                                                                ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0900ff] z-20 border-blue-500 ring-2 ring-blue-500/40'
-                                                                : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
-                                                        )}
-                                                    >
-                                                        <CardHeader className='text-left p-5 pb-3'>
-                                                            <div className='flex justify-between items-center mb-1'>
-                                                                <h3 className='text-xl font-bold text-white'>{plan.name}</h3>
-                                                                {isSelected && (
-                                                                    <CheckCircleIcon className='w-5 h-5 text-blue-400 shrink-0' />
-                                                                )}
-                                                            </div>
-                                                            <div className='flex items-baseline my-2'>
-                                                                <span className='text-3xl font-semibold flex items-center gap-1 text-amber-400'>
-                                                                    <BoltIcon className='w-5 h-5 fill-amber-400/20 text-amber-400 shrink-0' />
-                                                                    <NumberFlow
-                                                                        value={planPriceValue}
-                                                                        className='text-3xl font-semibold text-amber-400'
-                                                                    />
-                                                                </span>
-                                                                <span className='text-gray-300 text-xs ml-1.5 font-medium'>
-                                                                    BOLTs/{isYearly ? 'yr' : 'mo'}
-                                                                </span>
-                                                            </div>
-                                                            <p className='text-xs text-gray-400 line-clamp-2 min-h-[32px]'>
-                                                                {plan.description || 'Optimized cloud instance for high concurrency workloads.'}
-                                                            </p>
-                                                        </CardHeader>
-
-                                                        <CardContent className='p-5 pt-0 mt-auto'>
-                                                            <button
-                                                                type='button'
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    setSelectedPlanId(plan.id)
-                                                                    goToStep(2)
-                                                                }}
-                                                                className={cn(
-                                                                    'w-full py-2.5 px-4 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2',
-                                                                    isSelected
-                                                                        ? 'bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white'
-                                                                        : 'bg-gradient-to-t from-neutral-950 to-neutral-700 shadow-lg shadow-neutral-900 border border-neutral-800 text-white hover:border-neutral-600'
-                                                                )}
-                                                            >
-                                                                {isSelected ? 'Selected' : 'Select Plan'}
-                                                            </button>
-
-                                                            <div className='space-y-2 pt-4 border-t border-neutral-700/80 mt-4 text-xs'>
-                                                                <div className='flex items-center gap-2 text-gray-300'>
-                                                                    <span className='h-2 w-2 bg-blue-500 rounded-full shrink-0' />
-                                                                    <CpuChipIcon className='w-3.5 h-3.5 text-blue-400 shrink-0' />
-                                                                    <span>{plan.cpu} vCPU Cores</span>
+                                                    return (
+                                                        <Card
+                                                            key={plan.id}
+                                                            onClick={() => setSelectedPlanId(plan.id)}
+                                                            className={cn(
+                                                                'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
+                                                                isSelected
+                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0900ff] z-20 border-blue-500 ring-2 ring-blue-500/40'
+                                                                    : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
+                                                            )}
+                                                        >
+                                                            <CardHeader className='text-left p-5 pb-3'>
+                                                                <div className='flex justify-between items-center mb-1'>
+                                                                    <h3 className='text-xl font-bold text-white'>{plan.name}</h3>
+                                                                    {isSelected && (
+                                                                        <CheckCircleIcon className='w-5 h-5 text-blue-400 shrink-0' />
+                                                                    )}
                                                                 </div>
-                                                                <div className='flex items-center gap-2 text-gray-300'>
-                                                                    <span className='h-2 w-2 bg-emerald-500 rounded-full shrink-0' />
-                                                                    <ServerIcon className='w-3.5 h-3.5 text-emerald-400 shrink-0' />
-                                                                    <span>
-                                                                        {plan.ram >= 1024 ? `${(plan.ram / 1024).toFixed(0)} GB` : `${plan.ram} MB`} RAM
+                                                                <div className='flex items-baseline my-2'>
+                                                                    <span className='text-3xl font-semibold flex items-center gap-1 text-amber-400'>
+                                                                        <BoltIcon className='w-5 h-5 fill-amber-400/20 text-amber-400 shrink-0' />
+                                                                        <NumberFlow
+                                                                            value={planPriceValue}
+                                                                            className='text-3xl font-semibold text-amber-400'
+                                                                        />
+                                                                    </span>
+                                                                    <span className='text-gray-300 text-xs ml-1.5 font-medium'>
+                                                                        BOLTs/{isYearly ? 'yr' : 'mo'}
                                                                     </span>
                                                                 </div>
-                                                                <div className='flex items-center gap-2 text-gray-300'>
-                                                                    <span className='h-2 w-2 bg-indigo-500 rounded-full shrink-0' />
-                                                                    <CircleStackIcon className='w-3.5 h-3.5 text-indigo-400 shrink-0' />
-                                                                    <span>{plan.disk} GB NVMe SSD</span>
-                                                                </div>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
-                                                )
-                                            })}
-                                        </div>
+                                                                <p className='text-xs text-gray-400 line-clamp-2 min-h-[32px]'>
+                                                                    {plan.description || 'Optimized cloud instance for high concurrency workloads.'}
+                                                                </p>
+                                                            </CardHeader>
 
-                                        <div className='flex justify-end pt-2'>
+                                                            <CardContent className='p-5 pt-0 mt-auto'>
+                                                                <button
+                                                                    type='button'
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        setSelectedPlanId(plan.id)
+                                                                        goToStep(2)
+                                                                    }}
+                                                                    className={cn(
+                                                                        'w-full py-2.5 px-4 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2',
+                                                                        isSelected
+                                                                            ? 'bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white'
+                                                                            : 'bg-gradient-to-t from-neutral-950 to-neutral-700 shadow-lg shadow-neutral-900 border border-neutral-800 text-white hover:border-neutral-600'
+                                                                    )}
+                                                                >
+                                                                    {isSelected ? 'Selected' : 'Select Plan'}
+                                                                </button>
+
+                                                                <div className='space-y-2 pt-4 border-t border-neutral-700/80 mt-4 text-xs'>
+                                                                    <div className='flex items-center gap-2 text-gray-300'>
+                                                                        <span className='h-2 w-2 bg-blue-500 rounded-full shrink-0' />
+                                                                        <CpuChipIcon className='w-3.5 h-3.5 text-blue-400 shrink-0' />
+                                                                        <span>{plan.cpu} vCPU Cores</span>
+                                                                    </div>
+                                                                    <div className='flex items-center gap-2 text-gray-300'>
+                                                                        <span className='h-2 w-2 bg-emerald-500 rounded-full shrink-0' />
+                                                                        <ServerIcon className='w-3.5 h-3.5 text-emerald-400 shrink-0' />
+                                                                        <span>
+                                                                            {plan.ram >= 1024 ? `${(plan.ram / 1024).toFixed(0)} GB` : `${plan.ram} MB`} RAM
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className='flex items-center gap-2 text-gray-300'>
+                                                                        <span className='h-2 w-2 bg-indigo-500 rounded-full shrink-0' />
+                                                                        <CircleStackIcon className='w-3.5 h-3.5 text-indigo-400 shrink-0' />
+                                                                        <span>{plan.disk} GB NVMe SSD</span>
+                                                                    </div>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    )
+                                                })}
+                                            </div>
+
+                                        <div className='flex justify-end pt-2 pb-4'>
                                             <button
                                                 type='button'
                                                 onClick={() => goToStep(2)}
@@ -608,14 +784,11 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                         >
                                                             <div className='flex items-center gap-3'>
                                                                 <img src={node.flag} alt={node.name} className='w-6 h-4 rounded-sm object-cover shrink-0' />
-                                                                <div>
-                                                                    <div className='text-xs font-bold text-white flex items-center gap-2'>
-                                                                        {node.name}
-                                                                        <span className='text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold'>
-                                                                            Online
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className='text-[10px] text-gray-400 font-mono mt-0.5'>{node.fqdn}</div>
+                                                                <div className='text-xs font-bold text-white flex items-center gap-2'>
+                                                                    {node.name}
+                                                                    <span className='text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold'>
+                                                                        Online
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                             {isSelected && <CheckCircleIcon className='w-4 h-4 text-blue-400 shrink-0' />}
@@ -648,7 +821,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                 {step === 3 && (
                                     <div className='space-y-5 max-w-2xl mx-auto'>
                                         <h3 className='text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2'>
-                                            <KeyIcon className='w-4 h-4 text-amber-400' />
+                                            <PasswordIcon className='w-4 h-4 text-amber-400' />
                                             Instance Credentials & Identification
                                         </h3>
 

@@ -15,8 +15,11 @@ class ServerAuthService
 
     public function updatePassword(Server $server, string $password): void
     {
-        // Always store CIPassword first
-        $this->configRepository->setServer($server)->update(['cipassword' => $password]);
+        // Always store CIPassword and CIUser first
+        $this->configRepository->setServer($server)->update([
+            'ciuser' => 'root',
+            'cipassword' => $password,
+        ]);
 
         try {
             $osInfo = $this->guestAgentRepository->setServer($server)->guestAgentOs();

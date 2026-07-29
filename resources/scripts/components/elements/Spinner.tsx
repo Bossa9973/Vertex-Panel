@@ -1,8 +1,5 @@
-import styled from '@emotion/styled'
 import { ReactNode, Suspense } from 'react'
-import tw from 'twin.macro'
-
-import LogoOutline from '@/components/elements/LogoOutline'
+import { SpiralAnimation } from '@/components/ui/spiral-animation'
 
 interface Props {
     screen?: boolean
@@ -16,43 +13,23 @@ interface Spinner extends React.FC<Props> {
     }>
 }
 
-const SpinnerContainer = styled.div`
-    svg {
-        ${tw`w-14`}
-    }
-    svg path {
-        animation: dash 2s cubic-bezier(0.45, 0.09, 0.6, 0.89) infinite;
-    }
-    @keyframes dash {
-        0% {
-            stroke-dasharray: 100 2652;
-            stroke-dashoffset: 0;
-        }
-        50% {
-            stroke-dasharray: 2352 400;
-            stroke-dashoffset: 2752;
-        }
-        100% {
-            stroke-dasharray: 100 2652;
-            stroke-dashoffset: 5504;
-        }
-    }
-`
-
 const Spinner: Spinner = ({ screen, flat }: Props) => {
+    const size = screen ? 200 : 90
+    const dots = screen ? 400 : 180
+
     return (
         <div
             className={`grid place-items-center w-full ${
-                screen ? 'h-screen' : 'h-40'
-            } ${flat && 'dark:bg-black'}`}
+                screen ? 'h-screen fixed inset-0 z-50 bg-black/90 backdrop-blur-md' : 'h-40'
+            } ${flat ? 'dark:bg-black' : ''}`}
         >
-            <SpinnerContainer>
-                <LogoOutline
-                    className='text-foreground'
-                    strokeWidth={'25px'}
-                    viewBox={'-13 -13 538 538'}
-                />
-            </SpinnerContainer>
+            <SpiralAnimation
+                size={size}
+                totalDots={dots}
+                dotColor='#3b82f6'
+                backgroundColor='transparent'
+                duration={2.5}
+            />
         </div>
     )
 }

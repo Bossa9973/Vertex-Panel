@@ -1,9 +1,10 @@
-import { useId, useCallback } from "react"
+import React, { useId, useMemo } from "react"
 import { Particles, ParticlesProvider } from "@tsparticles/react"
 import { loadSlim } from "@tsparticles/slim"
 import type { Engine } from "@tsparticles/engine"
 
 interface SparklesProps {
+    id?: string
     className?: string
     size?: number
     minSize?: number | null
@@ -19,7 +20,8 @@ interface SparklesProps {
     options?: Record<string, any>
 }
 
-function SparklesInner({
+function SparklesInnerComponent({
+    id: propId,
     className,
     size = 1,
     minSize = null,
@@ -34,9 +36,10 @@ function SparklesInner({
     direction = "none",
     options = {},
 }: SparklesProps) {
-    const id = useId()
+    const generatedId = useId()
+    const particlesId = propId || generatedId
 
-    const defaultOptions = {
+    const particleOptions = useMemo(() => ({
         background: {
             color: { value: background },
         },
@@ -76,26 +79,29 @@ function SparklesInner({
             },
         },
         detectRetina: true,
-    }
+        ...options,
+    }), [background, color, direction, minSpeed, speed, density, minOpacity, opacity, opacitySpeed, minSize, size, options])
 
     return (
         <Particles
-            id={id}
-            options={{ ...defaultOptions, ...options }}
+            id={particlesId}
+            options={particleOptions}
             className={className}
         />
     )
 }
 
+const SparklesInner = React.memo(SparklesInnerComponent)
+
 async function initEngine(engine: Engine) {
     await loadSlim(engine)
 }
 
-export function Sparkles(props: SparklesProps) {
-    // Stable init callback (defined outside component to remain stable)
+export const Sparkles = React.memo(function Sparkles(props: SparklesProps) {
     return (
         <ParticlesProvider init={initEngine}>
             <SparklesInner {...props} />
         </ParticlesProvider>
     )
-}
+})
+
