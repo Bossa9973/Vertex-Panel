@@ -12,7 +12,7 @@ interface Menu extends FC<MenuProps> {
 
 const StyledMenuDropdown = styled(MantineMenu.Dropdown)`
     &.mantine-Menu-dropdown {
-        ${tw`p-2 bg-background border border-accent-200 shadow-lg dark:shadow-none sm:text-sm rounded`}
+        ${tw`p-2 bg-neutral-900/95 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl text-stone-100 font-sans z-[9999]`}
     }
 `
 
@@ -23,27 +23,30 @@ const StyledMenuItem = styled(MantineMenu.Item)<
     }
 >`
     &.mantine-Menu-item {
-        ${tw`w-full text-left px-2 h-9 bg-transparent disabled:text-accent-300 disabled:cursor-not-allowed`}
+        ${tw`w-full text-left px-3 py-2.5 h-auto rounded-xl bg-transparent transition-all duration-200 cursor-pointer font-sans font-semibold text-xs tracking-tight flex items-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed`}
 
         ${({ color }) =>
             color === 'red'
-                ? tw`text-error sm:hover:bg-error-lighter active:bg-error-lighter sm:active:bg-error-lighter`
-                : tw`text-accent-500 sm:hover:bg-accent-200 sm:active:bg-accent-200 active:bg-accent-200`}
+                ? tw`text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 active:scale-95`
+                : tw`text-stone-200 hover:bg-white/10 hover:text-white active:scale-95`}
+    }
+
+    &.mantine-Menu-item .mantine-Menu-itemIcon {
+        ${tw`mr-0`}
     }
 `
 
 const StyledDivider = styled(MantineMenu.Divider)`
-    ${tw`my-[6px] mx-auto w-[93%] bg-accent-200`}
+    ${tw`my-1.5 mx-auto w-[94%] border-t border-white/10`}
 `
 
-const Menu: Menu = props => <MantineMenu {...props} />
+const Menu: Menu = props => (
+    <MantineMenu withinPortal zIndex={9999} {...props} />
+)
 
 Menu.Dropdown = StyledMenuDropdown
-
 Menu.Target = MantineMenu.Target
-
 Menu.Divider = StyledDivider
-
 Menu.Item = StyledMenuItem
 
 export default Menu
