@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import ReactDOM from 'react-dom'
 import { BorderBeam } from '@/components/ui/BorderBeam'
 import http from '@/api/http'
 import {
@@ -59,9 +60,9 @@ export const ConnectDiscordModal: React.FC<Props> = ({
         window.location.href = '/auth/login/discord'
     }
 
-    return (
-        <div className='fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-fade-in'>
-            <div className='relative w-full max-w-lg overflow-hidden rounded-3xl bg-neutral-900/95 border border-white/20 backdrop-blur-3xl p-6 md:p-8 text-white shadow-[0_0_90px_rgba(88,101,242,0.45)] font-sans'>
+    return ReactDOM.createPortal(
+        <div className='fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-fade-in'>
+            <div className='relative w-full max-w-lg overflow-hidden rounded-3xl bg-neutral-900/95 border border-white/20 backdrop-blur-3xl p-6 md:p-8 text-white shadow-[0_0_90px_rgba(88,101,242,0.55)] font-sans'>
                 <BorderBeam size={320} duration={10} delay={0} colorFrom='#5865F2' colorTo='#3b82f6' borderWidth={2} />
 
                 {/* Close Button only if not blocked */}
@@ -169,7 +170,8 @@ export const ConnectDiscordModal: React.FC<Props> = ({
                     </form>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     )
 }
 
