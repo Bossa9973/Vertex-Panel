@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import DiscordSvgIcon from '@/components/elements/DiscordSvgIcon'
 import { Link } from 'react-router-dom'
 import { useStoreState, useStoreActions } from '@/state'
 import PageContentBlock from '@/components/elements/PageContentBlock'
@@ -349,9 +350,7 @@ export const AccountContainer: React.FC = () => {
                                 <div>
                                     <div className='flex items-center justify-between gap-2 mb-3'>
                                         <div className='flex items-center gap-2'>
-                                            <div className='w-5 h-5 rounded-md bg-[#5865F2]/20 flex items-center justify-center text-[#5865F2] font-bold text-xs'>
-                                                D
-                                            </div>
+                                            <DiscordSvgIcon className='w-5 h-5 fill-[#5865F2]' />
                                             <span className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
                                                 Discord Account
                                             </span>
