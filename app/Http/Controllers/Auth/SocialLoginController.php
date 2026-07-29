@@ -158,8 +158,10 @@ class SocialLoginController extends Controller
                 }
 
                 $socialUser = [
-                    'email' => $email,
-                    'name' => $username,
+                    'email'            => $email,
+                    'name'             => $username,
+                    'discord_id'       => (string) ($discordData['id'] ?? ''),
+                    'discord_username' => $username,
                 ];
             }
 
@@ -176,19 +178,26 @@ class SocialLoginController extends Controller
 
             if (!$user) {
                 $user = User::create([
-                    'name' => $socialUser['name'],
-                    'email' => $socialUser['email'],
+                    'name'     => $socialUser['name'],
+                    'email'    => $socialUser['email'],
                     'password' => Hash::make(Str::random(32)),
-                    'credits' => 10.00, // Welcome bonus
+                    'credits'  => 10.00,
                     'root_admin' => false,
                 ]);
 
                 $user->creditTransactions()->create([
-                    'amount' => 10.00,
-                    'type' => 'bonus',
-                    'description' => ucfirst($provider) . ' Social Sign-Up Bonus',
+                    'amount'       => 10.00,
+                    'type'         => 'bonus',
+                    'description'  => ucfirst($provider) . ' Social Sign-Up Bonus',
                     'reference_id' => 'SOCIAL-' . Str::upper(Str::random(8)),
                 ]);
+            }
+
+            // Always update Discord link fields when authenticating via Discord
+            if ($provider === 'discord' && !empty($socialUser['discord_id'])) {
+                $user->discord_id       = $socialUser['discord_id'];
+                $user->discord_username = $socialUser['discord_username'];
+                $user->save();
             }
 
             Auth::login($user);
