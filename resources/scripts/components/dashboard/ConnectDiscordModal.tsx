@@ -28,7 +28,7 @@ export const ConnectDiscordModal: React.FC<Props> = ({
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    if (!opened) return null
+    if (!opened && !isBlocked) return null
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()

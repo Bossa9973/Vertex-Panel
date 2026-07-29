@@ -40,7 +40,7 @@ export const EarnBoltsContainer: React.FC = () => {
     const [discordUsername, setDiscordUsername] = useState<string | null>(user?.discord_username || null)
     const [claimingKey, setClaimingKey] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'all' | 'invites' | 'boosts' | 'messages'>('all')
-    const [connectModalOpen, setConnectModalOpen] = useState(false)
+    const [connectModalOpen, setConnectModalOpen] = useState(!user?.discord_id)
 
     const userCredits = user?.credits ?? 0
 
