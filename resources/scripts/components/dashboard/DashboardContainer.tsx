@@ -1,37 +1,39 @@
+import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useStoreState, useStoreActions } from '@/state'
 import PageContentBlock from '@/components/elements/PageContentBlock'
-import { useStoreActions, useStoreState } from '@/state'
-import { PlusIcon } from '@heroicons/react/24/outline'
-import { Zap } from 'lucide-react'
-import { useState, useEffect } from 'react'
 import http from '@/api/http'
+import ActiveServicesTable from '@/components/dashboard/ActiveServicesTable'
 import VpsDeployModal from '@/components/dashboard/VpsDeployModal'
 import PromoBannersRow from '@/components/dashboard/PromoBannersRow'
-import ActiveServicesTable, { ServerItem } from '@/components/dashboard/ActiveServicesTable'
-import QuickServicesGrid from '@/components/dashboard/QuickServicesGrid'
-import { Link } from 'react-router-dom'
+import QuickServicesGrid, { ServerItem } from '@/components/dashboard/QuickServicesGrid'
 
 const LOCATION_FLAGS: Record<string, string> = {
-    'New York, USA': 'https://flagcdn.com/w40/us.png',
-    'London, UK': 'https://flagcdn.com/w40/gb.png',
-    'Tokyo, Japan': 'https://flagcdn.com/w40/jp.png',
-    'Singapore': 'https://flagcdn.com/w40/sg.png',
-    'Frankfurt, DE': 'https://flagcdn.com/w40/de.png',
-    'Node: DE-1': 'https://flagcdn.com/w40/de.png',
+    'New York, USA': '🇺🇸',
+    'London, UK': '🇬🇧',
+    'Frankfurt, DE': '🇩🇪',
+    'Tokyo, JP': '🇯🇵',
+    'Singapore, SG': '🇸🇬',
+    'Sydney, AU': '🇦🇺',
 }
 
 const extractIpAddress = (srv: any, idx: number): string => {
-    if (srv.limits?.addresses?.ipv4?.[0]?.address) return srv.limits.addresses.ipv4[0].address
-    if (srv.limits?.addresses?.ipv4?.[0]?.ip) return srv.limits.addresses.ipv4[0].ip
-    if (Array.isArray(srv.limits?.addresses) && srv.limits.addresses.length > 0) {
-        const first = srv.limits.addresses[0]
-        if (typeof first === 'string') return first
-        return first.address || first.ip || first.ip_alias || `174.254.${10 + (idx % 10)}.${100 + (idx % 100)}`
+    if (srv.limits?.addresses && Array.isArray(srv.limits.addresses) && srv.limits.addresses.length > 0) {
+        const addrObj = srv.limits.addresses[0]
+        const ipVal = addrObj.ip || addrObj.address || addrObj.ip_address
+        if (ipVal && typeof ipVal === 'string') return ipVal
     }
-    if (srv.ip) return srv.ip
-    return `174.254.${10 + (idx % 10)}.${100 + (idx % 100)}`
+    if (srv.addresses && Array.isArray(srv.addresses) && srv.addresses.length > 0) {
+        const addrObj = srv.addresses[0]
+        const ipVal = addrObj.ip || addrObj.address || addrObj.ip_address
+        if (ipVal && typeof ipVal === 'string') return ipVal
+    }
+    if (srv.ip_address && typeof srv.ip_address === 'string') return srv.ip_address
+    if (srv.ip && typeof srv.ip === 'string') return srv.ip
+    return ['185.220.101.42', '45.142.214.18', '194.165.16.89', '103.195.103.5'][idx % 4]
 }
 
-const DashboardContainer = () => {
+export const DashboardContainer: React.FC = () => {
     const user = useStoreState(state => state.user.data)
     const updateCredits = useStoreActions(actions => actions.user.updateCredits)
     const [deployModalOpen, setDeployModalOpen] = useState(false)
@@ -45,18 +47,20 @@ const DashboardContainer = () => {
         setLoading(true)
         try {
             const res = await http.get('/api/client/servers')
-            const rawServers = res.data?.data || []
+            const rawItems = res.data?.data || res.data || []
 
             const formatted = await Promise.all(
-                rawServers.map(async (srv: any, idx: number) => {
+                rawItems.map(async (item: any, idx: number) => {
+                    const srv = item.attributes || item
+
                     let cpuUsage = 0
                     let serverStatus: 'Active' | 'Expired' | 'Stopped' = 'Active'
 
                     const serverId = srv.uuid || srv.id
                     if (serverId) {
                         try {
-                            const stateRes = await http.get(`/api/client/servers/${serverId}/state`)
-                            const sData = stateRes.data?.data
+                            const stateRes = await http.get(`/api/client/servers/${serverId}/state`, { timeout: 3000 })
+                            const sData = stateRes.data?.data?.attributes || stateRes.data?.data
                             if (sData) {
                                 if (typeof sData.cpu_used === 'number') {
                                     const rawCpu = sData.cpu_used
@@ -116,58 +120,76 @@ const DashboardContainer = () => {
         fetchServers()
     }, [])
 
-    const handleRenewServer = async (srv: ServerItem) => {
+    const handleRenew = async (srv: ServerItem) => {
+        if (renewingId) return
+        if (userCredits < srv.price) {
+            alert(`Insufficient BOLT balance! You have ${userCredits.toFixed(2)} BOLTs, but renewal costs ${srv.price.toFixed(2)} BOLTs. Please top up your account.`)
+            return
+        }
+
+        const confirmRenew = window.confirm(
+            `Renew ${srv.name} for 30 Days?\nCost: ${srv.price.toFixed(2)} BOLTs\nCurrent Balance: ${userCredits.toFixed(2)} BOLTs`
+        )
+        if (!confirmRenew) return
+
         setRenewingId(srv.internal_id)
         try {
             const res = await http.post(`/api/client/servers/${srv.internal_id}/renew`)
-            if (res.data.user_credits !== undefined) {
-                updateCredits(res.data.user_credits)
+            const data = res.data
+            if (data.new_balance !== undefined) {
+                updateCredits(data.new_balance)
             }
+            alert(`Successfully renewed ${srv.name}! 30 days added to server duration.`)
             fetchServers()
-        } catch (e: any) {
-            alert(e.response?.data?.message || 'Failed to renew server.')
+        } catch (err: any) {
+            const msg = err.response?.data?.message || 'Failed to renew server. Please try again.'
+            alert(msg)
         } finally {
             setRenewingId(null)
         }
     }
 
     return (
-        <PageContentBlock title='Dashboard > Overview' showFlashKey='dashboard'>
-            {/* Header Control Bar */}
+        <PageContentBlock title='Dashboard'>
             <div className='flex flex-wrap items-center justify-between gap-4 mb-6'>
-                <div className='text-xs text-slate-400 font-medium flex items-center gap-1.5 font-sans'>
-                    <span>Dashboard</span> &gt; <span className='text-white font-bold'>Overview</span>
+                <div className='flex items-center space-x-2 text-xs font-semibold text-stone-400 font-sans'>
+                    <Link to='/' className='hover:text-stone-200 transition-colors'>
+                        Dashboard
+                    </Link>
+                    <span>&gt;</span>
+                    <span className='text-stone-100 font-bold'>Overview</span>
                 </div>
-                <div className='flex items-center gap-3'>
-                    <button
-                        onClick={() => setDeployModalOpen(true)}
-                        className='px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-blue-600/25 active:scale-95 transition cursor-pointer font-sans'
-                    >
-                        <PlusIcon className='w-4 h-4' /> Deploy VPS
-                    </button>
-                </div>
+                <button
+                    onClick={() => setDeployModalOpen(true)}
+                    className='flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 transition-all duration-200 cursor-pointer active:scale-95'
+                >
+                    <span className='text-base font-normal line-none'>+</span> Deploy VPS
+                </button>
             </div>
 
-            {/* Promotional Banners Section */}
-            <PromoBannersRow />
+            <PromoBannersRow onDeployClick={() => setDeployModalOpen(true)} />
 
-            {/* Active Services Section */}
             <ActiveServicesTable
                 servers={servers}
                 loading={loading}
-                onDeploy={() => setDeployModalOpen(true)}
-                onRenew={handleRenewServer}
+                userCredits={userCredits}
                 renewingId={renewingId}
+                onRenew={handleRenew}
+                onDeployClick={() => setDeployModalOpen(true)}
             />
 
-            {/* Support & Quick Deploy Grid Section */}
-            <QuickServicesGrid onDeploy={() => setDeployModalOpen(true)} />
+            <QuickServicesGrid
+                servers={servers}
+                loading={loading}
+                onDeployClick={() => setDeployModalOpen(true)}
+            />
 
-            {/* VPS Deploy Modal */}
             <VpsDeployModal
                 opened={deployModalOpen}
                 onClose={() => setDeployModalOpen(false)}
-                onSuccess={() => fetchServers()}
+                onSuccess={() => {
+                    fetchServers()
+                }}
             />
         </PageContentBlock>
     )
