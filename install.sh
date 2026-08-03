@@ -510,9 +510,20 @@ SQLEOF
 configure_nginx() {
     step 6 8 "Configuring Nginx"
 
+    # Ensure log & config directories exist
+    mkdir -p /var/log/nginx /etc/nginx/sites-available /etc/nginx/sites-enabled
+
+    # Ensure PHP-FPM service is started so the Unix socket is present
+    local fpm_svc
+    fpm_svc=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
+    if [[ -n "$fpm_svc" ]]; then
+        run_quietly systemctl start "$fpm_svc" 2>/dev/null || true
+    fi
+
     local domain php_sock
-    domain=$(printf "%s" "$APP_URL" | sed 's|https\?://||' | sed 's|/.*||')
-    php_sock=$(ls /run/php/php8.2-fpm.sock /run/php/php*-fpm.sock 2>/dev/null | head -1 || echo "/run/php/php8.2-fpm.sock")
+    domain=$(printf "%s" "$APP_URL" | sed 's|https\?://||' | sed 's|/.*||' | sed 's|:[0-9]*||')
+    domain="${domain:-_}"
+    php_sock=$(ls /run/php/php*.sock 2>/dev/null | head -1 || echo "/run/php/php-fpm.sock")
 
     spinner_start "Writing Nginx virtual host for ${domain}"
     cat > "${NGINX_CONF}" <<NGINXEOF
@@ -539,10 +550,11 @@ server {
     }
 
     location ~ \.php\$ {
-        include snippets/fastcgi-php.conf;
+        fastcgi_split_path_info ^(.+\.php)(/.+)\$;
         fastcgi_pass unix:${php_sock};
-        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
+        fastcgi_index index.php;
         include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         fastcgi_read_timeout 300;
     }
 
