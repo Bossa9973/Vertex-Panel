@@ -7,20 +7,41 @@ echo "========================================"
 echo "   Vertex Panel - Discord Bot Setup"
 echo "========================================"
 
-BOT_DIR="/var/www/vertex-panel/bot"
+# ─── Config ───────────────────────────────────────────────────────────────────
+REPO="https://github.com/Bossa9973/Vertex-Panel.git"
+BOT_DIR="/opt/vertex-bot"
 
-if [ ! -d "$BOT_DIR" ]; then
-    echo "Error: Bot directory not found at $BOT_DIR"
-    echo "Please ensure the panel is installed first."
-    exit 1
+# ─── Detect: standalone server OR same server as panel ────────────────────────
+if [ -d "/var/www/vertex-panel/bot" ]; then
+    echo "-> Detected full panel installation, using existing bot directory..."
+    BOT_DIR="/var/www/vertex-panel/bot"
+else
+    echo "-> Standalone bot mode: installing to ${BOT_DIR}..."
+    echo "-> Updating system package lists..."
+    apt-get update -y > /dev/null
+
+    echo "-> Installing git..."
+    apt-get install -y git > /dev/null
+
+    if [ -d "$BOT_DIR/.git" ]; then
+        echo "-> Updating existing bot files from GitHub..."
+        git -C "$BOT_DIR" pull > /dev/null
+    else
+        echo "-> Cloning only the bot/ directory from GitHub..."
+        mkdir -p "$BOT_DIR"
+        git clone --no-checkout --depth=1 "$REPO" /tmp/vertex-repo > /dev/null 2>&1
+        git -C /tmp/vertex-repo sparse-checkout init --cone > /dev/null
+        git -C /tmp/vertex-repo sparse-checkout set bot > /dev/null
+        git -C /tmp/vertex-repo checkout > /dev/null
+        cp -r /tmp/vertex-repo/bot/. "$BOT_DIR/"
+        rm -rf /tmp/vertex-repo
+    fi
 fi
 
 cd "$BOT_DIR"
 
-echo "-> Updating system package lists..."
-apt-get update -y > /dev/null
-
-echo "-> Installing core python dependencies..."
+# ─── Python environment ───────────────────────────────────────────────────────
+echo "-> Installing Python dependencies..."
 apt-get install -y python3-venv python3-pip > /dev/null
 
 if [ ! -d "venv" ]; then
@@ -31,24 +52,31 @@ fi
 echo "-> Activating environment..."
 source venv/bin/activate
 
-echo "-> Downloading and installing bot requirements..."
+echo "-> Installing bot requirements..."
 while read -r req; do
-    # Skip empty lines and comments
     if [[ -n "$req" && ! "$req" =~ ^# ]]; then
         echo "   > Installing $req..."
         pip install "$req" > /dev/null
     fi
 done < requirements.txt
 
+# ─── .env setup ───────────────────────────────────────────────────────────────
 if [ ! -f ".env" ]; then
     if [ -f ".env.example" ]; then
-        echo "-> Creating bot/.env from .env.example..."
+        echo "-> Creating .env from template..."
         cp .env.example .env
-    else
-        echo "-> Warning: bot/.env file not found! Please create /var/www/vertex-panel/bot/.env with your DISCORD_TOKEN."
     fi
+    echo ""
+    echo "  ⚠️  IMPORTANT: Edit ${BOT_DIR}/.env and fill in:"
+    echo "     DISCORD_TOKEN  = your bot token"
+    echo "     PANEL_URL      = https://your-panel-domain.com  (must be publicly accessible!)"
+    echo "     BOT_API_SECRET = must match BOT_API_SECRET in panel's .env"
+    echo ""
+    echo "  Then run: systemctl restart vertex-bot"
+    echo ""
 fi
 
+# ─── Systemd service ──────────────────────────────────────────────────────────
 echo "-> Creating systemd service..."
 
 cat > /etc/systemd/system/vertex-bot.service <<EOF
@@ -59,9 +87,9 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/var/www/vertex-panel/bot
+WorkingDirectory=${BOT_DIR}
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/var/www/vertex-panel/bot/venv/bin/python main.py
+ExecStart=${BOT_DIR}/venv/bin/python main.py
 Restart=always
 RestartSec=5
 
@@ -69,13 +97,16 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-echo "-> Starting the bot as a background service..."
+echo "-> Enabling and starting service..."
 systemctl daemon-reload
 systemctl enable vertex-bot
 systemctl restart vertex-bot
 
+echo ""
 echo "========================================"
-echo "✅ Bot setup complete and running!"
+echo "✅ Bot setup complete!"
 echo "========================================"
-echo "To view bot logs in real-time, run:"
-echo "journalctl -u vertex-bot -f"
+echo ""
+echo "View live logs:  journalctl -u vertex-bot -f"
+echo "Restart bot:     systemctl restart vertex-bot"
+echo "Bot config:      nano ${BOT_DIR}/.env"
