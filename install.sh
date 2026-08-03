@@ -269,10 +269,13 @@ install_dependencies() {
     # PHP 8.2 repository setup
     if ! command -v php &>/dev/null; then
         if [[ "${OS_NAME}" == "debian" ]]; then
-            spinner_start "Adding Surý PHP repository for Debian"
-            curl -sSLo /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg > /dev/null 2>&1 || true
             local codename
             codename=$(lsb_release -sc 2>/dev/null || echo "bookworm")
+            case "$codename" in
+                trixie|testing|sid) codename="bookworm" ;;
+            esac
+            spinner_start "Adding Surý PHP repository for Debian"
+            curl -sSLo /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg > /dev/null 2>&1 || true
             echo "deb https://packages.sury.org/php/ ${codename} main" > /etc/apt/sources.list.d/php.list
             spinner_stop
             success "Surý PHP repository added for Debian (${codename})"
@@ -283,14 +286,14 @@ install_dependencies() {
 
         if apt-cache show php8.2-cli > /dev/null 2>&1; then
             run_or_fail "Installing PHP 8.2 + extensions" \
-                apt-get install -y php8.2 php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml \
+                apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml \
                     php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp \
-                    php8.2-pcntl php8.2-redis php8.2-intl php8.2-tokenizer php8.2-fileinfo
+                    php8.2-redis php8.2-intl
         else
             run_or_fail "Installing PHP + extensions" \
-                apt-get install -y php php-cli php-fpm php-mysql php-xml \
+                apt-get install -y php-cli php-fpm php-mysql php-xml \
                     php-curl php-mbstring php-zip php-bcmath php-gmp \
-                    php-pcntl php-redis php-intl php-fileinfo
+                    php-redis php-intl
         fi
     else
         success "PHP $(php -r 'echo PHP_VERSION;') already installed"
