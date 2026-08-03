@@ -234,3 +234,22 @@ Route::prefix('/coterms')->group(function () {
 */
 Route::resource('tokens', Admin\TokenController::class)
      ->only(['index', 'store', 'destroy']);
+
+/*
+|--------------------------------------------------------------------------
+| Admin Role Routes
+|--------------------------------------------------------------------------
+|
+| Endpoint: /api/admin/roles
+|
+*/
+Route::prefix('/roles')->group(function () {
+    Route::get('/permissions', [Admin\AdminRoleController::class, 'permissions']);
+    Route::get('/admin-users', [Admin\AdminRoleController::class, 'adminUsers']);
+    Route::post('/assign', [Admin\AdminRoleController::class, 'assignRole']);
+    Route::get('/', [Admin\AdminRoleController::class, 'index']);
+    Route::post('/', [Admin\AdminRoleController::class, 'store']);
+    Route::put('/{role}', [Admin\AdminRoleController::class, 'update']);
+    Route::delete('/{role}', [Admin\AdminRoleController::class, 'destroy']);
+});
+

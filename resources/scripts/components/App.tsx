@@ -50,6 +50,10 @@ const App = () => {
             rootAdmin: ConvoyUser.root_admin,
             createdAt: ConvoyUser.created_at,
             updatedAt: ConvoyUser.updated_at,
+            adminPermissions: ConvoyUser.admin_permissions ?? null,
+            adminRoleId: ConvoyUser.admin_role_id ?? null,
+            adminRoleName: ConvoyUser.admin_role_name ?? null,
+            adminRoleColor: ConvoyUser.admin_role_color ?? null,
         })
     }
 

@@ -3,6 +3,7 @@
 namespace Convoy\Http;
 
 use Convoy\Http\Middleware\Authenticate;
+use Convoy\Http\Middleware\AdminRolePermission;
 use Convoy\Http\Middleware\EncryptCookies;
 use Convoy\Http\Middleware\PreventRequestsDuringMaintenance;
 use Convoy\Http\Middleware\RedirectIfAuthenticated;
@@ -85,5 +86,6 @@ class Kernel extends HttpKernel
         'signed' => ValidateSignature::class,
         'throttle' => ThrottleRequests::class,
         'verified' => EnsureEmailIsVerified::class,
+        'admin.perm' => AdminRolePermission::class,
     ];
 }

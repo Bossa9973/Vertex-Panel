@@ -10,6 +10,7 @@ import { HomeIcon } from '@heroicons/react/20/solid'
 import { lazy, useContext, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useMatch } from 'react-router-dom'
+import { useStoreState } from '@/state'
 
 import ContentContainer from '@/components/elements/ContentContainer'
 import { NavigationBarContext } from '@/components/elements/navigation/NavigationBar'
@@ -98,6 +99,14 @@ export const routes: Route[] = [
                     )
                 ),
             },
+            {
+                path: 'roles',
+                element: lazyLoad(
+                    lazy(
+                        () => import('@/components/admin/roles/AdminRolesContainer')
+                    )
+                ),
+            },
         ],
     },
 ]
@@ -120,6 +129,13 @@ const AdminDashboardRouter = () => {
     const isDashboardArea = useMatch('/admin/:id/')
     const isDashboardArea2 = useMatch('/admin')
     const { t: tStrings } = useTranslation('strings')
+    const user = useStoreState(s => s.user.data)
+
+    /** null = full access (CEO/no-role), array = restricted */
+    const adminPermissions = user?.adminPermissions ?? null
+    const isCeo = user?.email === 'ceo@vertexnodes.top'
+
+    const hasPerm = (perm: string) => adminPermissions === null || adminPermissions.includes(perm)
 
     const getLabel = (key: string, fallback: string) => {
         const val = tStrings(key)
@@ -127,58 +143,26 @@ const AdminDashboardRouter = () => {
     }
 
     const navRoutes = [
-        {
-            name: getLabel('overview', 'Overview'),
-            path: '/admin',
-            end: true,
-        },
-        {
-            name: getLabel('location_other', 'Locations'),
-            path: '/admin/locations',
-        },
-        {
-            name: getLabel('node_other', 'Nodes'),
-            path: '/admin/nodes',
-        },
-        {
-            name: getLabel('server_other', 'Servers'),
-            path: '/admin/servers',
-        },
-        {
-            name: 'VPS Plans',
-            path: '/admin/plans',
-        },
-        {
-            name: 'User Balances',
-            path: '/admin/user-balances',
-        },
-        {
-            name: getLabel('ipam', 'IPAM'),
-            path: '/admin/ipam',
-        },
-        {
-            name: getLabel('user_other', 'Users'),
-            path: '/admin/users',
-        },
-        {
-            name: 'Coterms',
-            path: '/admin/coterms',
-        },
-        {
-            name: getLabel('token_other', 'API Tokens'),
-            path: '/admin/tokens',
-        },
-        {
-            name: 'Maintenance',
-            path: '/admin/maintenance',
-        },
+        ...(hasPerm('view_overview') ? [{ name: getLabel('overview', 'Overview'), path: '/admin', end: true }] : []),
+        ...(hasPerm('view_locations') ? [{ name: getLabel('location_other', 'Locations'), path: '/admin/locations' }] : []),
+        ...(hasPerm('view_nodes') ? [{ name: getLabel('node_other', 'Nodes'), path: '/admin/nodes' }] : []),
+        ...(hasPerm('view_servers') ? [{ name: getLabel('server_other', 'Servers'), path: '/admin/servers' }] : []),
+        ...(hasPerm('view_plans') ? [{ name: 'VPS Plans', path: '/admin/plans' }] : []),
+        ...(hasPerm('manage_balances') ? [{ name: 'User Balances', path: '/admin/user-balances' }] : []),
+        ...(hasPerm('view_ipam') ? [{ name: getLabel('ipam', 'IPAM'), path: '/admin/ipam' }] : []),
+        ...(hasPerm('view_users') ? [{ name: getLabel('user_other', 'Users'), path: '/admin/users' }] : []),
+        ...(hasPerm('view_coterms') ? [{ name: 'Coterms', path: '/admin/coterms' }] : []),
+        ...(hasPerm('view_tokens') ? [{ name: getLabel('token_other', 'API Tokens'), path: '/admin/tokens' }] : []),
+        ...(hasPerm('view_maintenance') ? [{ name: 'Maintenance', path: '/admin/maintenance' }] : []),
+        // Roles tab — always visible to all admins (read-only for non-CEO)
+        { name: '🛡 Roles', path: '/admin/roles' },
     ]
 
     useEffect(() => {
         if (Boolean(isDashboardArea) || Boolean(isDashboardArea2)) {
             setRoutes(navRoutes)
         }
-    }, [isDashboardArea, isDashboardArea2])
+    }, [isDashboardArea, isDashboardArea2, adminPermissions])
 
     return (
         <>

@@ -7,6 +7,11 @@ export interface UserData {
     rootAdmin: boolean
     createdAt: string
     updatedAt: string
+    /** null means full access (CEO / no-role admin); array = role's permission keys */
+    adminPermissions: string[] | null
+    adminRoleId: number | null
+    adminRoleName: string | null
+    adminRoleColor: string | null
 }
 
 export interface UserStore {

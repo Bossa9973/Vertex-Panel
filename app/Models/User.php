@@ -8,6 +8,7 @@ use Illuminate\Auth\Authenticatable;
 use Illuminate\Contracts\Auth\Access\Authorizable as AuthorizableContract;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Foundation\Auth\Access\Authorizable;
@@ -40,6 +41,7 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         'primary_auth_provider',
         'password',
         'root_admin',
+        'admin_role_id',
     ];
 
     /**
@@ -86,7 +88,51 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         $data['google_id'] = $this->google_id;
         $data['google_email'] = $this->google_email;
         $data['primary_auth_provider'] = $this->primary_auth_provider ?? 'email';
+
+        // Include admin role permissions so the frontend can hide nav items
+        if ($this->root_admin) {
+            $role = $this->adminRole;
+            $data['admin_role_id']   = $this->admin_role_id;
+            $data['admin_role_name'] = $role?->name;
+            $data['admin_role_color'] = $role?->color;
+            // null role = Super Admin / full access (all perms granted)
+            $data['admin_permissions'] = $role ? ($role->permissions ?? []) : null;
+        } else {
+            $data['admin_role_id']    = null;
+            $data['admin_role_name']  = null;
+            $data['admin_role_color'] = null;
+            $data['admin_permissions'] = null;
+        }
+
         return $data;
+    }
+
+    /**
+     * Check whether this admin user has a specific permission.
+     *
+     * Rules:
+     *  - Non-admins always return false.
+     *  - Admins with NO role assigned (null admin_role_id) have FULL access.
+     *  - The CEO super-admin always has full access regardless of role.
+     *  - Otherwise check the role's permissions array.
+     */
+    public function hasAdminPermission(string $permission): bool
+    {
+        if (! $this->root_admin) {
+            return false;
+        }
+
+        // CEO / no-role admins = full access
+        if ($this->email === config('app.super_admin_email', 'ceo@vertexnodes.top') || is_null($this->admin_role_id)) {
+            return true;
+        }
+
+        $role = $this->adminRole;
+        if (! $role) {
+            return true; // role was deleted, treat as full access
+        }
+
+        return in_array($permission, $role->permissions ?? [], true);
     }
 
     public function createToken(
@@ -107,6 +153,11 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
     public function tokens(): MorphMany
     {
         return $this->morphMany(PersonalAccessToken::class, 'tokenable');
+    }
+
+    public function adminRole(): BelongsTo
+    {
+        return $this->belongsTo(AdminRole::class, 'admin_role_id');
     }
 
     public function servers(): HasMany
