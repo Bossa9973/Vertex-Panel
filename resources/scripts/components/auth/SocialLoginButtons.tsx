@@ -1,3 +1,5 @@
+import DiscordSvgIcon from '@/components/elements/DiscordSvgIcon'
+
 interface Props {
     mode?: 'login' | 'register'
     onError?: (err: Error) => void
