@@ -40,6 +40,15 @@ while read -r req; do
     fi
 done < requirements.txt
 
+if [ ! -f ".env" ]; then
+    if [ -f ".env.example" ]; then
+        echo "-> Creating bot/.env from .env.example..."
+        cp .env.example .env
+    else
+        echo "-> Warning: bot/.env file not found! Please create /var/www/vertex-panel/bot/.env with your DISCORD_TOKEN."
+    fi
+fi
+
 echo "-> Creating systemd service..."
 
 cat > /etc/systemd/system/vertex-bot.service <<EOF
@@ -51,8 +60,9 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/var/www/vertex-panel/bot
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/var/www/vertex-panel/bot/venv/bin/python main.py
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 [Install]
