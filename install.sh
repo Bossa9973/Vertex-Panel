@@ -103,7 +103,7 @@ ask() {
     else
         printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET}: " "$prompt"
     fi
-    read -r response
+    read -r response < /dev/tty
     printf "%s" "${response:-$default}"
 }
 
@@ -111,7 +111,7 @@ ask_password() {
     local prompt="$1"
     local response
     printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET}: " "$prompt"
-    read -rs response
+    read -rs response < /dev/tty
     printf "\n"
     printf "%s" "$response"
 }
@@ -121,7 +121,7 @@ ask_yn() {
     local default="${2:-y}"
     local response
     printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET} ${DIM}[y/n, default: %s]${RESET}: " "$prompt" "$default"
-    read -r response
+    read -r response < /dev/tty
     response="${response:-$default}"
     [[ "${response,,}" == "y" || "${response,,}" == "yes" ]]
 }
