@@ -78,10 +78,12 @@ print_banner() {
     printf "\n"
 }
 
-info()    { printf "   ${CYAN}*${RESET}  ${WHITE}%s${RESET}\n" "$1"; }
-success() { printf "   ${GREEN}ok${RESET} ${GREEN}%s${RESET}\n" "$1"; }
-warn()    { printf "   ${YELLOW}!!${RESET} ${YELLOW}%s${RESET}\n" "$1"; }
-error_msg() { printf "   ${RED}xx${RESET} ${RED}${BOLD}%s${RESET}\n" "$1"; }
+run_quietly() { "$@" > /dev/null 2>&1 || true; }
+
+info()    { printf "   ${CYAN}*${RESET}  ${WHITE}%b${RESET}\n" "$1"; }
+success() { printf "   ${GREEN}ok${RESET} ${GREEN}%b${RESET}\n" "$1"; }
+warn()    { printf "   ${YELLOW}!!${RESET} ${YELLOW}%b${RESET}\n" "$1"; }
+error_msg() { printf "   ${RED}xx${RESET} ${RED}${BOLD}%b${RESET}\n" "$1"; }
 
 run_or_fail() {
     local msg="$1"
