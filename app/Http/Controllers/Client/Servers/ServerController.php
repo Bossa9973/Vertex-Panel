@@ -68,8 +68,13 @@ class ServerController extends ApiController
     {
         \Illuminate\Support\Facades\Cache::forget("server.{$server->id}.state");
 
+        $powerState = $request->enum('state', PowerAction::class);
+        if (in_array($powerState, [PowerAction::START, PowerAction::RESTART, PowerAction::RESET])) {
+            \Illuminate\Support\Facades\Cache::put("server_last_boot_{$server->vmid}", now()->timestamp, now()->addMinutes(10));
+        }
+
         $this->powerRepository->setServer($server)
-                              ->send($request->enum('state', PowerAction::class));
+                              ->send($powerState);
 
         return $this->returnNoContent();
     }
