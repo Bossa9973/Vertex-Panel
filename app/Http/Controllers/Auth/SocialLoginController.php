@@ -26,6 +26,29 @@ class SocialLoginController extends Controller
     }
 
     /**
+     * Dynamically resolve the OAuth redirect URI for a provider.
+     */
+    private function getRedirectUri(Request $request, string $provider): string
+    {
+        $custom = config("services.{$provider}.redirect") ?: env(strtoupper($provider) . '_REDIRECT_URI');
+
+        // Use custom URI if specified AND it does not point to localhost / 127.0.0.1
+        if (!empty($custom) && !str_contains($custom, 'localhost') && !str_contains($custom, '127.0.0.1')) {
+            return $custom;
+        }
+
+        // Determine base URL dynamically from config('app.url') or current request
+        $appUrl = config('app.url');
+        if (!empty($appUrl) && !str_contains($appUrl, 'localhost') && !str_contains($appUrl, '127.0.0.1')) {
+            $baseUrl = rtrim($appUrl, '/');
+        } else {
+            $baseUrl = rtrim($request->schemeAndHttpHost(), '/');
+        }
+
+        return "{$baseUrl}/auth/social/{$provider}/callback";
+    }
+
+    /**
      * Redirect the user to the provider authentication page.
      */
     public function redirect(Request $request, string $provider)
@@ -43,11 +66,9 @@ class SocialLoginController extends Controller
 
         session(['social_auth_mode' => $mode]);
 
-        $baseUrl = config('app.url', 'http://localhost:8888');
-
         if ($provider === 'google') {
             $clientId    = config('services.google.client_id') ?: env('GOOGLE_CLIENT_ID');
-            $redirectUri = config('services.google.redirect') ?: env('GOOGLE_REDIRECT_URI', "{$baseUrl}/auth/social/google/callback");
+            $redirectUri = $this->getRedirectUri($request, 'google');
 
             if (empty($clientId)) {
                 return $mode === 'link'
@@ -69,7 +90,7 @@ class SocialLoginController extends Controller
 
         if ($provider === 'discord') {
             $clientId    = config('services.discord.client_id') ?: env('DISCORD_CLIENT_ID');
-            $redirectUri = config('services.discord.redirect') ?: env('DISCORD_REDIRECT_URI', "{$baseUrl}/auth/social/discord/callback");
+            $redirectUri = $this->getRedirectUri($request, 'discord');
 
             if (empty($clientId)) {
                 return $mode === 'link'
@@ -96,9 +117,8 @@ class SocialLoginController extends Controller
      */
     public function callback(Request $request, string $provider)
     {
-        $code    = $request->query('code');
-        $mode    = session('social_auth_mode', 'login');
-        $baseUrl = config('app.url', 'http://localhost:8888');
+        $code = $request->query('code');
+        $mode = session('social_auth_mode', 'login');
 
         if (empty($code)) {
             $error = $request->query('error_description', $request->query('error', 'Authentication cancelled.'));
@@ -115,9 +135,9 @@ class SocialLoginController extends Controller
 
             // ─── Fetch Google Profile ──────────────────────────────────────
             if ($provider === 'google') {
-                $clientId     = env('GOOGLE_CLIENT_ID');
-                $clientSecret = env('GOOGLE_CLIENT_SECRET');
-                $redirectUri  = env('GOOGLE_REDIRECT_URI', "{$baseUrl}/auth/social/google/callback");
+                $clientId     = config('services.google.client_id') ?: env('GOOGLE_CLIENT_ID');
+                $clientSecret = config('services.google.client_secret') ?: env('GOOGLE_CLIENT_SECRET');
+                $redirectUri  = $this->getRedirectUri($request, 'google');
 
                 $tokenResponse = $this->httpClient()->post('https://oauth2.googleapis.com/token', [
                     'client_id'     => $clientId,
@@ -155,9 +175,9 @@ class SocialLoginController extends Controller
 
             // ─── Fetch Discord Profile ─────────────────────────────────────
             if ($provider === 'discord') {
-                $clientId     = env('DISCORD_CLIENT_ID');
-                $clientSecret = env('DISCORD_CLIENT_SECRET');
-                $redirectUri  = env('DISCORD_REDIRECT_URI', "{$baseUrl}/auth/social/discord/callback");
+                $clientId     = config('services.discord.client_id') ?: env('DISCORD_CLIENT_ID');
+                $clientSecret = config('services.discord.client_secret') ?: env('DISCORD_CLIENT_SECRET');
+                $redirectUri  = $this->getRedirectUri($request, 'discord');
 
                 $tokenResponse = $this->httpClient()->asForm()->post('https://discord.com/api/oauth2/token', [
                     'client_id'     => $clientId,
