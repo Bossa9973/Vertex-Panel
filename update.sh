@@ -253,8 +253,13 @@ print_summary() {
     printf "\n"
 }
 
-# --- Main ---------------------------------------------------------------------
-trap 'spinner_stop; printf "\n   ${RED}Update interrupted. See /tmp/vertex_update.log${RESET}\n"; exit 1' ERR INT TERM
+cleanup() {
+    spinner_stop
+    if [[ -n "${INSTALL_DIR:-}" && -f "${INSTALL_DIR}/artisan" ]]; then
+        (cd "$INSTALL_DIR" && php artisan up --no-interaction > /dev/null 2>&1 || true)
+    fi
+}
+trap 'cleanup; printf "\n   ${RED}Update interrupted or failed. See /tmp/vertex_update.log${RESET}\n"; exit 1' ERR INT TERM
 
 print_banner
 preflight_checks
