@@ -19,6 +19,24 @@ class TmateSessionService
      */
     public function createSession(Server $server): array
     {
+        // 0. Restrict tmate session launch during first 5 minutes (300 seconds) after server creation
+        if ($server->created_at) {
+            $secondsSinceCreation = $server->created_at->diffInSeconds(now(), false);
+            if ($secondsSinceCreation >= 0 && $secondsSinceCreation < 300) {
+                $remainingSeconds = 300 - (int) $secondsSinceCreation;
+                $minutes = (int) ceil($remainingSeconds / 60);
+
+                $notice = "tmate terminal access is restricted for the first 5 minutes after server creation to ensure Cloud-Init finishes initial system setup and package configuration properly. Please wait approximately {$minutes} minute(s) ({$remainingSeconds}s remaining).";
+
+                return [
+                    'ssh_cmd' => $notice,
+                    'url' => $notice,
+                    'restricted' => true,
+                    'remaining_seconds' => $remainingSeconds,
+                ];
+            }
+        }
+
         $cacheKey = "server_tmate_ssh_{$server->vmid}";
 
         // 1. Return cached active SSH command if generated within expiration period

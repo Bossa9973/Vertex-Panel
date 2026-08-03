@@ -8,7 +8,9 @@ import http from '@/api/http'
 import Card from '@/components/elements/Card'
 
 const ServerTerminalBlock = () => {
-    const uuid = ServerContext.useStoreState(state => state.server.data!.uuid)
+    const serverData = ServerContext.useStoreState(state => state.server.data)
+    const uuid = serverData!.uuid
+    const createdAtStr = (serverData as any)?.created_at || (serverData as any)?.createdAt
     const { t } = useTranslation('server.overview')
     const { t: tStrings } = useTranslation('strings')
 
@@ -17,6 +19,39 @@ const ServerTerminalBlock = () => {
     const [tmateLoading, setTmateLoading] = useState<boolean>(false)
     const [modalOpened, setModalOpened] = useState<boolean>(false)
     const [copiedSsh, setCopiedSsh] = useState<boolean>(false)
+    const [secondsLeft, setSecondsLeft] = useState<number>(0)
+
+    useEffect(() => {
+        if (!createdAtStr) return
+
+        const calculateRemaining = () => {
+            const createdMs = new Date(createdAtStr).getTime()
+            if (isNaN(createdMs)) return 0
+            const elapsedSeconds = Math.floor((Date.now() - createdMs) / 1000)
+            return Math.max(0, 300 - elapsedSeconds)
+        }
+
+        const initial = calculateRemaining()
+        setSecondsLeft(initial)
+
+        if (initial <= 0) return
+
+        const timer = setInterval(() => {
+            const remaining = calculateRemaining()
+            setSecondsLeft(remaining)
+            if (remaining <= 0) {
+                clearInterval(timer)
+            }
+        }, 1000)
+
+        return () => clearInterval(timer)
+    }, [createdAtStr])
+
+    const formatTime = (secs: number) => {
+        const m = Math.floor(secs / 60)
+        const s = secs % 60
+        return `${m}:${s < 10 ? '0' : ''}${s}`
+    }
 
     useEffect(() => {
         http.get('/api/terminal-mode')
@@ -97,6 +132,20 @@ const ServerTerminalBlock = () => {
                                 </p>
                             </div>
 
+                            {secondsLeft > 0 && (
+                                <div className='mt-3 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs text-amber-300 space-y-1'>
+                                    <div className='font-bold flex items-center gap-1.5'>
+                                        <span>⏳ Initial Cloud-Init Boot Setup</span>
+                                        <span className='ml-auto font-mono text-amber-200 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30'>
+                                            {formatTime(secondsLeft)} remaining
+                                        </span>
+                                    </div>
+                                    <p className='text-[11px] text-amber-300/80 leading-snug'>
+                                        tmate terminal sessions are locked for the first 5 minutes of server boot to allow Cloud-Init to complete initial package setup cleanly.
+                                    </p>
+                                </div>
+                            )}
+
                             {sshCmd && (
                                 <div className='mt-4 p-3.5 bg-neutral-950/90 border border-indigo-500/30 rounded-xl space-y-3'>
                                     <div className='text-xs font-bold text-indigo-300 flex items-center justify-between'>
@@ -128,15 +177,18 @@ const ServerTerminalBlock = () => {
                                     className='grow'
                                     variant='outline'
                                     loading={tmateLoading}
+                                    disabled={tmateLoading || secondsLeft > 0}
                                     onClick={handleFetchTmateSession}
                                 >
-                                    {sshCmd ? 'View tmate SSH Command' : 'Fetch tmate SSH Session'}
+                                    {secondsLeft > 0
+                                        ? `tmate Restricted (${formatTime(secondsLeft)})`
+                                        : (sshCmd ? 'View tmate SSH Command' : 'Fetch tmate SSH Session')}
                                 </Button>
                                 <Button
                                     variant='outline'
-                                    disabled={tmateLoading}
+                                    disabled={tmateLoading || secondsLeft > 0}
                                     onClick={handleFetchTmateSession}
-                                    title='Fetch tmate session'
+                                    title={secondsLeft > 0 ? `Locked during Cloud-Init boot (${formatTime(secondsLeft)})` : 'Fetch tmate session'}
                                 >
                                     <CommandLineIcon className='w-4 h-4' />
                                 </Button>
