@@ -46,8 +46,8 @@ class SocialLoginController extends Controller
         $baseUrl = config('app.url', 'http://localhost:8888');
 
         if ($provider === 'google') {
-            $clientId    = config('services.google.client_id', env('GOOGLE_CLIENT_ID'));
-            $redirectUri = config('services.google.redirect', env('GOOGLE_REDIRECT_URI', "{$baseUrl}/auth/social/google/callback"));
+            $clientId    = config('services.google.client_id') ?: env('GOOGLE_CLIENT_ID');
+            $redirectUri = config('services.google.redirect') ?: env('GOOGLE_REDIRECT_URI', "{$baseUrl}/auth/social/google/callback");
 
             if (empty($clientId)) {
                 return $mode === 'link'
@@ -68,8 +68,8 @@ class SocialLoginController extends Controller
         }
 
         if ($provider === 'discord') {
-            $clientId    = config('services.discord.client_id', env('DISCORD_CLIENT_ID'));
-            $redirectUri = config('services.discord.redirect', env('DISCORD_REDIRECT_URI', "{$baseUrl}/auth/social/discord/callback"));
+            $clientId    = config('services.discord.client_id') ?: env('DISCORD_CLIENT_ID');
+            $redirectUri = config('services.discord.redirect') ?: env('DISCORD_REDIRECT_URI', "{$baseUrl}/auth/social/discord/callback");
 
             if (empty($clientId)) {
                 return $mode === 'link'
