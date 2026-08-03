@@ -551,11 +551,32 @@ SUPEOF
     spinner_stop
     success "Supervisor config written -> ${SUPERVISOR_CONF}"
 
-    run_or_fail "Starting queue workers" \
-        bash -c "supervisorctl reread && supervisorctl update && supervisorctl start all"
+    # Reload supervisor config so it picks up the new programs
+    run_or_fail "Loading Supervisor configuration" \
+        bash -c "supervisorctl reread && supervisorctl update"
+
+    # Start each program explicitly and verify
+    spinner_start "Starting vertex-queue workers"
+    if supervisorctl start vertex-queue:* > /tmp/vertex_install.log 2>&1; then
+        spinner_stop
+        success "Queue workers (vertex-queue) started"
+    else
+        spinner_stop
+        warn "vertex-queue may already be running or failed — check: supervisorctl status vertex-queue:*"
+    fi
+
+    spinner_start "Starting vertex-horizon worker"
+    if supervisorctl start vertex-horizon > /tmp/vertex_install.log 2>&1; then
+        spinner_stop
+        success "Horizon worker (vertex-horizon) started"
+    else
+        spinner_stop
+        warn "vertex-horizon may already be running or failed — check: supervisorctl status vertex-horizon"
+    fi
 
     printf "\n"
 }
+
 
 # --- Install vertex CLI management tool ---------------------------------------
 install_cli() {
@@ -694,21 +715,72 @@ CLIEOF
     printf "\n"
 }
 
+# --- Start all services and detect server address ----------------------------
+start_services() {
+    printf "   ${BLUE}${BOLD}[ FINAL ]${RESET}  ${BOLD}${WHITE}Starting All Services${RESET}\n"
+    printf "   ${DIM}------------------------------------------------------------${RESET}\n"
+
+    run_or_fail "Ensuring Nginx is running" systemctl restart nginx
+    run_or_fail "Ensuring PHP-FPM is running" systemctl restart php8.2-fpm
+    run_or_fail "Ensuring Redis is running" systemctl restart redis-server
+    run_or_fail "Ensuring MySQL is running" systemctl restart mysql
+    run_or_fail "Ensuring Supervisor is running" systemctl restart supervisor
+
+    # Wait briefly for supervisor programs to spin up
+    sleep 2
+
+    # Verify both Supervisor programs are running
+    local queue_status horizon_status
+    queue_status=$(supervisorctl status vertex-queue:vertex-queue_00 2>/dev/null | awk '{print $2}' || echo "UNKNOWN")
+    horizon_status=$(supervisorctl status vertex-horizon 2>/dev/null | awk '{print $2}' || echo "UNKNOWN")
+
+    printf "\n"
+    printf "   ${BOLD}${WHITE}Worker status:${RESET}\n"
+    if [[ "$queue_status" == "RUNNING" ]]; then
+        success "vertex-queue workers: RUNNING"
+    else
+        warn "vertex-queue status: ${queue_status} (run: supervisorctl start vertex-queue:*)"
+    fi
+    if [[ "$horizon_status" == "RUNNING" ]]; then
+        success "vertex-horizon worker: RUNNING"
+    else
+        warn "vertex-horizon status: ${horizon_status} (run: supervisorctl start vertex-horizon)"
+    fi
+
+    # Detect server IP
+    SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || ip route get 1 2>/dev/null | awk '{print $7; exit}' || echo "<your-server-ip>")
+    PANEL_PORT=80
+
+    printf "\n"
+    success "Panel is live at:  ${CYAN}${BOLD}http://${SERVER_IP}:${PANEL_PORT}${RESET}"
+    info  "Configured URL:    ${CYAN}${APP_URL}${RESET}"
+    printf "\n"
+}
+
 # --- Print completion summary -------------------------------------------------
+
 print_completion() {
     printf "\n"
     printf "   ${DIM}------------------------------------------------------------${RESET}\n"
     printf "\n"
     printf "   ${GREEN}${BOLD}Installation Complete!${RESET}\n"
     printf "\n"
-    printf "   ${BOLD}Panel URL:${RESET}  ${CYAN}%s${RESET}\n" "$APP_URL"
+    printf "   ${BOLD}Access your panel:${RESET}\n"
+    printf "     ${CYAN}${BOLD}http://${SERVER_IP:-<server-ip>}:80${RESET}          (direct IP)\n"
+    printf "     ${CYAN}${BOLD}%s${RESET}  (domain)\n" "$APP_URL"
+    printf "\n"
     printf "   ${BOLD}Panel Dir:${RESET}  ${DIM}%s${RESET}\n" "$INSTALL_DIR"
-    printf "   ${BOLD}Log Dir:${RESET}    ${DIM}/var/log/vertex-panel${RESET}\n"
+    printf "   ${BOLD}Log Dir:${RESET}    ${DIM}/var/log/vertex-panel/${RESET}\n"
+    printf "\n"
+    printf "   ${BOLD}Worker processes:${RESET}\n"
+    printf "   ${DIM}vertex-queue:*      ${RESET} 2 queue worker processes\n"
+    printf "   ${DIM}vertex-horizon      ${RESET} Horizon dashboard worker\n"
     printf "\n"
     printf "   ${BOLD}Management commands (run as root):${RESET}\n"
     printf "   ${DIM}vertex status           ${RESET}  Show service status\n"
     printf "   ${DIM}vertex start/stop/restart${RESET} Manage services\n"
     printf "   ${DIM}vertex logs             ${RESET}  Tail application logs\n"
+    printf "   ${DIM}vertex queue-logs       ${RESET}  Tail queue/horizon logs\n"
     printf "   ${DIM}vertex update           ${RESET}  Pull latest from GitHub\n"
     printf "   ${DIM}vertex artisan <cmd>    ${RESET}  Run Artisan commands\n"
     printf "\n"
@@ -723,7 +795,7 @@ print_completion() {
 
     local domain
     domain=$(printf "%s" "$APP_URL" | sed 's|https\?://||' | sed 's|/.*||')
-    printf "   ${DIM}Next step: Point DNS for %s to this server's IP.${RESET}\n" "$domain"
+    printf "   ${DIM}Next: Point DNS A record for %s -> %s${RESET}\n" "$domain" "${SERVER_IP:-<server-ip>}"
     printf "   ${DIM}Then visit your URL to complete admin account setup.${RESET}\n"
     printf "\n"
     printf "   ${DIM}------------------------------------------------------------${RESET}\n"
@@ -742,4 +814,5 @@ configure_panel
 configure_nginx
 configure_supervisor
 install_cli
+start_services
 print_completion
