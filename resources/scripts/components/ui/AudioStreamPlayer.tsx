@@ -6,20 +6,18 @@ import {
     PauseIcon,
     ChevronDownIcon,
     ChevronUpIcon,
-    RadioIcon,
     SparklesIcon,
 } from '@heroicons/react/24/outline'
 
 const YOUTUBE_VIDEO_ID = 'D5GX7NQfNcI'
 
 export const AudioStreamPlayer: React.FC = () => {
-    const [isPlaying, setIsPlaying] = useState<boolean>(true)
+    const [isPlaying, setIsPlaying] = useState<boolean>(false)
     const [isMuted, setIsMuted] = useState<boolean>(false)
     const [isExpanded, setIsExpanded] = useState<boolean>(false)
-    const [hasInteracted, setHasInteracted] = useState<boolean>(false)
+    const [hasStarted, setHasStarted] = useState<boolean>(false)
     const iframeRef = useRef<HTMLIFrameElement>(null)
 
-    // Send postMessage to YouTube IFrame API to toggle play/pause or mute
     const sendCommand = (func: string, args: any[] = []) => {
         if (iframeRef.current && iframeRef.current.contentWindow) {
             iframeRef.current.contentWindow.postMessage(
@@ -29,8 +27,20 @@ export const AudioStreamPlayer: React.FC = () => {
         }
     }
 
+    const startAudio = () => {
+        setHasStarted(true)
+        setIsPlaying(true)
+        setIsMuted(false)
+        sendCommand('unMute')
+        sendCommand('setVolume', [100])
+        sendCommand('playVideo')
+    }
+
     const togglePlay = () => {
-        setHasInteracted(true)
+        if (!hasStarted) {
+            startAudio()
+            return
+        }
         if (isPlaying) {
             sendCommand('pauseVideo')
             setIsPlaying(false)
@@ -41,7 +51,10 @@ export const AudioStreamPlayer: React.FC = () => {
     }
 
     const toggleMute = () => {
-        setHasInteracted(true)
+        if (!hasStarted) {
+            startAudio()
+            return
+        }
         if (isMuted) {
             sendCommand('unMute')
             setIsMuted(false)
@@ -51,28 +64,26 @@ export const AudioStreamPlayer: React.FC = () => {
         }
     }
 
-    // Auto-attempt playback on user click anywhere
     useEffect(() => {
-        const handleFirstInteraction = () => {
-            if (!hasInteracted) {
-                setHasInteracted(true)
-                sendCommand('playVideo')
+        const handleUserClick = () => {
+            if (!hasStarted) {
+                startAudio()
             }
         }
-        window.addEventListener('click', handleFirstInteraction, { once: true })
-        return () => window.removeEventListener('click', handleFirstInteraction)
-    }, [hasInteracted])
+        window.addEventListener('click', handleUserClick, { once: true })
+        return () => window.removeEventListener('click', handleUserClick)
+    }, [hasStarted])
 
     return (
         <div className='fixed bottom-5 right-5 z-50 font-sans select-none print:hidden'>
-            {/* Hidden YouTube IFrame Audio Engine */}
-            <div className='hidden pointer-events-none w-0 h-0 overflow-hidden'>
+            {/* Active Off-screen YouTube Player (Opacity 0 to prevent Chrome/Edge DOM suspension) */}
+            <div className='opacity-0 pointer-events-none absolute -bottom-96 -right-96 w-12 h-12 overflow-hidden'>
                 <iframe
                     ref={iframeRef}
                     id='vertex-radio-engine'
                     width='200'
                     height='200'
-                    src={`https://www.youtube-nocookie.com/embed/${YOUTUBE_VIDEO_ID}?enablejsapi=1&autoplay=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&origin=${window.location.origin}`}
+                    src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?enablejsapi=1&autoplay=1&mute=0&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0`}
                     title='Vertex Radio Engine'
                     allow='autoplay; encrypted-media'
                 />
@@ -80,7 +91,7 @@ export const AudioStreamPlayer: React.FC = () => {
 
             {/* Floating Glassmorphism Player Widget */}
             <div className={`transition-all duration-300 rounded-2xl border shadow-2xl backdrop-blur-xl ${
-                isExpanded ? 'w-80 p-4 bg-neutral-950/90 border-blue-500/30 shadow-blue-950/50' : 'px-4 py-2.5 bg-neutral-900/80 hover:bg-neutral-900 border-white/10 hover:border-blue-500/40'
+                isExpanded ? 'w-80 p-4 bg-neutral-950/95 border-blue-500/30 shadow-blue-950/50' : 'px-4 py-2.5 bg-neutral-900/90 hover:bg-neutral-900 border-white/10 hover:border-blue-500/40 shadow-xl'
             }`}>
                 {isExpanded ? (
                     /* Expanded Player Card */
@@ -92,7 +103,7 @@ export const AudioStreamPlayer: React.FC = () => {
                                 </span>
                                 <div>
                                     <h6 className='text-xs font-extrabold text-white tracking-wide uppercase flex items-center gap-1.5'>
-                                        Vertex Radio <span className='px-1.5 py-0.2 rounded text-[9px] bg-red-500/20 text-red-400 border border-red-500/30 font-mono'>LIVE STREAM</span>
+                                        Vertex Radio <span className='px-1.5 py-0.2 rounded text-[9px] bg-red-500/20 text-red-400 border border-red-500/30 font-mono'>LIVE</span>
                                     </h6>
                                     <p className='text-[11px] text-gray-400 font-medium truncate max-w-[170px]'>
                                         Dashboard Soundtrack
@@ -121,7 +132,7 @@ export const AudioStreamPlayer: React.FC = () => {
                                     Ambient Stream
                                 </p>
                                 <p className='text-[10px] text-gray-400 truncate'>
-                                    {isPlaying ? (isMuted ? 'Muted' : 'Streaming Dashboard Audio...') : 'Paused'}
+                                    {isPlaying ? (isMuted ? 'Muted' : 'Streaming Dashboard Audio...') : (hasStarted ? 'Paused' : 'Click Play to Start Audio')}
                                 </p>
                             </div>
                         </div>
@@ -140,7 +151,7 @@ export const AudioStreamPlayer: React.FC = () => {
 
                             <button
                                 onClick={togglePlay}
-                                className='p-3 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 active:scale-95 transition cursor-pointer'
+                                className='p-3 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 active:scale-95 transition cursor-pointer flex items-center justify-center'
                             >
                                 {isPlaying ? <PauseIcon className='w-5 h-5' /> : <PlayIcon className='w-5 h-5 ml-0.5' />}
                             </button>
@@ -164,7 +175,7 @@ export const AudioStreamPlayer: React.FC = () => {
                             <div className='flex flex-col'>
                                 <span className='text-[11px] font-extrabold text-blue-300 group-hover:text-blue-200 transition-colors flex items-center gap-1'>
                                     <span>Vertex Radio</span>
-                                    <span className='w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse' />
+                                    <span className={`w-1.5 h-1.5 rounded-full ${isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
                                 </span>
                             </div>
                         </button>
@@ -175,9 +186,9 @@ export const AudioStreamPlayer: React.FC = () => {
                             <button
                                 onClick={togglePlay}
                                 className='p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition cursor-pointer'
-                                title={isPlaying ? 'Pause' : 'Play'}
+                                title={isPlaying ? 'Pause' : 'Click to Play Audio'}
                             >
-                                {isPlaying ? <PauseIcon className='w-4 h-4' /> : <PlayIcon className='w-4 h-4' />}
+                                {isPlaying ? <PauseIcon className='w-4 h-4' /> : <PlayIcon className='w-4 h-4 text-blue-400' />}
                             </button>
 
                             <button
