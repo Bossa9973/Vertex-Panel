@@ -97,31 +97,43 @@ error_msg() { printf "   ${RED}xx${RESET} ${RED}${BOLD}%s${RESET}\n" "$1"; ERROR
 ask() {
     local prompt="$1"
     local default="${2:-}"
-    local response
+    local response=""
     if [[ -n "$default" ]]; then
-        printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET} ${DIM}[%s]${RESET}: " "$prompt" "$default"
+        printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET} ${DIM}[%s]${RESET}: " "$prompt" "$default" >&2
     else
-        printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET}: " "$prompt"
+        printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET}: " "$prompt" >&2
     fi
-    read -r response < /dev/tty
+    if [[ -t 0 ]]; then
+        read -r response
+    else
+        read -r response < /dev/tty 2>/dev/null || read -r response || response=""
+    fi
     printf "%s" "${response:-$default}"
 }
 
 ask_password() {
     local prompt="$1"
-    local response
-    printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET}: " "$prompt"
-    read -rs response < /dev/tty
-    printf "\n"
+    local response=""
+    printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET}: " "$prompt" >&2
+    if [[ -t 0 ]]; then
+        read -rs response
+    else
+        read -rs response < /dev/tty 2>/dev/null || read -rs response || response=""
+    fi
+    printf "\n" >&2
     printf "%s" "$response"
 }
 
 ask_yn() {
     local prompt="$1"
     local default="${2:-y}"
-    local response
-    printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET} ${DIM}[y/n, default: %s]${RESET}: " "$prompt" "$default"
-    read -r response < /dev/tty
+    local response=""
+    printf "   ${CYAN}?${RESET}  ${WHITE}%s${RESET} ${DIM}[y/n, default: %s]${RESET}: " "$prompt" "$default" >&2
+    if [[ -t 0 ]]; then
+        read -r response
+    else
+        read -r response < /dev/tty 2>/dev/null || read -r response || response=""
+    fi
     response="${response:-$default}"
     [[ "${response,,}" == "y" || "${response,,}" == "yes" ]]
 }
