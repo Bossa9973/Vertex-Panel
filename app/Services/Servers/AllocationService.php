@@ -114,6 +114,7 @@ class AllocationService
         $raw = collect($this->repository->setServer($server)->getConfig());
         $currentCores = $raw->where('key', '=', 'cores')->first()['value'] ?? null;
         $currentMem = $raw->where('key', '=', 'memory')->first()['value'] ?? null;
+        $currentAgent = $raw->where('key', '=', 'agent')->first()['value'] ?? null;
 
         $payload = [];
         if ((string) $currentCores !== (string) $cpu) {
@@ -121,6 +122,10 @@ class AllocationService
         }
         if ((string) $currentMem !== (string) $memMiB) {
             $payload['memory'] = $memMiB;
+        }
+        
+        if (empty($currentAgent) || $currentAgent === '0') {
+            $payload['agent'] = 1;
         }
 
         if (empty($payload)) {
