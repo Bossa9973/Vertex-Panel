@@ -261,16 +261,37 @@ install_dependencies() {
 
     run_or_fail "Installing core utilities" \
         apt-get install -y curl wget unzip git tar gnupg2 ca-certificates lsb-release \
-            software-properties-common apt-transport-https rsync
+            apt-transport-https rsync
 
-    # PHP 8.2
+    # Try installing software-properties-common quietly (available on Ubuntu, omitted on Debian)
+    run_quietly apt-get install -y software-properties-common 2>/dev/null || true
+
+    # PHP 8.2 repository setup
     if ! command -v php &>/dev/null; then
-        run_quietly add-apt-repository -y ppa:ondrej/php 2>/dev/null || true
+        if [[ "${OS_NAME}" == "debian" ]]; then
+            spinner_start "Adding Surý PHP repository for Debian"
+            curl -sSLo /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg > /dev/null 2>&1 || true
+            local codename
+            codename=$(lsb_release -sc 2>/dev/null || echo "bookworm")
+            echo "deb https://packages.sury.org/php/ ${codename} main" > /etc/apt/sources.list.d/php.list
+            spinner_stop
+            success "Surý PHP repository added for Debian (${codename})"
+        else
+            run_quietly add-apt-repository -y ppa:ondrej/php 2>/dev/null || true
+        fi
         run_or_fail "Updating package lists (PHP repo)" apt-get update -y
-        run_or_fail "Installing PHP 8.2 + extensions" \
-            apt-get install -y php8.2 php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml \
-                php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp \
-                php8.2-pcntl php8.2-redis php8.2-intl php8.2-tokenizer php8.2-fileinfo
+
+        if apt-cache show php8.2-cli > /dev/null 2>&1; then
+            run_or_fail "Installing PHP 8.2 + extensions" \
+                apt-get install -y php8.2 php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml \
+                    php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp \
+                    php8.2-pcntl php8.2-redis php8.2-intl php8.2-tokenizer php8.2-fileinfo
+        else
+            run_or_fail "Installing PHP + extensions" \
+                apt-get install -y php php-cli php-fpm php-mysql php-xml \
+                    php-curl php-mbstring php-zip php-bcmath php-gmp \
+                    php-pcntl php-redis php-intl php-fileinfo
+        fi
     else
         success "PHP $(php -r 'echo PHP_VERSION;') already installed"
     fi
@@ -294,13 +315,27 @@ install_dependencies() {
         success "Node.js $(node --version) already installed"
     fi
 
-    # MySQL
+    # MySQL / MariaDB Server
     if ! command -v mysql &>/dev/null; then
-        run_or_fail "Installing MySQL Server" apt-get install -y mysql-server
-        run_quietly systemctl start mysql
-        run_quietly systemctl enable mysql
+        spinner_start "Installing Database Server (MySQL / MariaDB)"
+        if apt-get install -y mysql-server > /tmp/vertex_install.log 2>&1; then
+            spinner_stop
+            success "MySQL Server installed"
+        elif apt-get install -y default-mysql-server > /tmp/vertex_install.log 2>&1; then
+            spinner_stop
+            success "Default MySQL Server installed"
+        elif apt-get install -y mariadb-server > /tmp/vertex_install.log 2>&1; then
+            spinner_stop
+            success "MariaDB Server installed"
+        else
+            spinner_stop
+            error_msg "Failed to install MySQL/MariaDB. Check /tmp/vertex_install.log"
+            return 1
+        fi
+        run_quietly systemctl start mysql 2>/dev/null || run_quietly systemctl start mariadb 2>/dev/null || true
+        run_quietly systemctl enable mysql 2>/dev/null || run_quietly systemctl enable mariadb 2>/dev/null || true
     else
-        success "MySQL already installed"
+        success "MySQL/MariaDB already installed"
     fi
 
     # Redis
@@ -469,8 +504,9 @@ SQLEOF
 configure_nginx() {
     step 6 8 "Configuring Nginx"
 
-    local domain
+    local domain php_sock
     domain=$(printf "%s" "$APP_URL" | sed 's|https\?://||' | sed 's|/.*||')
+    php_sock=$(ls /run/php/php8.2-fpm.sock /run/php/php*-fpm.sock 2>/dev/null | head -1 || echo "/run/php/php8.2-fpm.sock")
 
     spinner_start "Writing Nginx virtual host for ${domain}"
     cat > "${NGINX_CONF}" <<NGINXEOF
@@ -498,7 +534,7 @@ server {
 
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        fastcgi_pass unix:${php_sock};
         fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_read_timeout 300;
