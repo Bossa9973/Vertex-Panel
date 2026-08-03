@@ -47,12 +47,26 @@ class TmateSessionService
         try {
             $this->guestAgentRepository->setServer($server);
 
-            // Robust in-VM command loop with PATH export & automatic tmate check
+            // Multi-distro auto-installer & robust tmate session spawner
             $execCmd = "export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; "
                 . "pkill -9 tmate >/dev/null 2>&1 || true; "
                 . "rm -f /tmp/tmate.sock /tmp/tmate.log; "
                 . "if ! command -v tmate >/dev/null 2>&1; then "
-                . "  (DEBIAN_FRONTEND=noninteractive apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y tmate) >/dev/null 2>&1 || true; "
+                . "  if command -v apt-get >/dev/null 2>&1; then "
+                . "    for attempt in 1 2 3; do "
+                . "      (DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) >/dev/null 2>&1 || true; "
+                . "      if command -v tmate >/dev/null 2>&1; then break; fi; "
+                . "      sleep 1; "
+                . "    done; "
+                . "  elif command -v apk >/dev/null 2>&1; then "
+                . "    apk add --no-cache tmate >/dev/null 2>&1 || true; "
+                . "  elif command -v dnf >/dev/null 2>&1; then "
+                . "    dnf install -y tmate >/dev/null 2>&1 || true; "
+                . "  elif command -v yum >/dev/null 2>&1; then "
+                . "    yum install -y tmate >/dev/null 2>&1 || true; "
+                . "  elif command -v pacman >/dev/null 2>&1; then "
+                . "    pacman -Sy --noconfirm tmate >/dev/null 2>&1 || true; "
+                . "  fi; "
                 . "fi; "
                 . "tmate -S /tmp/tmate.sock new-session -d >/dev/null 2>&1 || true; "
                 . "for i in $(seq 1 40); do "
@@ -91,10 +105,10 @@ class TmateSessionService
             }
         } catch (\Throwable $e) {
             $msg = $e->getMessage();
-            Log::error("Proxmox Tmate Guest Agent Exec error: {$msg}");
+            Log::error("Proxmox Tmate Guest Agent Exec error for VM {$server->vmid}: {$msg}");
 
-            if (Str::contains($msg, ['not running', 'Agent', 'agent', '500', 'connection'])) {
-                $errorNotice = "Proxmox QEMU Guest Agent is not reachable on this VM. Please run 'sudo systemctl enable --now qemu-guest-agent' inside your VM terminal.";
+            if (Str::contains($msg, ['not running', 'Agent', 'agent', '500', 'connection', 'Communication'])) {
+                $errorNotice = "The VM is completing its first-boot initialization (cloud-init & QEMU agent). Please wait 30–60 seconds after booting, then try fetching the tmate session again.";
             } else {
                 $errorNotice = "Guest Agent execution error: {$msg}";
             }
