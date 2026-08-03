@@ -17,17 +17,28 @@ fi
 
 cd "$BOT_DIR"
 
-echo "-> Installing Python venv and dependencies..."
+echo "-> Updating system package lists..."
 apt-get update -y > /dev/null
+
+echo "-> Installing core python dependencies..."
 apt-get install -y python3-venv python3-pip > /dev/null
 
 if [ ! -d "venv" ]; then
+    echo "-> Creating isolated virtual environment..."
     python3 -m venv venv
 fi
 
-# Activate venv and install requirements
+echo "-> Activating environment..."
 source venv/bin/activate
-pip install -r requirements.txt > /dev/null
+
+echo "-> Downloading and installing bot requirements..."
+while read -r req; do
+    # Skip empty lines and comments
+    if [[ -n "$req" && ! "$req" =~ ^# ]]; then
+        echo "   > Installing $req..."
+        pip install "$req" > /dev/null
+    fi
+done < requirements.txt
 
 echo "-> Creating systemd service..."
 
