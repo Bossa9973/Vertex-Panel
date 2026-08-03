@@ -20,3 +20,4 @@ stats.html
 .fleet
 lang/php_*.json
 .phpunit.cache
+dump.rdb

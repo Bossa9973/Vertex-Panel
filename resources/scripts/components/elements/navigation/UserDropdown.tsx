@@ -27,14 +27,15 @@ const UserDropdown = ({ logout }: Props) => {
 
     return (
         <div className='hidden sm:flex items-center space-x-3.5'>
-            {/* BOLT Balance Badge */}
+            {/* BOLT Balance Badge — Blue Liquid Glass */}
             <Link
                 to='/credits'
-                className='flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500/15 to-amber-600/10 hover:from-amber-500/25 hover:to-amber-600/20 text-amber-400 font-extrabold text-xs transition-all border border-amber-500/30 shadow-md hover:border-amber-400/50 cursor-pointer active:scale-95'
+                className='flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-blue-950/80 via-blue-900/40 to-neutral-950/90 hover:from-blue-900/90 hover:to-indigo-950/90 text-white font-bold text-xs transition-all border border-blue-500/40 hover:border-blue-400 shadow-md shadow-blue-950/50 backdrop-blur-md cursor-pointer active:scale-95 group font-sans'
                 title='Click to top up account BOLTs'
             >
-                <BoltSvgIcon className='w-4 h-4 text-amber-400 shrink-0' />
-                <span className='font-mono tracking-tight'>{(user.credits ?? 0).toFixed(2)} BOLTs</span>
+                <BoltSvgIcon className='w-4 h-4 text-blue-400 shrink-0 group-hover:scale-110 transition-transform' />
+                <span className='font-sans font-extrabold tracking-tight text-white'>{(user.credits ?? 0).toFixed(2)}</span>
+                <span className='text-[10px] font-extrabold text-blue-400 font-sans tracking-wide uppercase'>BOLTs</span>
             </Link>
 
             {/* Theme Toggle Button */}
@@ -59,30 +60,31 @@ const UserDropdown = ({ logout }: Props) => {
                         className={`px-3 py-2mb-1 border-b cursor-pointer transition-colors ${isDark ? 'border-white/10 hover:bg-white/5' : 'border-slate-200 hover:bg-slate-50'}`}
                         title='Click to manage profile and linked accounts'
                     >
-                        <div className='flex items-center justify-between'>
-                            <p className={`text-xs font-bold tracking-tight truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{user.name}</p>
-                            <span className='text-[9px] font-extrabold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20'>Profile</span>
-                        </div>
-                        <p className={`text-[11px] font-medium truncate ${isDark ? 'text-stone-400' : 'text-slate-500'}`}>{user.email}</p>
+                        <p className={`font-bold text-xs truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                            {user.name}
+                        </p>
+                        <p className='text-[11px] text-gray-400 truncate font-sans'>
+                            {user.email}
+                        </p>
                     </div>
 
                     <Menu.Item
                         icon={<UserIcon className='w-4 h-4 text-blue-400 shrink-0' />}
                         onClick={() => navigate('/account')}
                     >
-                        <div className='flex items-center justify-between w-full'>
-                            <span className={`font-semibold ${isDark ? 'text-stone-200' : 'text-slate-800'}`}>Account Management</span>
+                        <div className='flex items-center justify-between w-full font-sans'>
+                            <span className={`font-semibold ${isDark ? 'text-stone-200' : 'text-slate-800'}`}>Account Profile</span>
                         </div>
                     </Menu.Item>
 
                     <Menu.Item
-                        icon={<BoltSvgIcon className='w-4 h-4 text-amber-400 shrink-0' />}
+                        icon={<BoltSvgIcon className='w-4 h-4 text-blue-400 shrink-0' />}
                         onClick={() => navigate('/credits')}
                     >
-                        <div className='flex items-center justify-between w-full'>
+                        <div className='flex items-center justify-between w-full font-sans'>
                             <span className={`font-semibold ${isDark ? 'text-stone-200' : 'text-slate-800'}`}>Billing & BOLTs</span>
-                            <span className='text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20'>
-                                {(user.credits ?? 0).toFixed(2)}
+                            <span className='text-[11px] font-sans font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20'>
+                                {(user.credits ?? 0).toFixed(2)} BOLTs
                             </span>
                         </div>
                     </Menu.Item>

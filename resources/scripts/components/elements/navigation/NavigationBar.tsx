@@ -124,7 +124,7 @@ const NavigationBar = () => {
                         >
                             <Logo className={`w-6 h-6 group-hover:scale-105 transition-transform ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
                             <h1 className={`font-bold text-lg tracking-tight font-sans ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                                Convoy
+                                Vertex
                             </h1>
                         </Link>
                         {breadcrumb && (

@@ -58,4 +58,66 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
 
         return $this->getData($response);
     }
+
+    /**
+     * Execute command inside VM via Proxmox QEMU Guest Agent.
+     */
+    public function exec(string $command)
+    {
+        Assert::isInstanceOf($this->server, Server::class);
+
+        $params = [
+            'command' => ['/bin/sh', '-c', $command],
+        ];
+
+        $response = $this->getHttpClient()
+            ->withUrlParameters([
+                'node' => $this->node->cluster,
+                'server' => $this->server->vmid,
+            ])
+            ->post('/api2/json/nodes/{node}/qemu/{server}/agent/exec', $params)
+            ->json();
+
+        return $this->getData($response);
+    }
+
+    /**
+     * Read file inside VM via Proxmox QEMU Guest Agent (GET request).
+     */
+    public function fileRead(string $file)
+    {
+        Assert::isInstanceOf($this->server, Server::class);
+
+        $response = $this->getHttpClient()
+            ->withUrlParameters([
+                'node' => $this->node->cluster,
+                'server' => $this->server->vmid,
+            ])
+            ->get('/api2/json/nodes/{node}/qemu/{server}/agent/file-read', [
+                'file' => $file,
+            ])
+            ->json();
+
+        return $this->getData($response);
+    }
+
+    /**
+     * Get exec status for a command PID.
+     */
+    public function execStatus(int $pid)
+    {
+        Assert::isInstanceOf($this->server, Server::class);
+
+        $response = $this->getHttpClient()
+            ->withUrlParameters([
+                'node' => $this->node->cluster,
+                'server' => $this->server->vmid,
+            ])
+            ->get('/api2/json/nodes/{node}/qemu/{server}/agent/exec-status', [
+                'pid' => $pid,
+            ])
+            ->json();
+
+        return $this->getData($response);
+    }
 }

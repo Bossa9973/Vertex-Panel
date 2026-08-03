@@ -1,6 +1,6 @@
 import http from '@/api/http'
 
-export type ConsoleType = 'novnc' | 'xtermjs'
+export type ConsoleType = 'novnc' | 'xtermjs' | 'sshx'
 
 interface ConsoleCredentialsWithoutCoterm {
     ticket: string

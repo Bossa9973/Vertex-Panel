@@ -65,30 +65,39 @@ class EarnBoltsController extends ApiController
     ];
 
     /**
-     * Get earn status and list of claimed/unclaimed tasks for authenticated user.
+     * Get earn status and list of claimed/unclaimed tasks with live requirements count.
      */
     public function status(Request $request): JsonResponse
     {
         $user = $request->user();
         $claims = DiscordClaim::where('user_id', $user->id)->get()->keyBy('task_key');
 
+        $discordId = $user->discord_id;
+        $stats = $this->getUserDiscordStats($discordId);
+
         $formattedTasks = [];
         foreach ($this->tasks as $key => $task) {
             $claim = $claims->get($key);
+            $currentCount = $this->getTaskCurrentCount($task['category'], $stats);
+            $isEligible = $currentCount >= $task['target_count'];
+
             $formattedTasks[] = array_merge($task, [
-                'is_claimed' => !is_null($claim),
-                'claimed_at' => $claim ? $claim->claimed_at->toIso8601String() : null,
-                'discord_id' => $claim ? $claim->discord_id : $user->discord_id,
+                'is_claimed'    => !is_null($claim),
+                'claimed_at'    => $claim ? $claim->claimed_at->toIso8601String() : null,
+                'discord_id'    => $claim ? $claim->discord_id : $discordId,
+                'current_count' => $currentCount,
+                'is_eligible'   => $isEligible,
             ]);
         }
 
         return response()->json([
             'success' => true,
             'data' => [
-                'user_credits' => (float) $user->credits,
-                'discord_id' => $user->discord_id,
+                'user_credits'     => (float) $user->credits,
+                'discord_id'       => $discordId,
                 'discord_username' => $user->discord_username,
-                'tasks' => $formattedTasks,
+                'stats'            => $stats,
+                'tasks'            => $formattedTasks,
             ],
         ]);
     }
@@ -159,6 +168,22 @@ class EarnBoltsController extends ApiController
         }
 
         $task = $this->tasks[$taskKey];
+        $stats = $this->getUserDiscordStats($discordId);
+        $currentCount = $this->getTaskCurrentCount($task['category'], $stats);
+
+        // REQUIREMENT CHECK: verify the user has actually reached the target count in Discord!
+        if ($currentCount < $task['target_count']) {
+            $unit = $task['category'];
+            return response()->json([
+                'success' => false,
+                'message' => "Requirement not met: You have {$currentCount} of {$task['target_count']} required {$unit}. Keep participating in Discord to unlock this reward!",
+                'data' => [
+                    'current_count' => $currentCount,
+                    'target_count' => $task['target_count'],
+                ],
+            ], 400);
+        }
+
         $rewardBolts = (float) $task['reward_bolts'];
 
         if (!$user->discord_id) {
@@ -186,12 +211,51 @@ class EarnBoltsController extends ApiController
 
         return response()->json([
             'success' => true,
-            'message' => "Congratulations! Successfully claimed " . number_format($rewardBolts, 2) . " BOLTs for {$task['title']}!",
+            'message' => "Congratulations! Successfully verified and claimed " . number_format($rewardBolts, 2) . " BOLTs for {$task['title']}!",
             'data' => [
                 'task_key' => $taskKey,
                 'reward_bolts' => $rewardBolts,
                 'new_balance' => (float) $user->credits,
             ],
         ]);
+    }
+
+    /**
+     * Helper to retrieve live Discord stats from MySQL tracking tables.
+     */
+    protected function getUserDiscordStats(?string $discordId): array
+    {
+        if (empty($discordId)) {
+            return ['messages' => 0, 'boosts' => 0, 'invites' => 0];
+        }
+
+        $stats = \Illuminate\Support\Facades\DB::table('discord_stats')
+            ->where('discord_id', $discordId)
+            ->first();
+
+        $validInvites = \Illuminate\Support\Facades\DB::table('discord_invited_users')
+            ->where('inviter_discord_id', $discordId)
+            ->where('status', 'joined')
+            ->where('is_fake', false)
+            ->count();
+
+        return [
+            'messages' => (int) ($stats?->messages ?? 0),
+            'boosts'   => (int) ($stats?->boosts ?? 0),
+            'invites'  => $validInvites,
+        ];
+    }
+
+    /**
+     * Helper to get current count based on task category.
+     */
+    protected function getTaskCurrentCount(string $category, array $stats): int
+    {
+        return match ($category) {
+            'invites'  => $stats['invites'] ?? 0,
+            'boosts'   => $stats['boosts'] ?? 0,
+            'messages' => $stats['messages'] ?? 0,
+            default    => 0,
+        };
     }
 }

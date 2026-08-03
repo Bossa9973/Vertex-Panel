@@ -42,7 +42,7 @@ const DeleteNodeCard = () => {
                     />
 
                     <p className='description-small my-3'>
-                        The node will be permanently deleted from Convoy. This
+                        The node will be permanently deleted from Vertex. This
                         action is irreversible and can not be undone.
                     </p>
 

@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import { useStoreState, useStoreActions } from '@/state'
 import PageContentBlock from '@/components/elements/PageContentBlock'
 import http from '@/api/http'
-import ActiveServicesTable from '@/components/dashboard/ActiveServicesTable'
+import ActiveServicesTable, { ServerItem } from '@/components/dashboard/ActiveServicesTable'
 import VpsDeployModal from '@/components/dashboard/VpsDeployModal'
 import PromoBannersRow from '@/components/dashboard/PromoBannersRow'
-import QuickServicesGrid, { ServerItem } from '@/components/dashboard/QuickServicesGrid'
+import QuickServicesGrid from '@/components/dashboard/QuickServicesGrid'
+import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
 
 const LOCATION_FLAGS: Record<string, string> = {
     'New York, USA': 'https://flagcdn.com/us.svg',
@@ -104,6 +105,9 @@ export const DashboardContainer: React.FC = () => {
                     const isExpired = diffDays <= 0
 
                     const ip = extractIpAddress(srv, idx)
+                    const cpuCores = srv.limits?.cpu ? Math.max(1, Math.round(srv.limits.cpu / 100)) : 1
+                    const ramMb = srv.limits?.memory || 1024
+                    const boltsPrice = cpuCores >= 4 || ramMb >= 8192 ? 30.0 : (cpuCores >= 2 || ramMb >= 4096 ? 15.0 : 5.0)
 
                     return {
                         id: String(srv.id || srv.uuid),
@@ -114,7 +118,7 @@ export const DashboardContainer: React.FC = () => {
                         flag,
                         ip,
                         cpu_usage: cpuUsage,
-                        price: srv.limits?.cpu ? (srv.limits.cpu >= 100 ? (srv.limits.cpu / 100) * 5.0 : 5.0) : 5.0,
+                        price: boltsPrice,
                         due_date: expiresAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
                         days_left: Math.max(0, diffDays),
                         status: isExpired ? 'Expired' : serverStatus,
@@ -164,38 +168,38 @@ export const DashboardContainer: React.FC = () => {
     }
 
     return (
-        <PageContentBlock title='Dashboard'>
-            <div className='flex flex-wrap items-center justify-between gap-4 mb-6'>
-                <div className='flex items-center space-x-2 text-xs font-semibold text-stone-400 font-sans'>
-                    <Link to='/' className='hover:text-stone-200 transition-colors'>
-                        Dashboard
-                    </Link>
-                    <span>&gt;</span>
-                    <span className='text-stone-100 font-bold'>Overview</span>
+        <PageMaintenanceGuard pageKey='dashboard'>
+        <PageContentBlock title='Dashboard' showFlashKey='dashboard'>
+            <div className='flex items-center justify-between font-sans mb-6'>
+                <div>
+                    <h2 className='text-2xl font-bold text-white tracking-tight'>
+                        Cloud Instances & VPS
+                    </h2>
+                    <p className='text-xs text-gray-400 mt-1'>
+                        Manage, monitor, deploy, and scale your active cloud virtual servers.
+                    </p>
                 </div>
+
                 <button
                     onClick={() => setDeployModalOpen(true)}
-                    className='flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 transition-all duration-200 cursor-pointer active:scale-95'
+                    className='px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/30 border border-blue-400/30 transition cursor-pointer flex items-center gap-1.5 shrink-0'
                 >
                     <span className='text-base font-normal line-none'>+</span> Deploy VPS
                 </button>
             </div>
 
-            <PromoBannersRow onDeployClick={() => setDeployModalOpen(true)} />
+            <PromoBannersRow />
 
             <ActiveServicesTable
                 servers={servers}
                 loading={loading}
-                userCredits={userCredits}
                 renewingId={renewingId}
                 onRenew={handleRenew}
-                onDeployClick={() => setDeployModalOpen(true)}
+                onDeploy={() => setDeployModalOpen(true)}
             />
 
             <QuickServicesGrid
-                servers={servers}
-                loading={loading}
-                onDeployClick={() => setDeployModalOpen(true)}
+                onDeploy={() => setDeployModalOpen(true)}
             />
 
             <VpsDeployModal
@@ -206,6 +210,7 @@ export const DashboardContainer: React.FC = () => {
                 }}
             />
         </PageContentBlock>
+        </PageMaintenanceGuard>
     )
 }
 

@@ -6,6 +6,7 @@ use Convoy\Http\Middleware\Client\Server\AuthenticateServerAccess;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/servers', [Client\IndexController::class, 'index']);
+Route::get('/announcement-status', [Client\IndexController::class, 'announcementStatus']);
 
 Route::prefix('/credits')->group(function () {
     Route::get('/', [Client\CreditsController::class, 'index']);
@@ -22,6 +23,7 @@ Route::prefix('/account')->group(function () {
     Route::get('/', [Client\AccountController::class, 'index']);
     Route::post('/profile', [Client\AccountController::class, 'updateProfile']);
     Route::post('/unlink', [Client\AccountController::class, 'unlinkProvider']);
+    Route::post('/redeem', [Client\AccountController::class, 'redeemPromoCode']);
 });
 
 Route::get('/plans', [Client\ServerDeployController::class, 'getOptions']);
@@ -40,6 +42,12 @@ Route::prefix('/servers/{server}')->middleware(
 
     Route::post(
         '/create-console-session', [Client\Servers\ServerController::class, 'createConsoleSession'],
+    );
+    Route::post(
+        '/create-sshx-session', [Client\Servers\ServerController::class, 'createSshxSession'],
+    );
+    Route::post(
+        '/sshx-webhook', [Client\Servers\ServerController::class, 'sshxWebhook'],
     );
 
     Route::prefix('/backups')->group(function () {

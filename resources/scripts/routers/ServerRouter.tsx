@@ -16,6 +16,7 @@ import { EloquentStatus } from '@/api/server/types'
 import ScreenBlock, { ErrorMessage } from '@/components/elements/ScreenBlock'
 import Spinner from '@/components/elements/Spinner'
 import { NavigationBarContext } from '@/components/elements/navigation/NavigationBar'
+import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
 
 
 export const routes: Route[] = [
@@ -252,7 +253,11 @@ const ServerRouter = () => {
                 <>
                     {getScreenBlock(server.status)}
 
-                    {typeof server.status !== 'string' ? <Outlet /> : null}
+                    {typeof server.status !== 'string' ? (
+                        <PageMaintenanceGuard pageKey='servers'>
+                            <Outlet />
+                        </PageMaintenanceGuard>
+                    ) : null}
                 </>
             )}
         </>

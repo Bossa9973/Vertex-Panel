@@ -1,4 +1,4 @@
-﻿import { useFlashKey } from '@/util/useFlash'
+import { useFlashKey } from '@/util/useFlash'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
@@ -22,7 +22,7 @@ const RegisterContainer = () => {
     const location = useLocation()
 
     useEffect(() => {
-        document.title = 'Create Account | Convoy'
+        document.title = 'Create Account | Vertex'
     }, [])
 
     const schema = z.object({
@@ -61,7 +61,7 @@ const RegisterContainer = () => {
     return (
         <LoginFormContainer
             title='Create Your Account'
-            description='Register for the Convoy Client Area and claim $10.00 in welcome credits.'
+            description='Register for the Vertex Client Area and claim $10.00 in welcome credits.'
             submitting={methods.formState.isSubmitting}
         >
             {/* Welcome Bonus Banner */}

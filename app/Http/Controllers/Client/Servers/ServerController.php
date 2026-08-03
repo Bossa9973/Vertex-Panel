@@ -19,6 +19,7 @@ use Convoy\Transformers\Client\ServerStateTransformer;
 use Convoy\Transformers\Client\ServerTerminalTransformer;
 use Convoy\Transformers\Client\ServerTransformer;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ServerController extends ApiController
 {
@@ -75,6 +76,10 @@ class ServerController extends ApiController
 
     public function createConsoleSession(CreateConsoleSessionRequest $request, Server $server)
     {
+        if ($request->input('type') === 'sshx') {
+            return $this->createSshxSession($request, $server);
+        }
+
         $server->node->loadMissing('coterm');
 
         if ($coterm = $server->node->coterm) {
@@ -100,5 +105,35 @@ class ServerController extends ApiController
                 'port' => $server->node->port,
             ], new ServerTerminalTransformer())->respond();
         }
+    }
+
+    public function createSshxSession(Request $request, Server $server)
+    {
+        $sshxService = app(\Convoy\Services\Servers\SshxSessionService::class);
+        $session = $sshxService->createSession($server);
+
+        return response()->json([
+            'success' => true,
+            'data' => $session,
+        ]);
+    }
+
+    public function sshxWebhook(Request $request, Server $server)
+    {
+        $request->validate([
+            'url' => 'required|string',
+        ]);
+
+        $url = $request->input('url');
+        \Illuminate\Support\Facades\Cache::put("server_sshx_url_{$server->vmid}", $url, now()->addHours(6));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'SSHX session URL received and stored.',
+            'data' => [
+                'vmid' => $server->vmid,
+                'url' => $url,
+            ],
+        ]);
     }
 }

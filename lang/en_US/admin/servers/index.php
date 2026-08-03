@@ -28,7 +28,7 @@ return [
     ],
     'delete_server' => [
         'title' => 'Delete Server',
-        'description' => 'The server will be deleted from Convoy. Backups and other associated data will be destroyed. However, you can tick the checkbox below to keep the virtual machine and data on the Proxmox node.',
+        'description' => 'The server will be deleted from Vertex. Backups and other associated data will be destroyed. However, you can tick the checkbox below to keep the virtual machine and data on the Proxmox node.',
         'dont_purge' => 'Do not purge VM and related files',
     ],
     'no_servers_found_one' => 'No servers found',

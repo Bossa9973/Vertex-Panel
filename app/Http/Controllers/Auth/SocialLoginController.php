@@ -15,6 +15,17 @@ use Illuminate\Support\Str;
 class SocialLoginController extends Controller
 {
     /**
+     * Return a pre-configured HTTP client.
+     * Disables SSL verification in local/development environments where
+     * the system CA bundle may be incomplete (e.g. Windows + WSL).
+     */
+    private function httpClient(): \Illuminate\Http\Client\PendingRequest
+    {
+        $verify = app()->environment('production');
+        return Http::withOptions(['verify' => $verify]);
+    }
+
+    /**
      * Redirect the user to the provider authentication page.
      */
     public function redirect(Request $request, string $provider)
@@ -24,45 +35,54 @@ class SocialLoginController extends Controller
         }
 
         $mode = $request->query('mode', 'login');
+
+        // If the user is already authenticated, they want to link a new provider — not log in
+        if (Auth::check()) {
+            $mode = 'link';
+        }
+
         session(['social_auth_mode' => $mode]);
 
         $baseUrl = config('app.url', 'http://localhost:8888');
 
         if ($provider === 'google') {
-            $clientId = config('services.google.client_id', env('GOOGLE_CLIENT_ID'));
+            $clientId    = config('services.google.client_id', env('GOOGLE_CLIENT_ID'));
             $redirectUri = config('services.google.redirect', env('GOOGLE_REDIRECT_URI', "{$baseUrl}/auth/social/google/callback"));
 
             if (empty($clientId)) {
-                return redirect('/auth/login')->with('error', 'Google Client ID is not configured in .env file.');
+                return $mode === 'link'
+                    ? redirect('/account?error=' . urlencode('Google Client ID is not configured in .env file.'))
+                    : redirect('/auth/login')->with('error', 'Google Client ID is not configured in .env file.');
             }
 
             $query = http_build_query([
-                'client_id' => $clientId,
-                'redirect_uri' => $redirectUri,
+                'client_id'     => $clientId,
+                'redirect_uri'  => $redirectUri,
                 'response_type' => 'code',
-                'scope' => 'openid email profile',
-                'access_type' => 'online',
-                'prompt' => 'select_account',
+                'scope'         => 'openid email profile',
+                'access_type'   => 'online',
+                'prompt'        => 'select_account',
             ]);
 
             return redirect("https://accounts.google.com/o/oauth2/v2/auth?{$query}");
         }
 
         if ($provider === 'discord') {
-            $clientId = config('services.discord.client_id', env('DISCORD_CLIENT_ID'));
+            $clientId    = config('services.discord.client_id', env('DISCORD_CLIENT_ID'));
             $redirectUri = config('services.discord.redirect', env('DISCORD_REDIRECT_URI', "{$baseUrl}/auth/social/discord/callback"));
 
             if (empty($clientId)) {
-                $target = Auth::check() ? '/earn?error=Discord+Client+ID+is+missing+in+.env+file' : '/auth/login?error=Discord+Client+ID+is+missing+in+.env+file';
-                return redirect($target);
+                return $mode === 'link'
+                    ? redirect('/account?error=' . urlencode('Discord Client ID is not configured in .env file.'))
+                    : redirect('/auth/login?error=' . urlencode('Discord Client ID is not configured in .env file.'));
             }
 
             $query = http_build_query([
-                'client_id' => $clientId,
-                'redirect_uri' => $redirectUri,
+                'client_id'     => $clientId,
+                'redirect_uri'  => $redirectUri,
                 'response_type' => 'code',
-                'scope' => 'identify email',
-                'prompt' => 'consent',
+                'scope'         => 'identify email',
+                'prompt'        => 'consent',
             ]);
 
             return redirect("https://discord.com/api/oauth2/authorize?{$query}");
@@ -76,87 +96,103 @@ class SocialLoginController extends Controller
      */
     public function callback(Request $request, string $provider)
     {
-        $code = $request->query('code');
-        $mode = session('social_auth_mode', 'login');
+        $code    = $request->query('code');
+        $mode    = session('social_auth_mode', 'login');
         $baseUrl = config('app.url', 'http://localhost:8888');
 
         if (empty($code)) {
             $error = $request->query('error_description', $request->query('error', 'Authentication cancelled.'));
+
+            if ($mode === 'link') {
+                return redirect('/account?error=' . urlencode($error));
+            }
+
             return redirect("/auth/{$mode}?error=" . urlencode($error));
         }
 
         try {
             $socialUser = null;
 
+            // ─── Fetch Google Profile ──────────────────────────────────────
             if ($provider === 'google') {
-                $clientId = env('GOOGLE_CLIENT_ID');
+                $clientId     = env('GOOGLE_CLIENT_ID');
                 $clientSecret = env('GOOGLE_CLIENT_SECRET');
-                $redirectUri = env('GOOGLE_REDIRECT_URI', "{$baseUrl}/auth/social/google/callback");
+                $redirectUri  = env('GOOGLE_REDIRECT_URI', "{$baseUrl}/auth/social/google/callback");
 
-                // Exchange authorization code for access token
-                $tokenResponse = Http::post('https://oauth2.googleapis.com/token', [
-                    'client_id' => $clientId,
+                $tokenResponse = $this->httpClient()->post('https://oauth2.googleapis.com/token', [
+                    'client_id'     => $clientId,
                     'client_secret' => $clientSecret,
-                    'code' => $code,
-                    'grant_type' => 'authorization_code',
-                    'redirect_uri' => $redirectUri,
+                    'code'          => $code,
+                    'grant_type'    => 'authorization_code',
+                    'redirect_uri'  => $redirectUri,
                 ]);
 
                 if (!$tokenResponse->successful()) {
-                    return redirect("/auth/{$mode}?error=" . urlencode('Failed to fetch Google OAuth access token.'));
+                    $errMsg = 'Failed to fetch Google OAuth access token.';
+                    return $mode === 'link'
+                        ? redirect('/account?error=' . urlencode($errMsg))
+                        : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
                 }
 
-                $accessToken = $tokenResponse->json('access_token');
-
-                // Fetch Google User Profile
-                $userResponse = Http::withToken($accessToken)->get('https://www.googleapis.com/oauth2/v3/userinfo');
+                $accessToken  = $tokenResponse->json('access_token');
+                $userResponse = $this->httpClient()->withToken($accessToken)->get('https://www.googleapis.com/oauth2/v3/userinfo');
 
                 if (!$userResponse->successful()) {
-                    return redirect("/auth/{$mode}?error=" . urlencode('Failed to fetch Google user profile.'));
+                    $errMsg = 'Failed to fetch Google user profile.';
+                    return $mode === 'link'
+                        ? redirect('/account?error=' . urlencode($errMsg))
+                        : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
                 }
 
                 $googleData = $userResponse->json();
                 $socialUser = [
-                    'email' => strtolower($googleData['email'] ?? ''),
-                    'name' => $googleData['name'] ?? $googleData['email'],
-                    'google_id' => (string) ($googleData['sub'] ?? ''),
+                    'email'        => strtolower($googleData['email'] ?? ''),
+                    'name'         => $googleData['name'] ?? $googleData['email'],
+                    'google_id'    => (string) ($googleData['sub'] ?? ''),
                     'google_email' => strtolower($googleData['email'] ?? ''),
                 ];
             }
 
+            // ─── Fetch Discord Profile ─────────────────────────────────────
             if ($provider === 'discord') {
-                $clientId = env('DISCORD_CLIENT_ID');
+                $clientId     = env('DISCORD_CLIENT_ID');
                 $clientSecret = env('DISCORD_CLIENT_SECRET');
-                $redirectUri = env('DISCORD_REDIRECT_URI', "{$baseUrl}/auth/social/discord/callback");
+                $redirectUri  = env('DISCORD_REDIRECT_URI', "{$baseUrl}/auth/social/discord/callback");
 
-                // Exchange authorization code for access token
-                $tokenResponse = Http::asForm()->post('https://discord.com/api/oauth2/token', [
-                    'client_id' => $clientId,
+                $tokenResponse = $this->httpClient()->asForm()->post('https://discord.com/api/oauth2/token', [
+                    'client_id'     => $clientId,
                     'client_secret' => $clientSecret,
-                    'grant_type' => 'authorization_code',
-                    'code' => $code,
-                    'redirect_uri' => $redirectUri,
+                    'grant_type'    => 'authorization_code',
+                    'code'          => $code,
+                    'redirect_uri'  => $redirectUri,
                 ]);
 
                 if (!$tokenResponse->successful()) {
-                    return redirect("/auth/{$mode}?error=" . urlencode('Failed to fetch Discord OAuth token.'));
+                    $errMsg = 'Failed to fetch Discord OAuth token.';
+                    return $mode === 'link'
+                        ? redirect('/account?error=' . urlencode($errMsg))
+                        : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
                 }
 
-                $accessToken = $tokenResponse->json('access_token');
-
-                // Fetch Discord User Profile
-                $userResponse = Http::withToken($accessToken)->get('https://discord.com/api/users/@me');
+                $accessToken  = $tokenResponse->json('access_token');
+                $userResponse = $this->httpClient()->withToken($accessToken)->get('https://discord.com/api/users/@me');
 
                 if (!$userResponse->successful()) {
-                    return redirect("/auth/{$mode}?error=" . urlencode('Failed to fetch Discord user profile.'));
+                    $errMsg = 'Failed to fetch Discord user profile.';
+                    return $mode === 'link'
+                        ? redirect('/account?error=' . urlencode($errMsg))
+                        : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
                 }
 
                 $discordData = $userResponse->json();
-                $email = strtolower($discordData['email'] ?? '');
-                $username = $discordData['global_name'] ?? $discordData['username'] ?? 'Discord User';
+                $email       = strtolower($discordData['email'] ?? '');
+                $username    = $discordData['global_name'] ?? $discordData['username'] ?? 'Discord User';
 
                 if (empty($email)) {
-                    return redirect("/auth/{$mode}?error=" . urlencode('Discord account email is unverified or missing.'));
+                    $errMsg = 'Discord account email is unverified or missing. Please enable email on your Discord account.';
+                    return $mode === 'link'
+                        ? redirect('/account?error=' . urlencode($errMsg))
+                        : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
                 }
 
                 $socialUser = [
@@ -168,8 +204,72 @@ class SocialLoginController extends Controller
             }
 
             if (!$socialUser || empty($socialUser['email'])) {
-                return redirect("/auth/{$mode}?error=" . urlencode('Could not retrieve user email from provider.'));
+                $errMsg = 'Could not retrieve user email from provider.';
+                return $mode === 'link'
+                    ? redirect('/account?error=' . urlencode($errMsg))
+                    : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
             }
+
+            // ═════════════════════════════════════════════════════════════════
+            // LINK MODE: Authenticated user linking a new provider to their account
+            // ═════════════════════════════════════════════════════════════════
+            if ($mode === 'link' && Auth::check()) {
+                /** @var User $currentUser */
+                $currentUser = Auth::user();
+
+                // Guard: refuse if the social provider's email already belongs to a different account
+                $emailConflict = User::where('email', $socialUser['email'])
+                    ->where('id', '!=', $currentUser->id)
+                    ->first();
+
+                if ($emailConflict) {
+                    $errMsg = "The {$provider} account email (" . $socialUser['email'] . ") is already registered to a different Vertex account. "
+                        . "Please use a different {$provider} account or log in to the account that owns that email address.";
+                    return redirect('/account?error=' . urlencode($errMsg));
+                }
+
+                // Link Google
+                if ($provider === 'google' && !empty($socialUser['google_id'])) {
+                    $googleConflict = User::where('google_id', $socialUser['google_id'])
+                        ->where('id', '!=', $currentUser->id)
+                        ->first();
+
+                    if ($googleConflict) {
+                        $errMsg = 'This Google account is already linked to another Vertex account. Unlink it there first.';
+                        return redirect('/account?error=' . urlencode($errMsg));
+                    }
+
+                    $currentUser->google_id    = $socialUser['google_id'];
+                    $currentUser->google_email = $socialUser['google_email'];
+                    $currentUser->save();
+
+                    return redirect('/account?success=' . urlencode('Google account successfully linked to your profile!'));
+                }
+
+                // Link Discord
+                if ($provider === 'discord' && !empty($socialUser['discord_id'])) {
+                    $discordConflict = User::where('discord_id', $socialUser['discord_id'])
+                        ->where('id', '!=', $currentUser->id)
+                        ->first();
+
+                    if ($discordConflict) {
+                        $errMsg = 'This Discord account is already linked to another Vertex account. Unlink it there first.';
+                        return redirect('/account?error=' . urlencode($errMsg));
+                    }
+
+                    $currentUser->discord_id       = $socialUser['discord_id'];
+                    $currentUser->discord_username = $socialUser['discord_username'];
+                    $currentUser->save();
+
+                    return redirect('/account?success=' . urlencode('Discord account successfully linked to your profile!'));
+                }
+
+                return redirect('/account?error=' . urlencode('Unable to link provider: no ID returned from ' . $provider . '.'));
+            }
+
+            // ═════════════════════════════════════════════════════════════════
+            // LOGIN / REGISTER MODE: Guest authenticating via social provider
+            // ═════════════════════════════════════════════════════════════════
 
             /** @var User $user */
             $user = User::where('email', $socialUser['email'])->first();
@@ -196,7 +296,7 @@ class SocialLoginController extends Controller
                 ]);
             }
 
-            // Update social link fields for whichever provider was authenticated
+            // Persist social provider IDs on the user record
             if ($provider === 'discord' && !empty($socialUser['discord_id'])) {
                 $user->discord_id       = $socialUser['discord_id'];
                 $user->discord_username = $socialUser['discord_username'];
@@ -212,13 +312,18 @@ class SocialLoginController extends Controller
             Auth::login($user);
             $request->session()->regenerate();
 
-            if ($provider === 'discord') {
-                return redirect('/earn');
+            return redirect('/');
+
+        } catch (\Throwable $e) {
+            $errMsg = config('app.debug')
+                ? $e->getMessage()
+                : 'An unexpected error occurred during authentication. Please try again.';
+
+            if ($mode === 'link') {
+                return redirect('/account?error=' . urlencode($errMsg));
             }
 
-            return redirect('/');
-        } catch (\Throwable $e) {
-            return redirect("/auth/{$mode}?error=" . urlencode($e->getMessage()));
+            return redirect("/auth/{$mode}?error=" . urlencode($errMsg));
         }
     }
 }

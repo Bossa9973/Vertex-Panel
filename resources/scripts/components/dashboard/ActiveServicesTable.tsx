@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Cpu, RotateCw, Plus, Copy, Check, Layers, Eye, EyeOff, Calendar } from 'lucide-react'
 import BorderBeam from '@/components/ui/BorderBeam'
+import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 
 export interface ServerItem {
     id: string
@@ -243,8 +244,11 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                             </td>
 
                                             {/* Price */}
-                                            <td className='py-4 px-3.5 align-middle font-mono text-xs text-slate-300 font-medium tracking-tight'>
-                                                ${(srv.price ?? 0).toFixed(2)} / Hours
+                                            <td className='py-4 px-3.5 align-middle font-mono text-xs font-semibold tracking-tight'>
+                                                <div className='inline-flex items-center gap-1.5 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg shadow-xs'>
+                                                    <BoltSvgIcon className='w-3.5 h-3.5 text-amber-400 shrink-0' />
+                                                    <span>{(srv.price ?? 5.00).toFixed(2)} BOLTs / 30d</span>
+                                                </div>
                                             </td>
 
                                             {/* Due Date */}

@@ -6,6 +6,7 @@ import {
     ServerStackIcon,
     SignalIcon,
     UsersIcon,
+    WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import { Badge, Skeleton } from '@mantine/core'
 import { ComponentType } from 'react'
@@ -19,6 +20,8 @@ import {
 
 import MessageBox from '@/components/elements/MessageBox'
 import PageContentBlock from '@/components/elements/PageContentBlock'
+import AdminAnnouncementToggle from '@/components/admin/overview/AdminAnnouncementToggle'
+import AdminTerminalToggle from '@/components/admin/overview/AdminTerminalToggle'
 
 interface IconProps {
     className?: string
@@ -219,6 +222,34 @@ const OverviewContainer = () => {
                                 : 'default'
                         }
                     />
+
+                    <AdminAnnouncementToggle />
+                    <AdminTerminalToggle />
+
+                    <div className='col-span-12 bg-neutral-900/70 border border-white/10 rounded-2xl p-6 shadow-xl shadow-blue-950/20 backdrop-blur-xl hover:border-white/20 transition-all font-sans'>
+                        <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-4'>
+                            <div className='flex items-start gap-4'>
+                                <div className='w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner'>
+                                    <WrenchScrewdriverIcon className='w-6 h-6' />
+                                </div>
+                                <div>
+                                    <h3 className='text-lg font-bold text-white tracking-tight'>
+                                        Page Maintenance Control Center
+                                    </h3>
+                                    <p className='text-xs text-gray-400 mt-1 max-w-xl leading-relaxed'>
+                                        Toggle maintenance mode for individual pages (Dashboard, Servers, Earn, Billing, Account, Store, Support) or enable global site maintenance.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <Link
+                                to='/admin/maintenance'
+                                className='px-5 py-2.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 transition cursor-pointer flex items-center gap-2 shrink-0 backdrop-blur-md'
+                            >
+                                Manage Page Maintenance &rarr;
+                            </Link>
+                        </div>
+                    </div>
 
                     <div className='col-span-12 lg:col-span-7 bg-neutral-900/70 border border-white/10 rounded-2xl p-6 shadow-xl shadow-blue-950/20 backdrop-blur-xl hover:border-white/20 transition-all'>
                         <div className='flex items-center justify-between gap-3 border-b border-gray-800 pb-4'>

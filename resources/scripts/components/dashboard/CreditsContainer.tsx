@@ -17,6 +17,8 @@ import { Modal, LoadingOverlay } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import BorderBeam from '@/components/ui/BorderBeam'
+import { GlassWalletCard } from '@/components/dashboard/GlassWalletCard'
+import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
 
 const formatTxDescription = (desc: string) => {
     if (!desc) return { title: 'Transaction Statement', detail: 'Account balance update' }
@@ -151,52 +153,22 @@ const CreditsContainer = () => {
     }
 
     return (
+        <PageMaintenanceGuard pageKey='billing'>
         <PageContentBlock title='Billing & BOLTs' showFlashKey='credits'>
-            <div className='grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 font-sans'>
-                {/* Credit Balance Card with BorderBeam */}
-                <div className='md:col-span-2 relative overflow-hidden bg-white/80 dark:bg-neutral-900/70 border border-slate-200/80 dark:border-white/10 rounded-2xl p-6 shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-blue-950/20 backdrop-blur-xl flex flex-col justify-between group hover:border-slate-300 dark:hover:border-white/20 transition-all'>
-                    <BorderBeam size={250} duration={12} delay={0} colorFrom='#f59e0b' colorTo='#3b82f6' borderWidth={1.5} />
-
-                    <div className='relative z-10'>
-                        {/* Header Row: Label on Left, Account Active Pill on Right */}
-                        <div className='flex items-center justify-between gap-4 mb-3'>
-                            <span className='text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-sans'>
-                                <BoltSvgIcon className='w-4 h-4 text-amber-400' /> Available BOLT Balance
-                            </span>
-                            <span className='text-xs text-emerald-500 dark:text-emerald-400 font-sans font-semibold flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-full shrink-0 shadow-xs'>
-                                <ShieldCheckIcon className='w-3.5 h-3.5' /> Account Active
-                            </span>
-                        </div>
-
-                        {/* Large Clean Balance Readout */}
-                        <div className='flex items-baseline gap-2.5 my-2'>
-                            <span className='text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight font-mono'>
-                                {(user?.credits ?? 0).toFixed(2)}
-                            </span>
-                            <span className='text-xl font-bold text-amber-400 font-sans tracking-tight'>
-                                BOLTs
-                            </span>
-                        </div>
-
-                        <p className='text-xs text-slate-400 mt-2 leading-relaxed max-w-lg font-sans'>
-                            Use account BOLTs to provision new VPS instances and automatically handle recurring service billing.
-                        </p>
-                    </div>
-
-                    <div className='relative z-10 mt-6 pt-4 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-4'>
-                        <div className='flex items-center gap-4 text-xs text-slate-400 font-sans'>
-                            <div>
-                                <span className='font-semibold text-slate-200'>Instant Methods: </span>
-                                Credit/Debit Card, PayPal, Crypto (USDT)
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => setOpened(true)}
-                            className='flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/25 transition-all cursor-pointer active:scale-95'
-                        >
-                            <PlusIcon className='w-4 h-4' /> Top Up BOLTs
-                        </button>
-                    </div>
+            <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 font-sans items-stretch'>
+                {/* Glass Wallet Balance Card */}
+                <div className='lg:col-span-2 flex flex-col justify-center'>
+                    <GlassWalletCard
+                        balance={(user?.credits ?? 0).toFixed(2)}
+                        currency='BOLTs'
+                        cardHolder={(user as any) ? `${(user as any).firstname || ''} ${(user as any).lastname || ''}`.trim() || (user as any).username || user?.email : 'Account Client'}
+                        cardNumber={`ACCT •••• •••• ${String((user as any)?.id || 1001).padStart(4, '0')}`}
+                        expiry='Automated'
+                        address={user?.email ? user.email.split('@')[0] : 'Active'}
+                        trend='Active'
+                        onTopUp={() => setOpened(true)}
+                        className='max-w-none w-full'
+                    />
                 </div>
 
                 {/* Quick Info Card */}
@@ -370,7 +342,7 @@ const CreditsContainer = () => {
                 centered
                 size='md'
                 styles={{
-                    content: { backgroundColor: '#121417', color: '#fff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px' },
+                    modal: { backgroundColor: '#121417', color: '#fff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px' },
                     header: { backgroundColor: '#121417', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.08)' },
                     close: { color: '#9ca3af', '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)', color: '#fff' } }
                 }}
@@ -457,6 +429,7 @@ const CreditsContainer = () => {
                 </div>
             </Modal>
         </PageContentBlock>
+        </PageMaintenanceGuard>
     )
 }
 

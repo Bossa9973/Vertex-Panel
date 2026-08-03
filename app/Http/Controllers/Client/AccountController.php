@@ -107,4 +107,78 @@ class AccountController extends ApiController
             ],
         ]);
     }
+
+    /**
+     * Redeem a promo code via the website.
+     * Requires the user to have a linked Discord account (codes are issued to Discord IDs).
+     */
+    public function redeemPromoCode(Request $request): JsonResponse
+    {
+        $request->validate([
+            'code' => 'required|string|max:32',
+        ]);
+
+        $user = $request->user();
+        $code = strtoupper(trim($request->input('code')));
+
+        // Must have Discord linked — promo codes are tied to Discord ID
+        if (empty($user->discord_id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You must link your Discord account before redeeming a promo code.',
+            ], 403);
+        }
+
+        $promo = \Illuminate\Support\Facades\DB::table('promo_codes')
+            ->where('code', $code)
+            ->first();
+
+        if (!$promo) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid code. Please check the code and try again.',
+            ], 404);
+        }
+
+        if ($promo->used) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This code has already been redeemed.',
+            ], 409);
+        }
+
+        if ($promo->discord_id !== $user->discord_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This code was not issued for your Discord account.',
+            ], 403);
+        }
+
+        // Credit the user and mark code used atomically
+        \Illuminate\Support\Facades\DB::transaction(function () use ($promo, $user, $code) {
+            $user->increment('credits', $promo->amount);
+
+            $user->creditTransactions()->create([
+                'amount'       => $promo->amount,
+                'type'         => 'bonus',
+                'description'  => 'Promo Code Redemption',
+                'reference_id' => $code,
+            ]);
+
+            \Illuminate\Support\Facades\DB::table('promo_codes')
+                ->where('code', $code)
+                ->update([
+                    'used'    => true,
+                    'user_id' => $user->id,
+                    'used_at' => now(),
+                ]);
+        });
+
+        return response()->json([
+            'success'     => true,
+            'message'     => "Code redeemed! {$promo->amount} credits have been added to your account.",
+            'amount'      => $promo->amount,
+            'new_balance' => round($user->fresh()->credits, 2),
+        ]);
+    }
 }

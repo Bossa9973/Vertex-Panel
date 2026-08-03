@@ -32,6 +32,9 @@ class RouteServiceProvider extends ServiceProvider
         $this->routes(function () {
             Route::middleware('web')->group(function () {
                 Route::get('/locales/locale.json', \Convoy\Http\Controllers\Base\LocaleController::class)->where('namespace', '.*');
+                Route::get('/api/announcement-status', [\Convoy\Http\Controllers\Client\IndexController::class, 'announcementStatus']);
+                Route::get('/api/terminal-mode', [\Convoy\Http\Controllers\Client\IndexController::class, 'terminalMode']);
+                Route::get('/api/maintenance-status', [\Convoy\Http\Controllers\Client\IndexController::class, 'maintenanceStatus']);
 
                 // Social Auth Routes (Accessible to all users for linking / OAuth login)
                 Route::get('/auth/login/{provider}', [\Convoy\Http\Controllers\Auth\SocialLoginController::class, 'redirect']);
@@ -54,6 +57,12 @@ class RouteServiceProvider extends ServiceProvider
                     ->as('admin.')
                     ->scopeBindings()
                     ->group(base_path('routes/api-admin.php'));
+
+                // Discord Bot API — secured by BotApiAuthenticate (shared secret)
+                Route::middleware([\Convoy\Http\Middleware\BotApiAuthenticate::class])
+                    ->prefix('/api/bot')
+                    ->as('bot.')
+                    ->group(base_path('routes/api-bot.php'));
             });
 
             Route::middleware(['api'])->group(function () {

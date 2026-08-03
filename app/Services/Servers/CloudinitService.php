@@ -146,4 +146,23 @@ class CloudinitService
 
         return $this->configRepository->setServer($server)->update(['ipconfig0' => $desired]);
     }
+
+    /**
+     * Generate cloud-init user-data Golden Template configuration.
+     */
+    public function generateCloudInitUserDataConfig(Server $server): string
+    {
+        return <<<YAML
+#cloud-config
+package_update: true
+packages:
+  - qemu-guest-agent
+  - curl
+  - tmate
+
+runcmd:
+  # 1. Enable QEMU Guest Agent daemon
+  - systemctl enable --now qemu-guest-agent
+YAML;
+    }
 }

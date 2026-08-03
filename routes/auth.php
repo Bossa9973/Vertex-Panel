@@ -19,6 +19,3 @@ Route::post('/login', [LoginController::class, 'login']);
 Route::post('/register', [RegisterController::class, 'register']);
 Route::post('/auth/register', [RegisterController::class, 'register']);
 
-// Real OAuth2 Social Authentication Routes (Google & Discord)
-Route::get('/auth/social/{provider}/redirect', [SocialLoginController::class, 'redirect']);
-Route::get('/auth/social/{provider}/callback', [SocialLoginController::class, 'callback']);

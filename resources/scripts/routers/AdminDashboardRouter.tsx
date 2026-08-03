@@ -89,6 +89,15 @@ export const routes: Route[] = [
                     )
                 ),
             },
+            {
+                path: 'maintenance',
+                element: lazyLoad(
+                    lazy(
+                        () =>
+                            import('@/components/admin/maintenance/AdminMaintenanceContainer')
+                    )
+                ),
+            },
         ],
     },
 ]
@@ -158,6 +167,10 @@ const AdminDashboardRouter = () => {
         {
             name: getLabel('token_other', 'API Tokens'),
             path: '/admin/tokens',
+        },
+        {
+            name: 'Maintenance',
+            path: '/admin/maintenance',
         },
     ]
 

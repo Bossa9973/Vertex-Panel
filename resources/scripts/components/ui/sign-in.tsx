@@ -132,7 +132,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
             </button>
 
             <p className="animate-element animate-delay-900 text-center text-xs text-stone-400 mt-2">
-              New to Convoy? <a href="#" onClick={(e) => { e.preventDefault(); onCreateAccount?.(); }} className="text-blue-400 font-semibold hover:underline transition-colors">Create Account</a>
+              New to Vertex? <a href="#" onClick={(e) => { e.preventDefault(); onCreateAccount?.(); }} className="text-blue-400 font-semibold hover:underline transition-colors">Create Account</a>
             </p>
           </div>
         </div>

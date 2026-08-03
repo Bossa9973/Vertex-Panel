@@ -6,4 +6,5 @@ enum ConsoleType: string
 {
     case NOVNC = 'novnc';
     case XTERMJS = 'xtermjs';
+    case SSHX = 'sshx';
 }

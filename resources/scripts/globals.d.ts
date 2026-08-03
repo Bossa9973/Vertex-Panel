@@ -9,3 +9,9 @@ declare module '@tanstack/table-core' {
         align?: Alignment
     }
 }
+
+declare module '*.png' {
+    const value: string
+    export default value
+}
+

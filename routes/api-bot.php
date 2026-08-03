@@ -1,0 +1,32 @@
+<?php
+
+use Convoy\Http\Controllers\Bot\BotApiController;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Discord Bot API Routes
+|--------------------------------------------------------------------------
+| All routes are protected by BotApiAuthenticate middleware.
+| The bot must send:  Authorization: Bot <BOT_API_SECRET>
+*/
+
+// Stats tracking (high-frequency, called on every Discord event)
+Route::post('/stats/message',  [BotApiController::class, 'trackMessage']);
+Route::post('/stats/boost',    [BotApiController::class, 'trackBoost']);
+Route::get('/stats/{discordId}', [BotApiController::class, 'getStats']);
+
+// Invite tracking
+Route::post('/invite/track',   [BotApiController::class, 'trackInvite']);
+Route::post('/invite/join',    [BotApiController::class, 'recordJoin']);
+Route::post('/invite/leave',   [BotApiController::class, 'recordLeave']);
+
+// Admin operations
+Route::post('/admin/add-messages',   [BotApiController::class, 'adminAddMessages']);
+Route::post('/admin/add-invites',    [BotApiController::class, 'adminAddInvites']);
+Route::post('/admin/generate-code',  [BotApiController::class, 'generatePromoCode']);
+Route::post('/admin/reset-user',     [BotApiController::class, 'adminResetUser']);
+Route::post('/admin/reset-all',      [BotApiController::class, 'adminResetAll']);
+
+// Promo code redemption
+Route::post('/promo/redeem',         [BotApiController::class, 'redeemPromoCode']);

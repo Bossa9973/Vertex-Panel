@@ -13,6 +13,12 @@ use Illuminate\Support\Facades\Route;
 |
 */
 Route::get('/overview', Admin\OverviewController::class);
+Route::get('/settings/announcement', [Admin\AdminSettingsController::class, 'getAnnouncementSetting']);
+Route::post('/settings/announcement', [Admin\AdminSettingsController::class, 'updateAnnouncementSetting']);
+Route::get('/settings/terminal', [Admin\AdminSettingsController::class, 'getTerminalSetting']);
+Route::post('/settings/terminal', [Admin\AdminSettingsController::class, 'updateTerminalSetting']);
+Route::get('/settings/maintenance', [Admin\AdminSettingsController::class, 'getMaintenanceSettings']);
+Route::post('/settings/maintenance', [Admin\AdminSettingsController::class, 'updateMaintenanceSettings']);
 
 /*
 |--------------------------------------------------------------------------

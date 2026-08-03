@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import DiscordSvgIcon from '@/components/elements/DiscordSvgIcon'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useStoreState, useStoreActions } from '@/state'
 import PageContentBlock from '@/components/elements/PageContentBlock'
+import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
 import http from '@/api/http'
 import { getInitials } from '@/util/helpers'
 import { Avatar } from '@mantine/core'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import { BorderBeam } from '@/components/ui/BorderBeam'
-import ConnectDiscordModal from '@/components/dashboard/ConnectDiscordModal'
 import {
     UserIcon,
     EnvelopeIcon,
@@ -18,6 +18,8 @@ import {
     ArrowPathIcon,
     CheckCircleIcon,
     LinkIcon,
+    GiftIcon,
+    TicketIcon,
 } from '@heroicons/react/24/outline'
 
 interface AccountDetails {
@@ -37,11 +39,19 @@ export const AccountContainer: React.FC = () => {
     const user = useStoreState(state => state.user.data)
     const isDark = useStoreState(state => state.settings.data?.theme !== 'light')
     const updateUserData = useStoreActions(actions => actions.user.setUserData)
+    const location = useLocation()
+    const navigate = useNavigate()
 
     const [account, setAccount] = useState<AccountDetails | null>(null)
     const [loading, setLoading] = useState(true)
     const [unlinking, setUnlinking] = useState<string | null>(null)
-    const [discordModalOpen, setDiscordModalOpen] = useState(false)
+    const [flashSuccess, setFlashSuccess] = useState<string | null>(null)
+    const [flashError, setFlashError] = useState<string | null>(null)
+
+    // Promo code redemption
+    const [promoCode, setPromoCode] = useState('')
+    const [promoRedeeming, setPromoRedeeming] = useState(false)
+    const [promoResult, setPromoResult] = useState<{ ok: boolean; message: string; amount?: number; balance?: number } | null>(null)
 
     // Form fields for updating name/email
     const [nameInput, setNameInput] = useState('')
@@ -68,6 +78,25 @@ export const AccountContainer: React.FC = () => {
     useEffect(() => {
         fetchAccountData()
     }, [])
+
+    // Read success/error flash messages injected by PHP OAuth callbacks
+    useEffect(() => {
+        const params = new URLSearchParams(location.search)
+        const success = params.get('success')
+        const error = params.get('error')
+        if (success) {
+            setFlashSuccess(success)
+            // Refresh account data so the newly linked provider shows immediately
+            fetchAccountData()
+        }
+        if (error) {
+            setFlashError(error)
+        }
+        if (success || error) {
+            // Remove query params from URL without adding a new history entry
+            navigate('/account', { replace: true })
+        }
+    }, [location.search])
 
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -124,8 +153,52 @@ export const AccountContainer: React.FC = () => {
 
     const primaryProvider = account?.primary_auth_provider || 'email'
 
+    const handleRedeemPromo = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!promoCode.trim() || promoRedeeming) return
+        setPromoRedeeming(true)
+        setPromoResult(null)
+        try {
+            const res = await http.post('/api/client/account/redeem', { code: promoCode.trim().toUpperCase() })
+            if (res.data?.success) {
+                setPromoResult({ ok: true, message: res.data.message, amount: res.data.amount, balance: res.data.new_balance })
+                setPromoCode('')
+                fetchAccountData() // refresh credit balance
+            } else {
+                setPromoResult({ ok: false, message: res.data?.message || 'Redemption failed.' })
+            }
+        } catch (err: any) {
+            const msg = err.response?.data?.message || 'Redemption failed. Please try again.'
+            setPromoResult({ ok: false, message: msg })
+        } finally {
+            setPromoRedeeming(false)
+        }
+    }
+
     return (
+        <PageMaintenanceGuard pageKey='account'>
         <PageContentBlock title='Account Management'>
+            {/* OAuth callback flash banners */}
+            {flashSuccess && (
+                <div
+                    className='flex items-start gap-3 mb-5 rounded-xl px-5 py-4 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-medium font-sans shadow'
+                    role='alert'
+                >
+                    <CheckCircleIcon className='w-5 h-5 flex-shrink-0 mt-0.5' />
+                    <span className='flex-1'>{flashSuccess}</span>
+                    <button onClick={() => setFlashSuccess(null)} className='ml-auto text-emerald-400 hover:text-emerald-200 text-xs opacity-70 hover:opacity-100'>✕</button>
+                </div>
+            )}
+            {flashError && (
+                <div
+                    className='flex items-start gap-3 mb-5 rounded-xl px-5 py-4 bg-red-500/15 border border-red-500/40 text-red-300 text-sm font-medium font-sans shadow'
+                    role='alert'
+                >
+                    <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 flex-shrink-0 mt-0.5' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='12'/><line x1='12' y1='16' x2='12' y2='16'/></svg>
+                    <span className='flex-1'>{flashError}</span>
+                    <button onClick={() => setFlashError(null)} className='ml-auto text-red-400 hover:text-red-200 text-xs opacity-70 hover:opacity-100'>✕</button>
+                </div>
+            )}
             {/* Breadcrumb Navigation */}
             <div className='flex items-center space-x-2 text-xs font-semibold text-stone-400 font-sans mb-6'>
                 <Link to='/' className='hover:text-stone-200 transition-colors'>
@@ -336,7 +409,7 @@ export const AccountContainer: React.FC = () => {
                                         </button>
                                     ) : (
                                         <a
-                                            href='/auth/login/google'
+                                            href='/auth/social/google/redirect'
                                             className='w-full py-2 rounded-xl font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95'
                                         >
                                             <LinkIcon className='w-3.5 h-3.5' /> Link Google Account
@@ -384,12 +457,12 @@ export const AccountContainer: React.FC = () => {
                                             {unlinking === 'discord' ? 'Unlinking...' : 'Unlink Discord Account'}
                                         </button>
                                     ) : (
-                                        <button
-                                            onClick={() => setDiscordModalOpen(true)}
+                                        <a
+                                            href='/auth/social/discord/redirect'
                                             className='w-full py-2 rounded-xl font-bold text-xs bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95'
                                         >
                                             <LinkIcon className='w-3.5 h-3.5' /> Link Discord Account
-                                        </button>
+                                        </a>
                                     )}
                                 </div>
                             </div>
@@ -397,18 +470,101 @@ export const AccountContainer: React.FC = () => {
                     </div>
                 </div>
             )}
+            {/* ── Promo Code Redemption ───────────────────────────────────── */}
+            {!loading && account && (
+                <div className={`relative overflow-hidden rounded-2xl border backdrop-blur-xl shadow-xl ${isDark ? 'bg-neutral-900/70 border-white/10' : 'bg-white/80 border-slate-200'}`}>
+                    <div className='p-6 md:p-8'>
+                        <div className='flex items-center gap-3 mb-6'>
+                            <div className='p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/25'>
+                                <GiftIcon className='w-5 h-5 text-amber-400' />
+                            </div>
+                            <div>
+                                <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Redeem Promo Code</h3>
+                                <p className='text-xs text-slate-400 mt-0.5'>Enter a code issued by an admin via Discord to add credits</p>
+                            </div>
+                        </div>
 
-            {/* Connect Discord Modal for linking from Account Page */}
-            <ConnectDiscordModal
-                opened={discordModalOpen}
-                onClose={() => setDiscordModalOpen(false)}
-                currentDiscordId={account?.discord_id || null}
-                onSuccess={(newId, newUsername) => {
-                    setDiscordModalOpen(false)
-                    fetchAccountData()
-                }}
-            />
+                        {!account.discord_id ? (
+                            /* ── No Discord linked ── */
+                            <div className={`rounded-xl p-5 border flex flex-col sm:flex-row items-start sm:items-center gap-4 ${isDark ? 'bg-neutral-950/60 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+                                <div className='flex items-center gap-3 flex-1'>
+                                    <div className='w-10 h-10 rounded-full bg-[#5865F2]/15 border border-[#5865F2]/30 flex items-center justify-center flex-shrink-0'>
+                                        <DiscordSvgIcon className='w-5 h-5 fill-[#5865F2]' />
+                                    </div>
+                                    <div>
+                                        <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Discord Required</p>
+                                        <p className='text-xs text-slate-400 mt-0.5'>Promo codes are tied to your Discord account. Link Discord to unlock redemption.</p>
+                                    </div>
+                                </div>
+                                <a
+                                    href='/auth/social/discord/redirect'
+                                    className='flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs bg-[#5865F2] hover:bg-[#4752C4] text-white transition active:scale-95'
+                                >
+                                    <LinkIcon className='w-3.5 h-3.5' /> Link Discord
+                                </a>
+                            </div>
+                        ) : (
+                            /* ── Discord linked — show redeem form ── */
+                            <div className='space-y-4'>
+                                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border ${isDark ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+                                    <CheckCircleIcon className='w-4 h-4 flex-shrink-0' />
+                                    <span>Linked as <strong>@{account.discord_username || account.discord_id}</strong> — eligible for code redemption</span>
+                                </div>
+
+                                <form onSubmit={handleRedeemPromo} className='flex gap-3'>
+                                    <div className='flex-1 relative'>
+                                        <TicketIcon className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-stone-500' : 'text-slate-400'}`} />
+                                        <input
+                                            type='text'
+                                            value={promoCode}
+                                            onChange={e => setPromoCode(e.target.value.toUpperCase())}
+                                            placeholder='LMN-XXXX-XXXX'
+                                            maxLength={16}
+                                            className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm font-mono font-bold tracking-widest transition outline-none focus:ring-2 focus:ring-amber-500/40 ${isDark ? 'bg-neutral-950/60 border-white/10 text-white placeholder-stone-600' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'}`}
+                                        />
+                                    </div>
+                                    <button
+                                        type='submit'
+                                        disabled={promoRedeeming || !promoCode.trim()}
+                                        className='flex-shrink-0 px-5 py-2.5 rounded-xl font-bold text-sm bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black transition active:scale-95 flex items-center gap-2'
+                                    >
+                                        {promoRedeeming ? (
+                                            <ArrowPathIcon className='w-4 h-4 animate-spin' />
+                                        ) : (
+                                            <GiftIcon className='w-4 h-4' />
+                                        )}
+                                        {promoRedeeming ? 'Redeeming...' : 'Redeem'}
+                                    </button>
+                                </form>
+
+                                {promoResult && (
+                                    <div className={`flex items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium border ${
+                                        promoResult.ok
+                                            ? isDark ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                            : isDark ? 'bg-red-500/10 border-red-500/25 text-red-300' : 'bg-red-50 border-red-200 text-red-800'
+                                    }`}>
+                                        {promoResult.ok ? (
+                                            <CheckCircleIcon className='w-4 h-4 flex-shrink-0 mt-0.5' />
+                                        ) : (
+                                            <svg xmlns='http://www.w3.org/2000/svg' className='w-4 h-4 flex-shrink-0 mt-0.5' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='12'/><line x1='12' y1='16' x2='12' y2='16.01'/></svg>
+                                        )}
+                                        <span className='flex-1'>
+                                            {promoResult.message}
+                                            {promoResult.ok && promoResult.amount && (
+                                                <> &mdash; <strong>+{promoResult.amount} credits</strong> · Balance: <strong>{promoResult.balance} credits</strong></>
+                                            )}
+                                        </span>
+                                        <button onClick={() => setPromoResult(null)} className='opacity-60 hover:opacity-100 text-xs ml-1'>✕</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
         </PageContentBlock>
+        </PageMaintenanceGuard>
     )
 }
 

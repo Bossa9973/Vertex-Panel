@@ -3,6 +3,7 @@ import { useFlashKey } from '@/util/useFlash'
 import { Loader } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import http from '@/api/http'
 
 import createConsoleSession, {
     ConsoleType,
@@ -34,6 +35,14 @@ const ServerTerminalContainer = () => {
 
         const main = async () => {
             try {
+                if (params.get('type') === 'sshx') {
+                    const res = await http.post(`/api/client/servers/${uuid}/create-sshx-session`)
+                    if (res.data?.data?.url) {
+                        window.location.href = res.data.data.url
+                        return
+                    }
+                }
+
                 const creds = await createConsoleSession(
                     uuid,
                     params.get('type')! as ConsoleType

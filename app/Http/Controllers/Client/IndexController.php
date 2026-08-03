@@ -39,4 +39,56 @@ class IndexController extends ApiController
 
         return fractal($servers, new ServerTransformer())->respond();
     }
+
+    public function announcementStatus()
+    {
+        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'announcement_row_enabled')->first();
+        $enabled = $setting ? ($setting->value === 'true' || $setting->value === '1') : true;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'enabled' => $enabled,
+            ],
+        ]);
+    }
+
+    public function terminalMode()
+    {
+        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'terminal_console_mode')->first();
+        $mode = $setting && in_array($setting->value, ['both', 'sshx']) ? $setting->value : 'both';
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'mode' => $mode,
+            ],
+        ]);
+    }
+
+    public function maintenanceStatus()
+    {
+        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'page_maintenance_settings')->first();
+        $defaults = [
+            'global' => false,
+            'dashboard' => false,
+            'servers' => false,
+            'earn' => false,
+            'billing' => false,
+            'account' => false,
+            'store' => false,
+            'tickets' => false,
+            'message' => 'This section is currently undergoing scheduled maintenance. Please check back shortly.',
+        ];
+
+        $data = $setting ? json_decode($setting->value, true) : $defaults;
+        if (!is_array($data)) {
+            $data = $defaults;
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => array_merge($defaults, $data),
+        ]);
+    }
 }

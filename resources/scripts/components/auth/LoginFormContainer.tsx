@@ -1,4 +1,4 @@
-﻿import { useStoreActions, useStoreState } from '@/state'
+import { useStoreActions, useStoreState } from '@/state'
 import { MoonIcon, SunIcon } from '@heroicons/react/20/solid'
 import { LoadingOverlay, Switch } from '@mantine/core'
 import { ReactNode, useEffect } from 'react'
@@ -37,7 +37,7 @@ const LoginFormContainer = ({
                 <div className='flex justify-center items-center gap-2.5 mb-6'>
                     <Logo className='w-9 h-9 text-accent-500' />
                     <span className='text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white'>
-                        Convoy
+                        Vertex
                     </span>
                 </div>
 
