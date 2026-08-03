@@ -35,7 +35,7 @@ const LoginFormContainer = ({
         <div className='min-h-screen flex flex-col sm:justify-center items-center py-10 px-4 bg-gray-100 dark:bg-[#0b0c0e] text-foreground transition-colors duration-200'>
             <div className='w-full sm:max-w-md'>
                 <div className='flex justify-center items-center gap-2.5 mb-6'>
-                    <Logo className='w-9 h-9 text-accent-500' />
+                    <Logo className='w-9 h-9 text-white' />
                     <span className='text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white'>
                         Vertex
                     </span>

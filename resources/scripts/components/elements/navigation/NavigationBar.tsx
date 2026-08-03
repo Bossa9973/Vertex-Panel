@@ -122,7 +122,7 @@ const NavigationBar = () => {
                             to={isAdminArea ? '/admin' : '/'}
                             className='flex items-center space-x-3 group'
                         >
-                            <Logo className={`w-6 h-6 group-hover:scale-105 transition-transform ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
+                            <Logo className='w-6 h-6 group-hover:scale-105 transition-transform text-white' />
                             <h1 className={`font-bold text-lg tracking-tight font-sans ${isDark ? 'text-white' : 'text-slate-900'}`}>
                                 Vertex
                             </h1>
@@ -166,7 +166,7 @@ const NavigationBar = () => {
                             transition: 'width 0.25s ease',
                         }}
                     >
-                        <Logo className='w-5 h-5 text-blue-400' />
+                        <Logo className='w-5 h-5 text-white' />
                     </div>
                     <div className='flex z-[2000] overflow-x-auto scrollbar-hide font-sans text-xs font-semibold'>
                         {routes.map(route => (
