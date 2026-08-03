@@ -713,7 +713,8 @@ case "${1:-}" in
     status)
         printf "\n  ${BOLD}Vertex Panel - Service Status${RESET}\n"
         printf "  ----------------------------------------\n"
-        for svc in nginx php8.2-fpm redis-server mysql supervisor; do
+        fpm_svc=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "php8.2-fpm")
+        for svc in nginx "$fpm_svc" redis-server mysql supervisor; do
             if systemctl is-active --quiet "$svc"; then
                 printf "  ${GREEN}[running]${RESET}  %s\n" "$svc"
             else
