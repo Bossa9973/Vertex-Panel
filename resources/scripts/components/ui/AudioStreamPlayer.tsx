@@ -7,87 +7,86 @@ import {
     ChevronDownIcon,
     ChevronUpIcon,
     SparklesIcon,
+    LinkIcon,
 } from '@heroicons/react/24/outline'
 
-const YOUTUBE_VIDEO_ID = 'D5GX7NQfNcI'
+// High-quality ambient soundtrack stream (Direct MP3 / Stream URL)
+const DEFAULT_AUDIO_URL = 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3'
 
 export const AudioStreamPlayer: React.FC = () => {
+    const [audioUrl, setAudioUrl] = useState<string>(() => {
+        return localStorage.getItem('vertex_radio_url') || DEFAULT_AUDIO_URL
+    })
     const [isPlaying, setIsPlaying] = useState<boolean>(false)
     const [isMuted, setIsMuted] = useState<boolean>(false)
     const [isExpanded, setIsExpanded] = useState<boolean>(false)
-    const [hasStarted, setHasStarted] = useState<boolean>(false)
-    const iframeRef = useRef<HTMLIFrameElement>(null)
+    const [customUrl, setCustomUrl] = useState<string>(audioUrl)
+    const [showUrlInput, setShowUrlInput] = useState<boolean>(false)
+    const audioRef = useRef<HTMLAudioElement>(null)
 
-    const sendCommand = (func: string, args: any[] = []) => {
-        if (iframeRef.current && iframeRef.current.contentWindow) {
-            iframeRef.current.contentWindow.postMessage(
-                JSON.stringify({ event: 'command', func, args }),
-                '*'
-            )
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = isMuted ? 0 : 0.85
         }
-    }
+    }, [isMuted])
 
-    const startAudio = () => {
-        setHasStarted(true)
-        setIsPlaying(true)
-        setIsMuted(false)
-        sendCommand('unMute')
-        sendCommand('setVolume', [100])
-        sendCommand('playVideo')
-    }
-
-    const togglePlay = () => {
-        if (!hasStarted) {
-            startAudio()
-            return
-        }
-        if (isPlaying) {
-            sendCommand('pauseVideo')
-            setIsPlaying(false)
-        } else {
-            sendCommand('playVideo')
-            setIsPlaying(true)
+    const togglePlay = async () => {
+        if (!audioRef.current) return
+        try {
+            if (isPlaying) {
+                audioRef.current.pause()
+                setIsPlaying(false)
+            } else {
+                await audioRef.current.play()
+                setIsPlaying(true)
+            }
+        } catch (err) {
+            console.error('Audio playback error:', err)
         }
     }
 
     const toggleMute = () => {
-        if (!hasStarted) {
-            startAudio()
-            return
-        }
-        if (isMuted) {
-            sendCommand('unMute')
-            setIsMuted(false)
-        } else {
-            sendCommand('mute')
-            setIsMuted(true)
-        }
+        if (!audioRef.current) return
+        const nextMute = !isMuted
+        setIsMuted(nextMute)
+        audioRef.current.muted = nextMute
     }
 
+    const applyCustomUrl = (newUrl: string) => {
+        setAudioUrl(newUrl)
+        localStorage.setItem('vertex_radio_url', newUrl)
+        setShowUrlInput(false)
+        setIsPlaying(false)
+        setTimeout(() => {
+            if (audioRef.current) {
+                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
+            }
+        }, 100)
+    }
+
+    // First user gesture handler to unblock browser autoplay
     useEffect(() => {
-        const handleUserClick = () => {
-            if (!hasStarted) {
-                startAudio()
+        const handleFirstInteraction = () => {
+            if (audioRef.current && !isPlaying) {
+                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
             }
         }
-        window.addEventListener('click', handleUserClick, { once: true })
-        return () => window.removeEventListener('click', handleUserClick)
-    }, [hasStarted])
+        window.addEventListener('click', handleFirstInteraction, { once: true })
+        return () => window.removeEventListener('click', handleFirstInteraction)
+    }, [isPlaying])
 
     return (
         <div className='fixed bottom-5 right-5 z-50 font-sans select-none print:hidden'>
-            {/* Active Off-screen YouTube Player (Opacity 0 to prevent Chrome/Edge DOM suspension) */}
-            <div className='opacity-0 pointer-events-none absolute -bottom-96 -right-96 w-12 h-12 overflow-hidden'>
-                <iframe
-                    ref={iframeRef}
-                    id='vertex-radio-engine'
-                    width='200'
-                    height='200'
-                    src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?enablejsapi=1&autoplay=1&mute=0&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0`}
-                    title='Vertex Radio Engine'
-                    allow='autoplay; encrypted-media'
-                />
-            </div>
+            {/* HTML5 Native Audio Element — Direct Stream Engine */}
+            <audio
+                ref={audioRef}
+                src={audioUrl}
+                loop
+                preload='auto'
+                crossOrigin='anonymous'
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+            />
 
             {/* Floating Glassmorphism Player Widget */}
             <div className={`transition-all duration-300 rounded-2xl border shadow-2xl backdrop-blur-xl ${
@@ -103,10 +102,10 @@ export const AudioStreamPlayer: React.FC = () => {
                                 </span>
                                 <div>
                                     <h6 className='text-xs font-extrabold text-white tracking-wide uppercase flex items-center gap-1.5'>
-                                        Vertex Radio <span className='px-1.5 py-0.2 rounded text-[9px] bg-red-500/20 text-red-400 border border-red-500/30 font-mono'>LIVE</span>
+                                        Vertex Radio <span className='px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono'>DIRECT STREAM</span>
                                     </h6>
                                     <p className='text-[11px] text-gray-400 font-medium truncate max-w-[170px]'>
-                                        Dashboard Soundtrack
+                                        Dashboard Sound System
                                     </p>
                                 </div>
                             </div>
@@ -129,13 +128,48 @@ export const AudioStreamPlayer: React.FC = () => {
                             </div>
                             <div className='grow overflow-hidden'>
                                 <p className='text-xs font-bold text-blue-300 truncate'>
-                                    Ambient Stream
+                                    Ambient Lofi Soundtrack
                                 </p>
                                 <p className='text-[10px] text-gray-400 truncate'>
-                                    {isPlaying ? (isMuted ? 'Muted' : 'Streaming Dashboard Audio...') : (hasStarted ? 'Paused' : 'Click Play to Start Audio')}
+                                    {isPlaying ? (isMuted ? 'Muted' : 'Playing Live Audio...') : 'Click Play to Stream Audio'}
                                 </p>
                             </div>
                         </div>
+
+                        {/* Stream Source URL Input Modal/Bar */}
+                        {showUrlInput ? (
+                            <div className='space-y-2 p-2.5 bg-neutral-900 border border-white/10 rounded-xl text-xs'>
+                                <span className='text-[11px] font-bold text-gray-300 block'>Custom Audio / MP3 Stream URL:</span>
+                                <input
+                                    type='text'
+                                    value={customUrl}
+                                    onChange={(e) => setCustomUrl(e.target.value)}
+                                    placeholder='https://example.com/sound.mp3 or /soundtrack.mp3'
+                                    className='w-full text-xs font-mono bg-neutral-950 border border-white/10 rounded px-2 py-1.5 text-blue-300 focus:outline-none'
+                                />
+                                <div className='flex gap-2 pt-1'>
+                                    <button
+                                        onClick={() => applyCustomUrl(customUrl)}
+                                        className='grow py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer'
+                                    >
+                                        Set Stream URL
+                                    </button>
+                                    <button
+                                        onClick={() => setShowUrlInput(false)}
+                                        className='px-2.5 py-1 rounded bg-neutral-800 text-gray-400 hover:text-white text-xs cursor-pointer'
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setShowUrlInput(true)}
+                                className='w-full py-1.5 text-[11px] font-semibold text-gray-400 hover:text-blue-300 flex items-center justify-center gap-1.5 hover:bg-white/5 rounded-lg transition cursor-pointer'
+                            >
+                                <LinkIcon className='w-3.5 h-3.5' /> Change Audio Stream / MP3 URL
+                            </button>
+                        )}
 
                         {/* Playback Controls */}
                         <div className='flex items-center justify-between pt-1'>
