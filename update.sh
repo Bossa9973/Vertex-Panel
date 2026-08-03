@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+# =============================================================================
+#
+#  ##  ##  ####  #####  ####### ####  ##  ##
+#  ##  ##  ##    ##  ##    ##   ##    ##  ##
+#  ##  ##  ####  #####     ##   ####   ####
+#   ####   ##    ## ##     ##   ##     ####
+#    ##    ####  ##  ##    ##   #####  ## ##
+#
+#  Vertex Panel -- Automated Updater v1.0
+#  GitHub: https://github.com/Bossa9973/Vertex-Panel
+#
+#  One-liner update command:
+#  curl -sSL https://raw.githubusercontent.com/Bossa9973/Vertex-Panel/main/update.sh | bash
+#
+# =============================================================================
+
+set -euo pipefail
+
+# --- Constants ----------------------------------------------------------------
+GITHUB_REPO="Bossa9973/Vertex-Panel"
+GITHUB_BRANCH="main"
+DEFAULT_INSTALL_DIR="/var/www/vertex-panel"
+SERVICE_USER="www-data"
+
+# --- ANSI Colors --------------------------------------------------------------
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+SPINNER_PID=""
+
+# --- Spinner ------------------------------------------------------------------
+spinner_start() {
+    local msg="${1:-Working...}"
+    (
+        local frames=('-' '\\' '|' '/')
+        local i=0
+        while true; do
+            printf "\r  \033[0;36m${frames[$i]}\033[0m  \033[0;37m%s\033[0m   " "$msg"
+            i=$(( (i + 1) % 4 ))
+            sleep 0.12
+        done
+    ) &
+    SPINNER_PID=$!
+    disown "$SPINNER_PID" 2>/dev/null || true
+}
+
+spinner_stop() {
+    if [[ -n "$SPINNER_PID" ]]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        SPINNER_PID=""
+        printf "\r\033[2K"
+    fi
+}
+
+# --- Output Helpers -----------------------------------------------------------
+print_banner() {
+    clear
+    printf "\n"
+    printf "${BLUE}${BOLD}"
+    printf "   ##  ##  ####  #####   #######  ####  ##  ##\n"
+    printf "   ##  ##  ##    ##  ##     ##    ##    ##  ##\n"
+    printf "   ##  ##  ####  #####      ##    ####   ####\n"
+    printf "    ####   ##    ## ##      ##    ##     ####\n"
+    printf "     ##    ####  ##  ##     ##    #####  ## ##\n"
+    printf "${RESET}\n"
+    printf "   ${DIM}Panel Updater  |  Powered by Laravel & Proxmox${RESET}\n"
+    printf "\n"
+    printf "   ${DIM}------------------------------------------------------------${RESET}\n"
+    printf "\n"
+}
+
+info()    { printf "   ${CYAN}*${RESET}  ${WHITE}%s${RESET}\n" "$1"; }
+success() { printf "   ${GREEN}ok${RESET} ${GREEN}%s${RESET}\n" "$1"; }
+warn()    { printf "   ${YELLOW}!!${RESET} ${YELLOW}%s${RESET}\n" "$1"; }
+error_msg() { printf "   ${RED}xx${RESET} ${RED}${BOLD}%s${RESET}\n" "$1"; }
+
+run_or_fail() {
+    local msg="$1"
+    shift
+    spinner_start "$msg"
+    if "$@" > /tmp/vertex_update.log 2>&1; then
+        spinner_stop
+        success "$msg"
+    else
+        spinner_stop
+        error_msg "Failed: $msg"
+        printf "   ${DIM}Details: /tmp/vertex_update.log${RESET}\n"
+        return 1
+    fi
+}
+
+# --- Pre-flight Checks --------------------------------------------------------
+preflight_checks() {
+    if [[ $EUID -ne 0 ]]; then
+        error_msg "Must be run as root. Try: sudo bash update.sh"
+        exit 1
+    fi
+
+    # Determine panel directory
+    if [[ -f "./artisan" && -f "./package.json" ]]; then
+        INSTALL_DIR="$(pwd)"
+    elif [[ -d "$DEFAULT_INSTALL_DIR" ]]; then
+        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+    else
+        error_msg "Vertex Panel directory not found. Expected: ${DEFAULT_INSTALL_DIR}"
+        exit 1
+    fi
+
+    info "Panel directory: ${BOLD}${INSTALL_DIR}${RESET}"
+
+    if ! curl -s --connect-timeout 5 https://github.com > /dev/null 2>&1; then
+        error_msg "No internet access. Cannot reach GitHub."
+        exit 1
+    fi
+}
+
+# --- Perform Update -----------------------------------------------------------
+perform_update() {
+    cd "$INSTALL_DIR"
+
+    # Get current version before update
+    OLD_VER=$(grep -oP '(?<="version": ")[^"]+' package.json 2>/dev/null | head -1 || echo "1.0.0")
+
+    # Maintenance mode
+    spinner_start "Enabling maintenance mode"
+    php artisan down --no-interaction > /dev/null 2>&1 || true
+    spinner_stop
+    success "Panel put into maintenance mode"
+
+    # Download latest ZIP release from GitHub
+    local tmp_zip="/tmp/vertex-panel-update.zip"
+    local tmp_dir="/tmp/vertex-panel-update-src"
+
+    spinner_start "Downloading latest release from GitHub (${GITHUB_REPO})"
+    if curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$tmp_zip" 2>/tmp/vertex_update.log; then
+        spinner_stop
+        local size
+        size=$(du -sh "$tmp_zip" | cut -f1)
+        success "Downloaded update archive (${size})"
+    else
+        spinner_stop
+        error_msg "Download failed. Check internet connection."
+        php artisan up --no-interaction 2>/dev/null || true
+        exit 1
+    fi
+
+    # Extract update
+    run_or_fail "Extracting update archive" unzip -q -o "$tmp_zip" -d "$tmp_dir"
+
+    local src_dir
+    src_dir=$(find "$tmp_dir" -maxdepth 1 -type d -not -path "$tmp_dir" | head -1)
+
+    # Sync files safely (preserving .env, storage, and user files)
+    spinner_start "Syncing panel files"
+    if rsync -a --delete \
+        --exclude='.env' \
+        --exclude='storage/' \
+        --exclude='public/storage' \
+        --exclude='.git/' \
+        "${src_dir}/" "${INSTALL_DIR}/" > /tmp/vertex_update.log 2>&1; then
+        spinner_stop
+        success "Panel files updated"
+    else
+        spinner_stop
+        error_msg "Failed to sync files."
+        php artisan up --no-interaction 2>/dev/null || true
+        exit 1
+    fi
+
+    # Clean up downloaded zip
+    run_quietly rm -rf "$tmp_zip" "$tmp_dir"
+
+    # Composer dependencies
+    run_or_fail "Updating PHP dependencies (Composer)" \
+        composer install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
+
+    # Node dependencies and build
+    run_or_fail "Installing Node.js dependencies" \
+        npm install --prefix "${INSTALL_DIR}" --silent
+
+    run_or_fail "Building frontend assets (Vite)" \
+        npm run build --prefix "${INSTALL_DIR}"
+
+    # Database migrations
+    run_or_fail "Running database migrations" \
+        php artisan migrate --force --no-interaction
+
+    # Optimize and clear caches
+    run_or_fail "Clearing and rebuilding application cache" \
+        php artisan optimize:clear
+
+    run_or_fail "Optimizing route and config cache" \
+        php artisan optimize
+
+    run_quietly php artisan view:clear 2>/dev/null || true
+
+    # File permissions
+    spinner_start "Updating file permissions"
+    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}" > /dev/null 2>&1
+    chmod -R 755 "${INSTALL_DIR}/storage" > /dev/null 2>&1
+    chmod -R 755 "${INSTALL_DIR}/bootstrap/cache" > /dev/null 2>&1
+    spinner_stop
+    success "File permissions updated"
+
+    # Restart background services
+    spinner_start "Restarting background services & workers"
+    local fpm_svc
+    fpm_svc=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
+    if [[ -n "$fpm_svc" ]]; then
+        run_quietly systemctl restart "$fpm_svc" 2>/dev/null || true
+    fi
+    run_quietly systemctl restart nginx 2>/dev/null || true
+    run_quietly systemctl restart supervisor 2>/dev/null || true
+    run_quietly supervisorctl restart all 2>/dev/null || true
+    spinner_stop
+    success "Services and queue/horizon workers restarted"
+
+    # Disable maintenance mode
+    spinner_start "Bringing panel back online"
+    php artisan up --no-interaction > /dev/null 2>&1 || true
+    spinner_stop
+    success "Panel is back online"
+
+    NEW_VER=$(grep -oP '(?<="version": ")[^"]+' package.json 2>/dev/null | head -1 || echo "1.0.0")
+}
+
+# --- Completion Summary -------------------------------------------------------
+print_summary() {
+    printf "\n"
+    printf "   ${DIM}------------------------------------------------------------${RESET}\n"
+    printf "\n"
+    printf "   ${GREEN}${BOLD}Update Complete!${RESET}\n"
+    printf "\n"
+    printf "   ${BOLD}Previous Version:${RESET} ${DIM}%s${RESET}\n" "${OLD_VER:-1.0.0}"
+    printf "   ${BOLD}Current Version:${RESET}  ${GREEN}${BOLD}%s${RESET}\n" "${NEW_VER:-1.0.0}"
+    printf "   ${BOLD}Panel Dir:${RESET}        ${DIM}%s${RESET}\n" "$INSTALL_DIR"
+    printf "\n"
+    printf "   ${BOLD}Worker Status:${RESET}\n"
+    supervisorctl status 2>/dev/null | sed 's/^/   /' || printf "   Supervisor workers restarted\n"
+    printf "\n"
+    printf "   ${DIM}------------------------------------------------------------${RESET}\n"
+    printf "\n"
+}
+
+# --- Main ---------------------------------------------------------------------
+trap 'spinner_stop; printf "\n   ${RED}Update interrupted. See /tmp/vertex_update.log${RESET}\n"; exit 1' ERR INT TERM
+
+print_banner
+preflight_checks
+perform_update
+print_summary
