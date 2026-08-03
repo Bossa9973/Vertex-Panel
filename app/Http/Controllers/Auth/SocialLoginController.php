@@ -7,7 +7,7 @@ use Convoy\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -27,17 +27,29 @@ class SocialLoginController extends Controller
 
     /**
      * Dynamically resolve the OAuth redirect URI for a provider.
+     *
+     * Always returns the canonical /auth/social/{provider}/callback path so that
+     * both the /auth/login/{provider} entry-point and the
+     * /auth/social/{provider}/redirect entry-point produce the same redirect URI.
+     * Discord (and Google) reject the token exchange when the redirect_uri sent
+     * during authorisation differs from the one sent when exchanging the code.
      */
     private function getRedirectUri(Request $request, string $provider): string
     {
         $custom = config("services.{$provider}.redirect") ?: env(strtoupper($provider) . '_REDIRECT_URI');
 
-        // Use custom URI if specified AND it does not point to localhost / 127.0.0.1
+        // Use custom URI only when it is an absolute, non-localhost URL.
         if (!empty($custom) && !str_contains($custom, 'localhost') && !str_contains($custom, '127.0.0.1')) {
+            // Normalise to the canonical path regardless of what the custom URI says,
+            // so both entry-points always agree on the callback URL.
+            $base = rtrim(preg_replace('#/auth/.*$#', '', $custom), '/');
+            if (!empty($base)) {
+                return "{$base}/auth/social/{$provider}/callback";
+            }
             return $custom;
         }
 
-        // Determine base URL dynamically from config('app.url') or current request
+        // Determine base URL dynamically from config('app.url') or the current request.
         $appUrl = config('app.url');
         if (!empty($appUrl) && !str_contains($appUrl, 'localhost') && !str_contains($appUrl, '127.0.0.1')) {
             $baseUrl = rtrim($appUrl, '/');
@@ -148,7 +160,15 @@ class SocialLoginController extends Controller
                 ]);
 
                 if (!$tokenResponse->successful()) {
-                    $errMsg = 'Failed to fetch Google OAuth access token.';
+                    $rawError = $tokenResponse->json('error_description')
+                        ?? $tokenResponse->json('error')
+                        ?? $tokenResponse->body();
+                    $errMsg = 'Failed to fetch Google OAuth access token: ' . $rawError;
+                    Log::error('Google OAuth token exchange failed', [
+                        'status'   => $tokenResponse->status(),
+                        'body'     => $tokenResponse->body(),
+                        'redirect' => $redirectUri,
+                    ]);
                     return $mode === 'link'
                         ? redirect('/account?error=' . urlencode($errMsg))
                         : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
@@ -158,7 +178,11 @@ class SocialLoginController extends Controller
                 $userResponse = $this->httpClient()->withToken($accessToken)->get('https://www.googleapis.com/oauth2/v3/userinfo');
 
                 if (!$userResponse->successful()) {
-                    $errMsg = 'Failed to fetch Google user profile.';
+                    $errMsg = 'Failed to fetch Google user profile: ' . $userResponse->body();
+                    Log::error('Google OAuth userinfo fetch failed', [
+                        'status' => $userResponse->status(),
+                        'body'   => $userResponse->body(),
+                    ]);
                     return $mode === 'link'
                         ? redirect('/account?error=' . urlencode($errMsg))
                         : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
@@ -188,7 +212,15 @@ class SocialLoginController extends Controller
                 ]);
 
                 if (!$tokenResponse->successful()) {
-                    $errMsg = 'Failed to fetch Discord OAuth token.';
+                    $rawError = $tokenResponse->json('error_description')
+                        ?? $tokenResponse->json('error')
+                        ?? $tokenResponse->body();
+                    $errMsg = 'Failed to fetch Discord OAuth token: ' . $rawError;
+                    Log::error('Discord OAuth token exchange failed', [
+                        'status'   => $tokenResponse->status(),
+                        'body'     => $tokenResponse->body(),
+                        'redirect' => $redirectUri,
+                    ]);
                     return $mode === 'link'
                         ? redirect('/account?error=' . urlencode($errMsg))
                         : redirect("/auth/{$mode}?error=" . urlencode($errMsg));
@@ -335,6 +367,13 @@ class SocialLoginController extends Controller
             return redirect('/');
 
         } catch (\Throwable $e) {
+            Log::error('Social auth callback exception', [
+                'provider' => $provider ?? 'unknown',
+                'mode'     => $mode,
+                'message'  => $e->getMessage(),
+                'trace'    => $e->getTraceAsString(),
+            ]);
+
             $errMsg = config('app.debug')
                 ? $e->getMessage()
                 : 'An unexpected error occurred during authentication. Please try again.';
