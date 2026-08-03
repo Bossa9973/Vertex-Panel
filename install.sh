@@ -266,34 +266,37 @@ install_dependencies() {
     # Try installing software-properties-common quietly (available on Ubuntu, omitted on Debian)
     run_quietly apt-get install -y software-properties-common 2>/dev/null || true
 
-    # PHP 8.2 repository setup
+    # PHP installation
     if ! command -v php &>/dev/null; then
-        if [[ "${OS_NAME}" == "debian" ]]; then
-            local codename
-            codename=$(lsb_release -sc 2>/dev/null || echo "bookworm")
-            case "$codename" in
-                trixie|testing|sid) codename="bookworm" ;;
-            esac
-            spinner_start "Adding Surý PHP repository for Debian"
-            curl -sSLo /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg > /dev/null 2>&1 || true
-            echo "deb https://packages.sury.org/php/ ${codename} main" > /etc/apt/sources.list.d/php.list
+        spinner_start "Installing PHP & extensions"
+        if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl > /tmp/vertex_install.log 2>&1; then
             spinner_stop
-            success "Surý PHP repository added for Debian (${codename})"
+            success "PHP & extensions installed"
+        elif apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp php8.2-redis php8.2-intl > /tmp/vertex_install.log 2>&1; then
+            spinner_stop
+            success "PHP 8.2 & extensions installed"
         else
-            run_quietly add-apt-repository -y ppa:ondrej/php 2>/dev/null || true
-        fi
-        run_or_fail "Updating package lists (PHP repo)" apt-get update -y
+            # Fallback: add external PHP repository if system repo lacks PHP packages
+            if [[ "${OS_NAME}" == "ubuntu" ]]; then
+                run_quietly add-apt-repository -y ppa:ondrej/php 2>/dev/null || true
+                run_quietly apt-get update -y
+            elif [[ "${OS_NAME}" == "debian" ]]; then
+                curl -sSLo /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg > /dev/null 2>&1 || true
+                echo "deb https://packages.sury.org/php/ $(lsb_release -sc 2>/dev/null || echo bookworm) main" > /etc/apt/sources.list.d/php.list
+                run_quietly apt-get update -y
+            fi
 
-        if apt-cache show php8.2-cli > /dev/null 2>&1; then
-            run_or_fail "Installing PHP 8.2 + extensions" \
-                apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml \
-                    php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp \
-                    php8.2-redis php8.2-intl
-        else
-            run_or_fail "Installing PHP + extensions" \
-                apt-get install -y php-cli php-fpm php-mysql php-xml \
-                    php-curl php-mbstring php-zip php-bcmath php-gmp \
-                    php-redis php-intl
+            if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl > /tmp/vertex_install.log 2>&1; then
+                spinner_stop
+                success "PHP & extensions installed"
+            elif apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp php8.2-redis php8.2-intl > /tmp/vertex_install.log 2>&1; then
+                spinner_stop
+                success "PHP 8.2 & extensions installed"
+            else
+                spinner_stop
+                error_msg "Failed to install PHP. Check /tmp/vertex_install.log"
+                return 1
+            fi
         fi
     else
         success "PHP $(php -r 'echo PHP_VERSION;') already installed"
@@ -673,7 +676,9 @@ case "${1:-}" in
     start)
         check_root "$1"
         printf "${GREEN}Starting Vertex Panel services...${RESET}\n"
-        systemctl start nginx php8.2-fpm redis-server mysql supervisor
+        systemctl start nginx redis-server supervisor 2>/dev/null || true
+        systemctl start mysql 2>/dev/null || systemctl start mariadb 2>/dev/null || true
+        systemctl start php8.2-fpm 2>/dev/null || systemctl start php-fpm 2>/dev/null || systemctl start php*-fpm 2>/dev/null || true
         supervisorctl start all 2>/dev/null || true
         printf "${GREEN}All services started.${RESET}\n"
         ;;
@@ -687,7 +692,9 @@ case "${1:-}" in
     restart)
         check_root "$1"
         printf "${CYAN}Restarting services...${RESET}\n"
-        systemctl restart nginx php8.2-fpm redis-server supervisor
+        systemctl restart nginx redis-server supervisor 2>/dev/null || true
+        systemctl restart mysql 2>/dev/null || systemctl restart mariadb 2>/dev/null || true
+        systemctl restart php8.2-fpm 2>/dev/null || systemctl restart php-fpm 2>/dev/null || systemctl restart php*-fpm 2>/dev/null || true
         supervisorctl restart all 2>/dev/null || true
         printf "${GREEN}All services restarted.${RESET}\n"
         ;;
@@ -772,9 +779,23 @@ start_services() {
     printf "   ${DIM}------------------------------------------------------------${RESET}\n"
 
     run_or_fail "Ensuring Nginx is running" systemctl restart nginx
-    run_or_fail "Ensuring PHP-FPM is running" systemctl restart php8.2-fpm
+
+    local fpm_svc
+    fpm_svc=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
+    if [[ -n "$fpm_svc" ]]; then
+        run_or_fail "Ensuring PHP-FPM is running (${fpm_svc})" systemctl restart "$fpm_svc"
+    else
+        run_quietly systemctl restart php8.2-fpm 2>/dev/null || run_quietly systemctl restart php-fpm 2>/dev/null || true
+    fi
+
     run_or_fail "Ensuring Redis is running" systemctl restart redis-server
-    run_or_fail "Ensuring MySQL is running" systemctl restart mysql
+
+    if systemctl is-active --quiet mariadb 2>/dev/null || systemctl is-enabled --quiet mariadb 2>/dev/null; then
+        run_or_fail "Ensuring Database (MariaDB) is running" systemctl restart mariadb
+    else
+        run_or_fail "Ensuring Database (MySQL) is running" systemctl restart mysql
+    fi
+
     run_or_fail "Ensuring Supervisor is running" systemctl restart supervisor
 
     # Wait briefly for supervisor programs to spin up
