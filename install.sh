@@ -877,10 +877,13 @@ print_completion() {
         printf "\n"
     fi
 
+    printf "   ${BOLD}Create an admin account:${RESET}\n"
+    printf "     ${CYAN}${BOLD}vertex artisan c:user:make${RESET}\n"
+    printf "\n"
     local domain
     domain=$(printf "%s" "$APP_URL" | sed 's|https\?://||' | sed 's|/.*||')
     printf "   ${DIM}Next: Point DNS A record for %s -> %s${RESET}\n" "$domain" "${SERVER_IP:-<server-ip>}"
-    printf "   ${DIM}Then visit your URL to complete admin account setup.${RESET}\n"
+    printf "   ${DIM}Then visit your URL and sign in with your admin credentials.${RESET}\n"
     printf "\n"
     printf "   ${DIM}------------------------------------------------------------${RESET}\n"
     printf "\n"
