@@ -223,7 +223,7 @@ export const AccountContainer: React.FC = () => {
                     <div className={`relative overflow-hidden rounded-2xl p-6 md:p-8 border backdrop-blur-xl transition-all shadow-xl ${isDark ? 'bg-neutral-900/70 border-white/10' : 'bg-white/80 border-slate-200 shadow-slate-200/50'}`}>
                         <BorderBeam size={260} duration={14} delay={0} colorFrom='#3b82f6' colorTo='#f59e0b' borderWidth={1.5} />
 
-                        <div className='relative z-10 flex flex-col md:flex-row items-center md:items-start justify-between gap-6'>
+                        <div className='relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6'>
                             <div className='flex flex-col md:flex-row items-center gap-5 text-center md:text-left'>
                                 <Avatar color='blue' size='xl' radius='xl' className='font-bold shadow-lg ring-2 ring-blue-500/40 text-xl'>
                                     {getInitials(account.name, ' ', 2)}
@@ -243,16 +243,18 @@ export const AccountContainer: React.FC = () => {
                                     <p className='text-xs text-slate-400 mt-1 font-mono'>
                                         Member since {account.created_at ? new Date(account.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Recently Joined'}
                                     </p>
-                                    {(account.rootAdmin || user?.rootAdmin) && (
-                                        <div className='mt-3'>
-                                            <AwardBadge titleText='Certified Vertex Staff Member' subTitleText='VERTEX CLOUD' />
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
+                            {/* Middle Award Badge for Admin Accounts */}
+                            {(account.rootAdmin || user?.rootAdmin) && (
+                                <div className='flex items-center justify-center my-2 lg:my-0 shrink-0'>
+                                    <AwardBadge titleText='Certified Vertex Staff Member' subTitleText='VERTEX CLOUD' />
+                                </div>
+                            )}
+
                             {/* Credit Readout Badge */}
-                            <div className={`rounded-xl p-4 border flex flex-col items-center md:items-end justify-center ${isDark ? 'bg-neutral-950/60 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className={`rounded-xl p-4 border flex flex-col items-center md:items-end justify-center shrink-0 ${isDark ? 'bg-neutral-950/60 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
                                 <span className='text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1'>
                                     <BoltSvgIcon className='w-3.5 h-3.5 text-amber-400' /> Account Balance
                                 </span>

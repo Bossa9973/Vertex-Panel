@@ -8,7 +8,6 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import Menu from '@/components/elements/Menu'
 import ThemeSwitch from '@/components/elements/ThemeSwitch'
-import { AwardBadge } from '@/components/ui/award-badge'
 
 interface Props {
     logout: () => void
@@ -67,11 +66,6 @@ const UserDropdown = ({ logout }: Props) => {
                         <p className='text-[11px] text-gray-400 truncate font-sans'>
                             {user.email}
                         </p>
-                        {user.rootAdmin && (
-                            <div className='mt-2 flex justify-center scale-90 origin-left'>
-                                <AwardBadge titleText='Certified Vertex Staff Member' subTitleText='VERTEX CLOUD' />
-                            </div>
-                        )}
                     </div>
 
                     <Menu.Item
