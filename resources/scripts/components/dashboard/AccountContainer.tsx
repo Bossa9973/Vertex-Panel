@@ -22,6 +22,8 @@ import {
     TicketIcon,
 } from '@heroicons/react/24/outline'
 
+import { AwardBadge } from '@/components/ui/award-badge'
+
 interface AccountDetails {
     name: string
     email: string
@@ -241,6 +243,11 @@ export const AccountContainer: React.FC = () => {
                                     <p className='text-xs text-slate-400 mt-1 font-mono'>
                                         Member since {account.created_at ? new Date(account.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Recently Joined'}
                                     </p>
+                                    {(account.rootAdmin || user?.rootAdmin) && (
+                                        <div className='mt-3'>
+                                            <AwardBadge titleText='Certified Vertex Staff Member' subTitleText='VERTEX CLOUD' />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

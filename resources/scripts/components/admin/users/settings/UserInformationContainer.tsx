@@ -10,7 +10,7 @@ import FlashMessageRender from '@/components/elements/FlashMessageRenderer'
 import FormCard from '@/components/elements/FormCard'
 import CheckboxFormik from '@/components/elements/formik/CheckboxFormik'
 import TextInputFormik from '@/components/elements/formik/TextInputFormik'
-
+import { AwardBadge } from '@/components/ui/award-badge'
 
 const UserInformationContainer = () => {
     const { data: user, mutate } = useUserSWR()
@@ -79,6 +79,12 @@ const UserInformationContainer = () => {
                                 label={'Administrator'}
                                 className={'mt-3'}
                             />
+                            {form.values.rootAdmin && (
+                                <div className='mt-4 p-3 bg-neutral-950/80 border border-amber-500/20 rounded-xl space-y-2'>
+                                    <span className='text-xs font-bold text-amber-400 block'>Vertex Staff Designation</span>
+                                    <AwardBadge titleText='Certified Vertex Staff Member' subTitleText='VERTEX CLOUD' />
+                                </div>
+                            )}
                         </div>
                     </FormCard.Body>
                     <FormCard.Footer>
