@@ -1,6 +1,6 @@
 services:
   workspace:
-    image: performave/convoy-workspace:latest
+    image: vertexcloud/convoy-workspace:latest
     tty: true
     volumes:
       - .:/var/www/

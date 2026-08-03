@@ -31,7 +31,7 @@
     @vite('resources/scripts/main.tsx')
 
     <!-- Analytics -->
-    <script defer data-domain="hosted.convoypanel.com" src="https://beacon.performave.com/js/script.local.js"></script>
+    <!-- Vertex Cloud Analytics -->
     <script>
         window.plausible = window.plausible || function() {
             (window.plausible.q = window.plausible.q || []).push(arguments)

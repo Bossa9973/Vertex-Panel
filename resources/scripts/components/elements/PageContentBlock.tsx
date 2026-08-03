@@ -51,10 +51,10 @@ const PageContentBlock = ({
                             &copy; 2020 - {new Date().getFullYear()}{' '}
                             <a
                                 className='dark:hover:text-stone-400 hover:text-black'
-                                href='https://performave.com'
+                                href='https://vertexnodes.net'
                                 target='_blank'
                             >
-                                Performave
+                                Vertex Cloud
                             </a>
                         </p>
 

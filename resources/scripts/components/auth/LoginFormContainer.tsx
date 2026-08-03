@@ -64,8 +64,8 @@ const LoginFormContainer = ({
                 <div className='flex justify-between items-center px-2 py-4 w-full text-xs text-gray-500 dark:text-gray-400'>
                     <p>
                         &copy; 2020 - {new Date().getFullYear()}{' '}
-                        <a href='https://performave.com' target='_blank' rel='noreferrer' className='hover:text-accent-500 transition font-medium'>
-                            Performave
+                        <a href='https://vertexnodes.net' target='_blank' rel='noreferrer' className='hover:text-accent-500 transition font-medium'>
+                            Vertex Cloud
                         </a>
                     </p>
                     <div className='flex items-center gap-2'>
