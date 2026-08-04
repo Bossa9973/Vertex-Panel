@@ -14,7 +14,7 @@ interface SparklesProps {
     opacity?: number
     opacitySpeed?: number
     minOpacity?: number | null
-    color?: string
+    color?: string | string[]
     background?: string
     direction?: string
     options?: Record<string, any>
@@ -31,7 +31,7 @@ function SparklesInnerComponent({
     opacity = 1,
     opacitySpeed = 3,
     minOpacity = null,
-    color = "#FFFFFF",
+    color = "#22c55e",
     background = "transparent",
     direction = "none",
     options = {},
@@ -76,6 +76,11 @@ function SparklesInnerComponent({
                     min: minSize ?? size / 2.5,
                     max: size,
                 },
+            },
+            shadow: {
+                enable: true,
+                color: typeof color === 'string' ? color : '#22c55e',
+                blur: 5,
             },
         },
         detectRetina: true,
