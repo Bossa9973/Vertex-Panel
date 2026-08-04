@@ -69,9 +69,15 @@ const ServerTerminalBlock = () => {
             const res = await http.post(`/api/client/servers/${uuid}/create-sshx-session`)
             if (res.data?.data) {
                 const data = res.data.data
+                if (data.restricted) {
+                    setSshCmd(null)
+                    return
+                }
                 const cmd = data.ssh_cmd || data.url
-                setSshCmd(cmd)
-                setModalOpened(true)
+                if (cmd) {
+                    setSshCmd(cmd)
+                    setModalOpened(true)
+                }
             }
         } catch (err: any) {
             console.error('Failed to fetch tmate session:', err)
@@ -112,23 +118,33 @@ const ServerTerminalBlock = () => {
     return (
         <>
             <Card className='relative flex flex-col col-span-10 md:col-span-5 font-sans overflow-hidden'>
-                {/* 5-minute Full Component Popup Overlay after Deploy */}
+                {/* 5-minute Liquid Glass Blur Full Component Popup Overlay after Deploy */}
                 {secondsLeft > 0 && (
-                    <div className='absolute inset-0 z-30 backdrop-blur-md bg-neutral-950/92 border border-amber-500/30 rounded-2xl flex flex-col items-center justify-center text-center p-6 space-y-4 shadow-2xl transition-all'>
-                        <div className='w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/10 animate-pulse'>
-                            <LockClosedIcon className='w-6 h-6' />
+                    <div className='absolute inset-0 z-30 flex flex-col items-center justify-center text-center p-6 bg-gradient-to-br from-neutral-950/85 via-blue-950/70 to-neutral-950/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl shadow-2xl transition-all duration-300 space-y-4 overflow-hidden'>
+                        {/* Abstract Radial Glow Backgrounds */}
+                        <div className='absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue-600/20 blur-3xl pointer-events-none' />
+                        <div className='absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-amber-500/15 blur-3xl pointer-events-none' />
+
+                        {/* Animated Glass Badge Icon */}
+                        <div className='relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/20 to-amber-500/20 border border-blue-400/40 text-blue-400 shadow-[0_0_30px_rgba(59,130,246,0.3)] backdrop-blur-md animate-pulse z-10'>
+                            <SparklesIcon className='h-7 w-7 text-blue-400' />
                         </div>
-                        <div className='space-y-1.5 max-w-sm'>
-                            <h6 className='font-extrabold text-base text-amber-300 tracking-tight flex items-center justify-center gap-1.5'>
-                                First-Boot Setup in Progress
+
+                        {/* Title & Explanation */}
+                        <div className='relative z-10 space-y-1.5 max-w-sm'>
+                            <h6 className='text-lg font-extrabold text-white tracking-tight flex items-center justify-center gap-2'>
+                                Initial Cloud-Init Provisioning
                             </h6>
-                            <p className='text-xs text-amber-200/80 leading-relaxed font-sans'>
-                                tmate terminal access is locked for the first 5 minutes post-deployment to ensure Cloud-Init finishes initial OS package installation cleanly.
+                            <p className='text-xs text-slate-300 leading-relaxed font-sans'>
+                                Terminal access is temporarily locked behind this boot shield for the first 5 minutes post-deployment to ensure Cloud-Init finishes initial OS package setup cleanly before accepting connections.
                             </p>
                         </div>
-                        <div className='flex items-center gap-2 bg-amber-950/90 border border-amber-500/40 px-4 py-2 rounded-xl text-amber-300 shadow-inner'>
-                            <span className='text-xs font-bold uppercase tracking-wider text-amber-400/90'>Time Remaining:</span>
-                            <span className='font-mono font-extrabold text-sm text-amber-200 tracking-widest'>
+
+                        {/* Countdown Pill */}
+                        <div className='relative z-10 flex items-center gap-2.5 px-4 py-2 rounded-full bg-neutral-900/90 border border-amber-500/40 shadow-lg shadow-amber-950/50 backdrop-blur-md'>
+                            <span className='w-2 h-2 rounded-full bg-amber-400 animate-ping' />
+                            <span className='text-[11px] font-bold text-slate-300 uppercase tracking-wider'>Unlocks In:</span>
+                            <span className='font-mono font-extrabold text-sm text-amber-400 tracking-widest'>
                                 {formatTime(secondsLeft)}
                             </span>
                         </div>

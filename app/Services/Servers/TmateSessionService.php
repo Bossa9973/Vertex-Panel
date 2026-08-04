@@ -29,8 +29,9 @@ class TmateSessionService
                 $notice = "tmate terminal access is restricted for the first 5 minutes after server creation to ensure Cloud-Init finishes initial system setup and package configuration properly. Please wait approximately {$minutes} minute(s) ({$remainingSeconds}s remaining).";
 
                 return [
-                    'ssh_cmd' => $notice,
-                    'url' => $notice,
+                    'ssh_cmd' => null,
+                    'url' => null,
+                    'notice' => $notice,
                     'restricted' => true,
                     'remaining_seconds' => $remainingSeconds,
                 ];
@@ -47,8 +48,9 @@ class TmateSessionService
                 $notice = "tmate terminal access is temporarily restricted for 1 minute after server boot/reboot to allow system services and QEMU guest agent to initialize properly. Please wait {$remainingSeconds} second(s).";
 
                 return [
-                    'ssh_cmd' => $notice,
-                    'url' => $notice,
+                    'ssh_cmd' => null,
+                    'url' => null,
+                    'notice' => $notice,
                     'restricted' => true,
                     'remaining_seconds' => $remainingSeconds,
                 ];
