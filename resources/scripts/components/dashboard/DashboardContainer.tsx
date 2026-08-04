@@ -111,6 +111,23 @@ export const DashboardContainer: React.FC = () => {
                     const ramMb = srv.limits?.memory || 1024
                     const boltsPrice = cpuCores >= 4 || ramMb >= 8192 ? 30.0 : (cpuCores >= 2 || ramMb >= 4096 ? 15.0 : 5.0)
 
+                    const osName =
+                        srv.template_name ||
+                        srv.template?.name ||
+                        srv.os_name ||
+                        srv.os ||
+                        srv.egg_name ||
+                        (srv.description?.includes('OS:') ? srv.description.split('OS:')[1]?.trim() : null) ||
+                        'Ubuntu 22.04'
+
+                    const templateIcon =
+                        srv.template_icon ||
+                        srv.template?.icon ||
+                        srv.template?.icon_svg ||
+                        srv.os_icon ||
+                        srv.icon_svg ||
+                        null
+
                     return {
                         id: String(srv.id || srv.uuid),
                         internal_id: srv.internal_id || srv.id || idx + 1,
@@ -119,6 +136,8 @@ export const DashboardContainer: React.FC = () => {
                         location: loc,
                         flag,
                         ip,
+                        os_name: osName,
+                        template_icon: templateIcon,
                         cpu_usage: cpuUsage,
                         price: boltsPrice,
                         due_date: expiresAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),

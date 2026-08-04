@@ -11,6 +11,8 @@ export interface ServerItem {
     location: string
     flag: string
     ip: string
+    os_name?: string
+    template_icon?: string
     cpu_usage: number
     price: number
     due_date: string
@@ -45,7 +47,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border border-neutral-800 ring-1 ring-blue-500/10 shadow-[0px_-13px_300px_0px_#0900ff] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'>
+        <div className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border border-white/[0.06] ring-1 ring-blue-500/10 shadow-[0px_0px_60px_0px_rgba(9,0,255,0.15)] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'>
             {/* Section Header */}
             <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-neutral-700/80 text-left'>
                 <div className='flex items-center gap-3'>
@@ -87,7 +89,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                     <th className='py-3 px-4'>Service Name</th>
                                     <th className='py-3 px-4'>Location</th>
                                     <th className='py-3 px-4'>IP</th>
-                                    <th className='py-3 px-4'>CPU</th>
+                                    <th className='py-3 px-4'>OS</th>
                                     <th className='py-3 px-4'>Price</th>
                                     <th className='py-3 px-4'>Due Date</th>
                                     <th className='py-3 px-4'>Status</th>
@@ -170,9 +172,18 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 )}
                                             </td>
 
-                                            {/* CPU Percentage */}
-                                            <td className='py-3 px-4 align-middle font-mono text-xs text-gray-300'>
-                                                {srv.cpu_usage}%
+                                            {/* OS Template Column */}
+                                            <td className='py-3 px-4 align-middle text-xs text-gray-300 font-sans'>
+                                                <div className='flex items-center gap-1.5'>
+                                                    {srv.template_icon ? (
+                                                        <img
+                                                            src={srv.template_icon}
+                                                            alt={srv.os_name || 'OS'}
+                                                            className='w-4 h-4 object-contain inline mr-1.5 shrink-0'
+                                                        />
+                                                    ) : null}
+                                                    <span className='truncate max-w-[120px]'>{srv.os_name || 'Ubuntu 22.04'}</span>
+                                                </div>
                                             </td>
 
                                             {/* Price: 30 BOLTs in text-amber-400 font-semibold with BoltIcon w-3.5 h-3.5 text-amber-400 fill-amber-400/20 */}
