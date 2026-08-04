@@ -90,12 +90,19 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div className='relative overflow-hidden bg-[#0d0d0f]/80 border border-neutral-800/90 rounded-xl p-6 mb-8 font-sans transition-all text-left'>
+        <div
+            className='relative overflow-hidden rounded-[11px] p-6 mb-8 font-sans text-left transition-all'
+            style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.07)',
+                boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.04), 0 8px 32px rgba(0, 0, 0, 0.4)',
+            }}
+        >
             {/* Section Header */}
-            <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-8 pb-4 border-b border-neutral-800/80 text-left'>
+            <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-8 pb-4 border-b border-[rgba(255,255,255,0.07)] text-left'>
                 <div className='flex items-center gap-3'>
                     <h2 className='text-lg font-bold text-white tracking-tight font-sans'>Active Services</h2>
-                    <span className='px-2 py-0.5 rounded-full border border-neutral-700 text-neutral-400 text-xs font-mono font-normal bg-transparent'>
+                    <span className='px-2 py-0.5 rounded-full border border-neutral-700/80 text-neutral-400 text-xs font-mono font-normal bg-transparent'>
                         {servers.length}
                     </span>
                 </div>
@@ -128,7 +135,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                     <div className='overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'>
                         <table className='w-full text-left border-collapse font-sans'>
                             <thead>
-                                <tr className='border-b border-neutral-800 text-[11px] font-medium text-neutral-400 tracking-wider uppercase'>
+                                <tr className='border-b border-[rgba(255,255,255,0.07)] text-[11px] font-semibold text-neutral-300 tracking-wider uppercase opacity-90'>
                                     <th className='py-2.5 px-3.5'>Service Name</th>
                                     <th className='py-2.5 px-3.5'>Location</th>
                                     <th className='py-2.5 px-3.5'>IP</th>
@@ -139,21 +146,24 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                     <th className='py-2.5 px-3.5 text-right'>Action</th>
                                 </tr>
                             </thead>
-                            <tbody className='divide-y divide-neutral-800/50 text-xs font-medium text-neutral-200'>
+                            <tbody className='text-xs font-medium text-neutral-200'>
                                 {servers.map((srv) => {
                                     const isRevealed = !!revealedIps[srv.ip]
 
                                     return (
                                         <tr
                                             key={srv.id}
-                                            className='h-11 hover:bg-[#ffffff06] transition-colors duration-150 group border-l-2 border-l-transparent hover:border-l-emerald-500'
+                                            className='h-11 transition-all duration-150 ease-out group border-b border-[rgba(255,255,255,0.05)] border-l-2 border-l-transparent hover:border-l-[#22c55e] hover:bg-[rgba(255,255,255,0.04)]'
                                         >
-                                            {/* Service Name */}
+                                            {/* Service Name & Subdomain below */}
                                             <td className='py-2.5 px-3.5 align-middle'>
-                                                <div className='font-semibold text-white flex items-center gap-2 text-xs font-sans tracking-tight'>
-                                                    <Link to={`/servers/${srv.id}`} className='hover:text-neutral-300 transition-colors'>
+                                                <div className='font-bold text-white text-xs font-sans tracking-tight'>
+                                                    <Link to={`/servers/${srv.id}`} className='hover:text-neutral-200 transition-colors'>
                                                         {srv.name}
                                                     </Link>
+                                                </div>
+                                                <div className='text-[10px] text-[#666666] font-mono tracking-tight mt-0.5'>
+                                                    {srv.hostname}
                                                 </div>
                                             </td>
 
@@ -214,11 +224,11 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 {srv.cpu_usage}%
                                             </td>
 
-                                            {/* Price Column */}
+                                            {/* Price Column: Slightly brighter white for BOLTs */}
                                             <td className='py-2.5 px-3.5 align-middle font-mono text-xs'>
-                                                <div className='inline-flex items-baseline text-neutral-300'>
-                                                    <span>{Math.round(srv.price ?? 30)} BOLTs</span>
-                                                    <span className='text-[10px] text-neutral-500 font-sans ml-1'>/ 30d</span>
+                                                <div className='inline-flex items-baseline'>
+                                                    <span className='text-white font-semibold font-mono'>{Math.round(srv.price ?? 30)} BOLTs</span>
+                                                    <span className='text-[10px] text-neutral-400 font-sans ml-1'>/ 30d</span>
                                                 </div>
                                             </td>
 
@@ -227,24 +237,26 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 {srv.due_date}
                                             </td>
 
-                                            {/* Status: 4px dot + "Active" in small-caps, no background */}
+                                            {/* Status: Pulsing 4px dot + "Active" in small-caps, no background */}
                                             <td className='py-2.5 px-3.5 align-middle'>
-                                                <div className='inline-flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-400'>
+                                                <div className='inline-flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-[#22c55e]'>
                                                     <span
                                                         className={`w-1 h-1 rounded-full shrink-0 ${
-                                                            srv.status === 'Active' ? 'bg-emerald-500' : 'bg-rose-500'
+                                                            srv.status === 'Active'
+                                                                ? 'bg-[#22c55e] animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]'
+                                                                : 'bg-rose-500'
                                                         }`}
                                                     />
                                                     <span>{srv.status === 'Active' ? 'Active' : srv.status.toUpperCase()}</span>
                                                 </div>
                                             </td>
 
-                                            {/* Action Button: Ghost/outline style, sharp corners, hover fill white text dark */}
+                                            {/* Action Button: Presence border, hover fill glass background */}
                                             <td className='py-2.5 px-3.5 text-right align-middle'>
                                                 <button
                                                     onClick={() => onRenew(srv)}
                                                     disabled={renewingId === srv.internal_id}
-                                                    className='px-3 py-1 rounded-[4px] border border-neutral-700/80 bg-transparent text-neutral-300 text-xs font-medium hover:bg-white hover:text-black hover:border-white transition-all duration-150 cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5 group/btn'
+                                                    className='px-3 py-1 rounded-[4px] border border-[rgba(255,255,255,0.15)] bg-transparent text-neutral-200 text-xs font-medium hover:border-white hover:bg-[rgba(255,255,255,0.08)] hover:text-white transition-all duration-150 cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5'
                                                 >
                                                     {renewingId === srv.internal_id && (
                                                         <RotateCw className='w-3 h-3 animate-spin text-neutral-400' />
