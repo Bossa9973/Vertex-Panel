@@ -9,23 +9,13 @@ import Card from '@/components/elements/Card'
 
 const ServerTerminalBlock = () => {
     const serverData = ServerContext.useStoreState(state => state.server.data)
-    const uuid = serverData!.uuid
-    const createdAtStr = (serverData as any)?.created_at || (serverData as any)?.createdAt
-    const { t } = useTranslation('server.overview')
-    const { t: tStrings } = useTranslation('strings')
-
-    const [terminalMode, setTerminalMode] = useState<'both' | 'sshx'>('both')
-    const [sshCmd, setSshCmd] = useState<string | null>(null)
-    const [tmateLoading, setTmateLoading] = useState<boolean>(false)
-    const [modalOpened, setModalOpened] = useState<boolean>(false)
-    const [copiedSsh, setCopiedSsh] = useState<boolean>(false)
-    const [secondsLeft, setSecondsLeft] = useState<number>(0)
+    const rawCreatedAt = (serverData as any)?.createdAt || (serverData as any)?.created_at
 
     useEffect(() => {
-        if (!createdAtStr) return
+        if (!rawCreatedAt) return
 
         const calculateRemaining = () => {
-            const createdMs = new Date(createdAtStr).getTime()
+            const createdMs = rawCreatedAt instanceof Date ? rawCreatedAt.getTime() : new Date(rawCreatedAt).getTime()
             if (isNaN(createdMs)) return 0
             const elapsedSeconds = Math.floor((Date.now() - createdMs) / 1000)
             return Math.max(0, 300 - elapsedSeconds)
@@ -45,7 +35,7 @@ const ServerTerminalBlock = () => {
         }, 1000)
 
         return () => clearInterval(timer)
-    }, [createdAtStr])
+    }, [rawCreatedAt])
 
     const formatTime = (secs: number) => {
         const m = Math.floor(secs / 60)

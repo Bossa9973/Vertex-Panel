@@ -14,17 +14,17 @@ const ServerPowerBlock = () => {
     const { t: tStrings } = useTranslation('strings')
     const serverData = ServerContext.useStoreState(state => state.server.data)
     const uuid = serverData?.uuid
-    const createdAtStr = (serverData as any)?.created_at || (serverData as any)?.createdAt
+    const rawCreatedAt = (serverData as any)?.createdAt || (serverData as any)?.created_at
     const state = ServerContext.useStoreState(state => state.status.data?.state)
     const notify = useNotify()
 
     const [secondsLeft, setSecondsLeft] = useState<number>(0)
 
     useEffect(() => {
-        if (!createdAtStr) return
+        if (!rawCreatedAt) return
 
         const calculateRemaining = () => {
-            const createdMs = new Date(createdAtStr).getTime()
+            const createdMs = rawCreatedAt instanceof Date ? rawCreatedAt.getTime() : new Date(rawCreatedAt).getTime()
             if (isNaN(createdMs)) return 0
             const elapsedSeconds = Math.floor((Date.now() - createdMs) / 1000)
             return Math.max(0, 300 - elapsedSeconds)
@@ -44,7 +44,7 @@ const ServerPowerBlock = () => {
         }, 1000)
 
         return () => clearInterval(timer)
-    }, [createdAtStr])
+    }, [rawCreatedAt])
 
     const formatTime = (secs: number) => {
         const m = Math.floor(secs / 60)

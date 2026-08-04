@@ -34,6 +34,7 @@ export interface ServerBuild {
     id: string
     internalId: number
     uuid: string
+    createdAt: Date | null
     hostname: string
     name: string
     description: string | null
@@ -88,6 +89,7 @@ export const rawDataToServerBuild = (data: any): ServerBuild => ({
     id: data.id,
     internalId: data.internal_id,
     uuid: data.uuid,
+    createdAt: data.created_at ? new Date(data.created_at) : null,
     hostname: data.hostname,
     name: data.name,
     status: data.status,
