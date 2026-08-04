@@ -112,7 +112,7 @@ const NavigationBar = () => {
     }
 
     return (
-        <div className={isDark ? 'bg-neutral-950/95 backdrop-blur-2xl w-full border-b border-white/[0.05] font-sans shadow-lg shadow-blue-950/20' : 'bg-white/95 backdrop-blur-2xl w-full border-b border-slate-200/80 font-sans shadow-md'}>
+        <div className='bg-black/20 backdrop-blur-md w-full border-b border-white/[0.05] font-sans'>
             {isAdminArea && <AdminBanner />}
             <LoadingOverlay visible={isLoggingOut} zIndex={4000} />
             <ContentContainer ref={topBar} className='pt-3 pb-1.5 relative'>
@@ -123,16 +123,16 @@ const NavigationBar = () => {
                             className='flex items-center space-x-3 group'
                         >
                             <Logo className='w-6 h-6 group-hover:scale-105 transition-transform text-white' />
-                            <h1 className={`font-bold text-lg tracking-tight font-sans ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                            <h1 className='font-bold text-lg tracking-tight font-sans text-white'>
                                 Vertex
                             </h1>
                         </Link>
                         {breadcrumb && (
                             <>
                                 <div className='py-1.5 h-full'>
-                                    <div className={`rotate-[25deg] w-[2px] h-full rounded-full ${isDark ? 'bg-white/10' : 'bg-slate-300'}`} />
+                                    <div className='rotate-[25deg] w-[2px] h-full rounded-full bg-white/10' />
                                 </div>
-                                <p className={`shrink font-semibold text-xs font-sans truncate text-ellipsis overflow-hidden whitespace-nowrap px-3 py-1 rounded-lg backdrop-blur-md ${isDark ? 'text-stone-300 bg-neutral-900/80 border border-white/10' : 'text-slate-700 bg-slate-100/80 border border-slate-200/80'}`}>
+                                <p className='shrink font-semibold text-xs font-sans truncate text-ellipsis overflow-hidden whitespace-nowrap px-3 py-1 rounded-lg backdrop-blur-md text-stone-300 bg-neutral-900/80 border border-white/10'>
                                     {breadcrumb}
                                 </p>
                             </>
@@ -156,7 +156,7 @@ const NavigationBar = () => {
             />
             <div
                 ref={bottomBar}
-                className={`backdrop-blur-xl shadow-none transition-shadow w-full border-t border-b z-[2000] ${isDark ? 'bg-neutral-900/90 border-white/10' : 'bg-slate-100/90 border-slate-200/80'}`}
+                className='backdrop-blur-md shadow-none transition-shadow w-full border-t border-b border-white/[0.05] z-[2000] bg-black/20'
             >
                 <ContentContainer className='flex w-full'>
                     <div

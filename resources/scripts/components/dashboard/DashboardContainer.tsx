@@ -194,7 +194,7 @@ export const DashboardContainer: React.FC = () => {
             <div className='pb-12'>
                 <div className='flex items-start justify-between font-sans mb-4 text-left'>
                     <div>
-                        <h2 className='text-2xl sm:text-3xl font-medium text-white flex gap-1.5'>
+                        <h2 className='text-2xl sm:text-3xl font-semibold text-white flex gap-1.5'>
                             <VerticalCutReveal
                                 splitBy='words'
                                 staggerDuration={0.12}
@@ -205,14 +205,14 @@ export const DashboardContainer: React.FC = () => {
                                 Cloud Instances & VPS
                             </VerticalCutReveal>
                         </h2>
-                        <p className='text-[11px] text-gray-400 font-normal mt-1'>
+                        <p className='text-[11px] text-gray-500 font-normal mt-1'>
                             Manage, monitor, deploy, and scale your active cloud virtual servers.
                         </p>
                     </div>
 
                     <button
                         onClick={() => setDeployModalOpen(true)}
-                        className='py-2.5 px-5 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition shrink-0 active:scale-95'
+                        className='py-2.5 px-5 rounded-xl bg-gradient-to-t from-blue-600 to-blue-700 shadow-lg shadow-blue-900/50 border border-blue-600 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition shrink-0 active:scale-95'
                     >
                         <RocketLaunchIcon className='w-4 h-4' /> Deploy VPS
                     </button>

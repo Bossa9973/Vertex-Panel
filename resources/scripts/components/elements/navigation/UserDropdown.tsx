@@ -27,15 +27,15 @@ const UserDropdown = ({ logout }: Props) => {
 
     return (
         <div className='hidden sm:flex items-center space-x-3.5'>
-            {/* BOLT Balance Badge — Blue Liquid Glass */}
+            {/* BOLT Balance Badge */}
             <Link
                 to='/credits'
-                className='flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-blue-950/80 via-blue-900/40 to-neutral-950/90 hover:from-blue-900/90 hover:to-indigo-950/90 text-white font-bold text-xs transition-all border border-blue-500/40 hover:border-blue-400 shadow-md shadow-blue-950/50 backdrop-blur-md cursor-pointer active:scale-95 group font-sans'
+                className='flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-white transition-all cursor-pointer font-sans'
                 title='Click to top up account BOLTs'
             >
-                <BoltSvgIcon className='w-4 h-4 text-blue-400 shrink-0 group-hover:scale-110 transition-transform' />
-                <span className='font-sans font-extrabold tracking-tight text-white'>{(user.credits ?? 0).toFixed(2)}</span>
-                <span className='text-[10px] font-extrabold text-blue-400 font-sans tracking-wide uppercase'>BOLTs</span>
+                <BoltSvgIcon className='w-4 h-4 text-amber-400 shrink-0' />
+                <span className='font-sans text-sm font-semibold text-white'>{(user.credits ?? 0).toFixed(2)}</span>
+                <span className='text-xs font-semibold text-amber-400 font-sans'>BOLTs</span>
             </Link>
 
             {/* Theme Toggle Button */}
