@@ -52,12 +52,18 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
+        <>
+        <style>{`
+          .active-services-card {
+            box-shadow:
+              0 0 0 1px rgba(255,255,255,0.04),
+              0 8px 32px rgba(0,0,0,0.5),
+              0 0 100px -10px rgba(9, 0, 255, 0.35);
+            border-top: 1px solid rgba(99, 102, 241, 0.2);
+          }
+        `}</style>
         <div
-            style={{
-                boxShadow:
-                    '0 0 0 1px rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.4), 0 0 80px -10px rgba(9,0,255,0.25)',
-            }}
-            className='p-6 bg-neutral-900/60 backdrop-blur-sm border border-white/[0.04] border-t border-t-blue-500/20 text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'
+            className='active-services-card p-6 bg-neutral-900/60 backdrop-blur-sm border border-white/[0.04] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'
         >
             {/* Subtle top-to-bottom overlay gradient */}
             <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0' />
@@ -249,6 +255,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                 )}
             </div>
         </div>
+        </>
     )
 }
 
