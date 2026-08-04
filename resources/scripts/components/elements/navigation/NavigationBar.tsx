@@ -112,7 +112,7 @@ const NavigationBar = () => {
     }
 
     return (
-        <div className='bg-white w-full dark:bg-black font-sans border-b border-stone-800/80'>
+        <div className='bg-transparent backdrop-blur-md w-full font-sans border-b border-white/[0.05]'>
             {isAdminArea && <AdminBanner />}
             <LoadingOverlay visible={isLoggingOut} zIndex={4000} />
             <ContentContainer ref={topBar} className='pt-3 pb-1.5 relative'>
@@ -156,7 +156,7 @@ const NavigationBar = () => {
             />
             <div
                 ref={bottomBar}
-                className='bg-white shadow-none transition-shadow dark:bg-black w-full border-t border-b border-stone-800/80 z-[2000]'
+                className='bg-transparent backdrop-blur-md shadow-none transition-shadow w-full border-t border-b border-white/[0.05] z-[2000]'
             >
                 <ContentContainer className='flex w-full'>
                     <div
@@ -186,7 +186,7 @@ const NavigationBar = () => {
             </div>
             <div
                 ref={placeholder}
-                className='hidden h-[49px] w-full bg-[#0d0e11]'
+                className='hidden h-[49px] w-full bg-transparent'
             />
         </div>
     )
