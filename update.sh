@@ -161,13 +161,15 @@ perform_update() {
     local src_dir
     src_dir=$(find "$tmp_dir" -maxdepth 1 -type d -not -path "$tmp_dir" | head -1)
 
-    # Sync files safely (preserving .env, storage, and user files)
+    # Sync files safely (preserving .env, storage, update.sh, and user files)
     spinner_start "Syncing panel files"
     if rsync -a --delete \
         --exclude='.env' \
         --exclude='storage/' \
         --exclude='public/storage' \
         --exclude='.git/' \
+        --exclude='update.sh' \
+        --exclude='install.sh' \
         "${src_dir}/" "${INSTALL_DIR}/" > /tmp/vertex_update.log 2>&1; then
         spinner_stop
         success "Panel files updated"
@@ -176,6 +178,14 @@ perform_update() {
         error_msg "Failed to sync files."
         php artisan up --no-interaction 2>/dev/null || true
         exit 1
+    fi
+
+    # Ensure update.sh is preserved in panel directory and global PATH (never deleted)
+    if [[ -f "${src_dir}/update.sh" ]]; then
+        cp -f "${src_dir}/update.sh" "${INSTALL_DIR}/update.sh" 2>/dev/null || true
+        chmod +x "${INSTALL_DIR}/update.sh" 2>/dev/null || true
+        cp -f "${src_dir}/update.sh" "/usr/local/bin/vertex-update" 2>/dev/null || true
+        chmod +x "/usr/local/bin/vertex-update" 2>/dev/null || true
     fi
 
     # Clean up downloaded zip
