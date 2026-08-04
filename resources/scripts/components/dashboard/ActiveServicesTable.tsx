@@ -6,17 +6,17 @@ import { BoltIcon } from '@heroicons/react/24/outline'
 export interface ServerItem {
     id: string
     internal_id: number
-    name: string
-    hostname: string
-    location: string
-    flag: string
-    ip: string
-    os_name?: string
-    template_icon?: string
+    name: string | null
+    hostname: string | null
+    location: string | null
+    flag: string | null
+    ip: string | null
+    os_name?: string | null
+    template_icon?: string | null
     cpu_usage: number
-    price: number
-    due_date: string
-    days_left: number
+    price: number | null
+    due_date: string | null
+    days_left: number | null
     status: 'Active' | 'Expired' | 'Stopped'
 }
 
@@ -28,8 +28,8 @@ interface Props {
     renewingId: number | null
 }
 
-const formatOsName = (name?: string) => {
-    if (!name) return 'Ubuntu 22.04'
+const formatOsName = (name?: string | null): string | null => {
+    if (!name) return null
     return name.replace(/[-_]/g, ' ').replace(/\(.*?\)/g, '').trim()
 }
 
@@ -106,81 +106,85 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                             </thead>
                             <tbody className='divide-y divide-neutral-700/80 text-xs font-medium text-gray-300'>
                                 {servers.map((srv) => {
-                                    const isRevealed = !!revealedIps[srv.ip]
+                                    const isRevealed = srv.ip ? !!revealedIps[srv.ip] : false
 
                                     return (
                                         <tr
                                             key={srv.id}
                                             className='relative h-14 border-b border-neutral-700/80 group hover:bg-white/[0.05] transition-colors duration-150'
                                         >
-                                            {/* Service Name & Subdomain Cell with Hover Accent */}
                                             <td className='relative py-3 px-4 align-middle'>
                                                 <div className='absolute left-0 top-0 bottom-0 w-[2px] bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150' />
                                                 <div className='flex flex-col justify-center text-left pl-1'>
                                                     <div className='font-semibold text-white text-sm font-sans tracking-tight leading-snug'>
-                                                        <Link to={`/servers/${srv.id}`} className='hover:text-blue-400 transition-colors'>
-                                                            {srv.name}
-                                                        </Link>
+                                                        {srv.name ? (
+                                                            <Link to={`/servers/${srv.id}`} className='hover:text-blue-400 transition-colors'>
+                                                                {srv.name}
+                                                            </Link>
+                                                        ) : (
+                                                            <span className='text-gray-500'>—</span>
+                                                        )}
                                                     </div>
                                                     <div className='text-xs text-gray-400 font-mono tracking-tight leading-none mt-0.5'>
-                                                        {srv.hostname}
+                                                        {srv.hostname || <span className='text-gray-600'>—</span>}
                                                     </div>
                                                 </div>
                                             </td>
 
-                                            {/* Location Cell: Single line with flag emoji */}
                                             <td className='py-3 px-4 align-middle whitespace-nowrap'>
                                                 <div className='flex items-center gap-2 text-gray-300 text-xs font-medium whitespace-nowrap'>
                                                     {srv.flag && (srv.flag.startsWith('http://') || srv.flag.startsWith('https://') || srv.flag.startsWith('/')) ? (
                                                         <img
                                                             src={srv.flag}
-                                                            alt={srv.location}
+                                                            alt={srv.location ?? ''}
                                                             className='w-4 h-4 rounded-full object-cover border border-neutral-700 shrink-0'
                                                         />
-                                                    ) : (
+                                                    ) : srv.flag ? (
                                                         <span className='text-xs leading-none shrink-0 font-sans'>
-                                                            {srv.flag || '🌐'}
+                                                            {srv.flag}
                                                         </span>
-                                                    )}
-                                                    <span className='whitespace-nowrap'>{srv.location}</span>
+                                                    ) : null}
+                                                    <span className='whitespace-nowrap'>{srv.location ?? <span className='text-gray-600'>—</span>}</span>
                                                 </div>
                                             </td>
 
-                                            {/* IP Address Cell */}
                                             <td className='py-3 px-4 align-middle min-w-[150px] font-mono whitespace-nowrap'>
-                                                {isRevealed ? (
-                                                    <div className='inline-flex items-center gap-2 text-xs text-gray-200 font-mono'>
-                                                        <span>{srv.ip}</span>
-                                                        <button
-                                                            onClick={(e) => handleCopyIp(srv.ip, e)}
-                                                            title='Copy IP address'
-                                                            className='text-gray-400 hover:text-white transition-colors cursor-pointer p-0.5'
+                                                {srv.ip ? (
+                                                    isRevealed ? (
+                                                        <div className='inline-flex items-center gap-2 text-xs text-gray-200 font-mono'>
+                                                            <span>{srv.ip}</span>
+                                                            <button
+                                                                onClick={(e) => handleCopyIp(srv.ip!, e)}
+                                                                title='Copy IP address'
+                                                                className='text-gray-400 hover:text-white transition-colors cursor-pointer p-0.5'
+                                                            >
+                                                                {copiedIp === srv.ip ? (
+                                                                    <Check className='w-3.5 h-3.5 text-emerald-400' />
+                                                                ) : (
+                                                                    <Copy className='w-3 h-3' />
+                                                                )}
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => toggleRevealIp(srv.ip!, e)}
+                                                                title='Hide IP address'
+                                                                className='text-gray-400 hover:text-white transition-colors cursor-pointer p-0.5'
+                                                            >
+                                                                <EyeOff className='w-3 h-3' />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span
+                                                            onClick={(e) => toggleRevealIp(srv.ip!, e)}
+                                                            className='font-mono text-xs text-gray-400 blur-[3px] hover:blur-none select-none cursor-pointer tracking-wider inline-block transition-all duration-150 hover:text-white'
                                                         >
-                                                            {copiedIp === srv.ip ? (
-                                                                <Check className='w-3.5 h-3.5 text-emerald-400' />
-                                                            ) : (
-                                                                <Copy className='w-3 h-3' />
-                                                            )}
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => toggleRevealIp(srv.ip, e)}
-                                                            title='Hide IP address'
-                                                            className='text-gray-400 hover:text-white transition-colors cursor-pointer p-0.5'
-                                                        >
-                                                            <EyeOff className='w-3 h-3' />
-                                                        </button>
-                                                    </div>
+                                                            {srv.ip}
+                                                        </span>
+                                                    )
                                                 ) : (
-                                                    <span
-                                                        onClick={(e) => toggleRevealIp(srv.ip, e)}
-                                                        className='font-mono text-xs text-gray-400 blur-[3px] hover:blur-none select-none cursor-pointer tracking-wider inline-block transition-all duration-150 hover:text-white'
-                                                    >
-                                                        {srv.ip}
-                                                    </span>
+                                                    <span className='text-gray-600 text-xs'>—</span>
                                                 )}
                                             </td>
 
-                                            {/* OS Template Column */}
                                             <td className='py-3 px-4 align-middle text-xs text-gray-300 font-sans max-w-[140px] whitespace-nowrap overflow-hidden'>
                                                 <div className='flex items-center gap-1.5 truncate'>
                                                     {srv.template_icon ? (
@@ -190,25 +194,30 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                             className='w-4 h-4 inline mr-1.5 object-contain shrink-0'
                                                         />
                                                     ) : null}
-                                                    <span className='truncate'>{formatOsName(srv.os_name)}</span>
+                                                    {formatOsName(srv.os_name) ? (
+                                                        <span className='truncate'>{formatOsName(srv.os_name)}</span>
+                                                    ) : (
+                                                        <span className='text-gray-600'>—</span>
+                                                    )}
                                                 </div>
                                             </td>
 
-                                            {/* Price Cell */}
                                             <td className='py-3 px-4 align-middle font-mono text-xs whitespace-nowrap'>
-                                                <div className='flex items-center gap-1 font-sans text-xs whitespace-nowrap'>
-                                                    <BoltIcon className='w-3.5 h-3.5 text-amber-400 fill-amber-400/20 inline mr-1 shrink-0' />
-                                                    <span className='text-amber-400 font-semibold'>{Math.round(srv.price ?? 30)} BOLTs</span>
-                                                    <span className='text-gray-400 text-xs ml-1'>/ 30d</span>
-                                                </div>
+                                                {srv.price != null ? (
+                                                    <div className='flex items-center gap-1 font-sans text-xs whitespace-nowrap'>
+                                                        <BoltIcon className='w-3.5 h-3.5 text-amber-400 fill-amber-400/20 inline mr-1 shrink-0' />
+                                                        <span className='text-amber-400 font-semibold'>{Math.round(srv.price)} BOLTs</span>
+                                                        <span className='text-gray-400 text-xs ml-1'>/ 30d</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className='text-gray-600'>—</span>
+                                                )}
                                             </td>
 
-                                            {/* Due Date Cell */}
                                             <td className='py-3 px-4 align-middle font-mono text-xs text-gray-300 whitespace-nowrap'>
-                                                {srv.due_date}
+                                                {srv.due_date ?? <span className='text-gray-600'>—</span>}
                                             </td>
 
-                                            {/* Status Cell */}
                                             <td className='py-3 px-4 align-middle whitespace-nowrap'>
                                                 <span
                                                     className={`text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold uppercase tracking-wide ${
