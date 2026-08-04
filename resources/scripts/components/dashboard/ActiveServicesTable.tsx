@@ -45,7 +45,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border border-neutral-800 shadow-[0px_-13px_300px_0px_#0900ff] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'>
+        <div className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border border-neutral-800 ring-1 ring-blue-500/10 shadow-[0px_-13px_300px_0px_#0900ff] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'>
             {/* Section Header */}
             <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-neutral-700/80 text-left'>
                 <div className='flex items-center gap-3'>
@@ -101,8 +101,11 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                     return (
                                         <tr
                                             key={srv.id}
-                                            className='h-[52px] border-b border-neutral-700/80 hover:bg-white/[0.03] transition-colors duration-150 group'
+                                            className='relative h-[52px] border-b border-neutral-700/80 group/row hover:bg-white/[0.03] transition-colors duration-150'
                                         >
+                                            {/* Hover Left Blue Accent */}
+                                            <div className='absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150' />
+
                                             {/* Service Name & Subdomain */}
                                             <td className='py-3 px-4 align-middle'>
                                                 <div className='font-bold text-white text-sm font-sans tracking-tight'>
@@ -172,10 +175,10 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 {srv.cpu_usage}%
                                             </td>
 
-                                            {/* Price: Match plan card 10 BOLTs style with BoltIcon */}
+                                            {/* Price: 30 BOLTs in text-amber-400 font-semibold with BoltIcon w-3.5 h-3.5 text-amber-400 fill-amber-400/20 */}
                                             <td className='py-3 px-4 align-middle font-mono text-xs'>
                                                 <div className='flex items-center gap-1 font-sans text-xs'>
-                                                    <BoltIcon className='w-4 h-4 text-amber-400 fill-amber-400/20 shrink-0' />
+                                                    <BoltIcon className='w-3.5 h-3.5 text-amber-400 fill-amber-400/20 inline shrink-0' />
                                                     <span className='text-amber-400 font-semibold'>{Math.round(srv.price ?? 30)} BOLTs</span>
                                                     <span className='text-gray-400 text-xs ml-1'>/ 30d</span>
                                                 </div>
@@ -186,10 +189,10 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 {srv.due_date}
                                             </td>
 
-                                            {/* Status: Match "Online" badge from Step 2 node row */}
+                                            {/* Status: EXACTLY node Online pill from Step 2 */}
                                             <td className='py-3 px-4 align-middle'>
                                                 <span
-                                                    className={`text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold uppercase tracking-wider font-mono ${
+                                                    className={`text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold uppercase tracking-wide ${
                                                         srv.status === 'Active'
                                                             ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                                                             : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
@@ -199,12 +202,12 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 </span>
                                             </td>
 
-                                            {/* Action Button: Match "Back" button from modal footer */}
+                                            {/* Action Button: py-2 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white hover:border-neutral-600 font-bold text-xs cursor-pointer transition-all */}
                                             <td className='py-3 px-4 text-right align-middle'>
                                                 <button
                                                     onClick={() => onRenew(srv)}
                                                     disabled={renewingId === srv.internal_id}
-                                                    className='py-2.5 px-5 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs cursor-pointer transition inline-flex items-center gap-1.5 disabled:opacity-50'
+                                                    className='py-2 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white hover:border-neutral-600 font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 disabled:opacity-50'
                                                 >
                                                     {renewingId === srv.internal_id && (
                                                         <RotateCw className='w-3 h-3 animate-spin text-blue-400' />
