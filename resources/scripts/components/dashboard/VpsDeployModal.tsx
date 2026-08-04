@@ -640,13 +640,20 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                             key={plan.id}
                                                             onClick={() => setSelectedPlanId(plan.id)}
                                                             className={cn(
-                                                                'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
+                                                                'relative cursor-pointer transition-all duration-300 text-white flex flex-col justify-between overflow-hidden',
                                                                 isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-20 border-blue-500 ring-2 ring-blue-500/40 shadow-xl'
-                                                                    : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
+                                                                    ? 'bg-gradient-to-br from-neutral-900/95 via-blue-950/40 to-neutral-950/95 border-blue-500/90 ring-1 ring-blue-500/50 shadow-[0_0_35px_-5px_rgba(59,130,246,0.4),0_15px_30px_-10px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.15)] z-20 backdrop-blur-xl'
+                                                                    : 'bg-gradient-to-br from-neutral-900/90 via-neutral-900/60 to-neutral-950/90 border-neutral-800 z-10 hover:border-blue-500/40 hover:shadow-[0_0_20px_-5px_rgba(59,130,246,0.15)]'
                                                             )}
                                                         >
-                                                            <CardHeader className='text-left p-5 pb-3'>
+                                                            {/* Refined Ambient Light Spread & Glass Top Highlight */}
+                                                            {isSelected && (
+                                                                <>
+                                                                    <div className='absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-36 bg-blue-500/25 blur-3xl rounded-full pointer-events-none' />
+                                                                    <div className='absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-blue-400/90 to-transparent pointer-events-none' />
+                                                                </>
+                                                            )}
+                                                            <CardHeader className='text-left p-5 pb-3 relative z-10'>
                                                                 <div className='flex justify-between items-center mb-1'>
                                                                     <h3 className='text-xl font-bold text-white'>{plan.name}</h3>
                                                                     {isSelected && (
@@ -679,10 +686,10 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                                         goToStep(2)
                                                                     }}
                                                                     className={cn(
-                                                                        'w-full py-2.5 px-4 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2',
+                                                                        'w-full py-2.5 px-4 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 relative z-10',
                                                                         isSelected
-                                                                            ? 'bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white'
-                                                                            : 'bg-gradient-to-t from-neutral-950 to-neutral-700 shadow-lg shadow-neutral-900 border border-neutral-800 text-white hover:border-neutral-600'
+                                                                            ? 'bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 shadow-[0_0_20px_rgba(37,99,235,0.4)] border border-blue-400/50 text-white'
+                                                                            : 'bg-gradient-to-t from-neutral-950 to-neutral-800 shadow-md shadow-neutral-950 border border-neutral-800 text-white hover:border-neutral-600'
                                                                     )}
                                                                 >
                                                                     {isSelected ? 'Selected' : 'Select Plan'}
@@ -744,18 +751,21 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                             key={tpl.id}
                                                             onClick={() => setSelectedTemplateId(tpl.id)}
                                                             className={cn(
-                                                                'p-4 cursor-pointer transition-all duration-200 text-white border-neutral-800 flex items-center gap-3',
+                                                                'p-4 cursor-pointer transition-all duration-300 text-white flex items-center gap-3 relative overflow-hidden',
                                                                 isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-blue-500 ring-1 ring-blue-500/50 shadow-md'
-                                                                    : 'bg-neutral-900/60 hover:bg-neutral-800/80 hover:border-neutral-700'
+                                                                    ? 'bg-gradient-to-br from-neutral-900/95 via-blue-950/30 to-neutral-950/95 border-blue-500/90 shadow-[0_0_25px_-5px_rgba(59,130,246,0.35)] ring-1 ring-blue-500/50'
+                                                                    : 'bg-neutral-900/60 border-neutral-800 hover:bg-neutral-800/80 hover:border-blue-500/30'
                                                             )}
                                                         >
-                                                            <img src={tpl.icon_svg} alt={tpl.name} className='w-8 h-8 object-contain shrink-0' />
-                                                            <div className='min-w-0 flex-1'>
+                                                            {isSelected && (
+                                                                <div className='absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-blue-400/80 to-transparent pointer-events-none' />
+                                                            )}
+                                                            <img src={tpl.icon_svg} alt={tpl.name} className='w-8 h-8 object-contain shrink-0 relative z-10' />
+                                                            <div className='min-w-0 flex-1 relative z-10'>
                                                                 <span className='text-xs font-bold block truncate text-white'>{tpl.name}</span>
                                                                 <span className='text-[10px] text-gray-400 block truncate'>{tpl.category}</span>
                                                             </div>
-                                                            {isSelected && <CheckCircleIcon className='w-4 h-4 text-blue-400 shrink-0' />}
+                                                            {isSelected && <CheckCircleIcon className='w-4 h-4 text-blue-400 shrink-0 relative z-10' />}
                                                         </Card>
                                                     )
                                                 })}
@@ -776,12 +786,15 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                             key={node.id}
                                                             onClick={() => setSelectedNodeId(node.id)}
                                                             className={cn(
-                                                                'p-4 cursor-pointer transition-all duration-200 text-white border-neutral-800 flex items-center justify-between',
+                                                                'p-4 cursor-pointer transition-all duration-300 text-white flex items-center justify-between relative overflow-hidden',
                                                                 isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-blue-500 shadow-[0px_0px_20px_0px_#0900ff] ring-1 ring-blue-500/50'
-                                                                    : 'bg-neutral-900/60 hover:bg-neutral-800/80 hover:border-neutral-700'
+                                                                    ? 'bg-gradient-to-br from-neutral-900/95 via-blue-950/30 to-neutral-950/95 border-blue-500/90 shadow-[0_0_25px_-5px_rgba(59,130,246,0.35)] ring-1 ring-blue-500/50'
+                                                                    : 'bg-neutral-900/60 border-neutral-800 hover:bg-neutral-800/80 hover:border-blue-500/30'
                                                             )}
                                                         >
+                                                            {isSelected && (
+                                                                <div className='absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-blue-400/80 to-transparent pointer-events-none' />
+                                                            )}
                                                             <div className='flex items-center gap-3'>
                                                                 <img src={node.flag} alt={node.name} className='w-6 h-4 rounded-sm object-cover shrink-0' />
                                                                 <div className='text-xs font-bold text-white flex items-center gap-2'>
@@ -926,8 +939,12 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             Final Confirmation & Provisioning
                                         </h3>
 
-                                        <Card className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-neutral-800 shadow-xl text-white relative overflow-hidden'>
-                                            <div className='flex items-center gap-4 pb-4 border-b border-neutral-700 mb-4'>
+                                        <Card className='p-6 bg-gradient-to-br from-neutral-900/95 via-blue-950/40 to-neutral-950/95 border-blue-500/80 ring-1 ring-blue-500/40 shadow-[0_0_40px_-5px_rgba(59,130,246,0.35),0_20px_40px_-10px_rgba(0,0,0,0.8)] text-white relative overflow-hidden backdrop-blur-xl'>
+                                            {/* Refined Ambient Light Spread & Glass Top Edge Highlight */}
+                                            <div className='absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-40 bg-blue-500/20 blur-3xl rounded-full pointer-events-none' />
+                                            <div className='absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-blue-400/80 to-transparent pointer-events-none' />
+
+                                            <div className='flex items-center gap-4 pb-4 border-b border-neutral-700/80 mb-4 relative z-10'>
                                                 {selectedTemplate && (
                                                     <img src={selectedTemplate.icon_svg} alt={selectedTemplate.name} className='w-10 h-10 object-contain shrink-0' />
                                                 )}
