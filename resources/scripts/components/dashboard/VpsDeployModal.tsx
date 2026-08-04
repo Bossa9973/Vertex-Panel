@@ -642,7 +642,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                             className={cn(
                                                                 'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
                                                                 isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0900ff] z-20 border-blue-500 ring-2 ring-blue-500/40'
+                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-20 border-blue-500 ring-2 ring-blue-500/40 shadow-xl'
                                                                     : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
                                                             )}
                                                         >
@@ -746,7 +746,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                             className={cn(
                                                                 'p-4 cursor-pointer transition-all duration-200 text-white border-neutral-800 flex items-center gap-3',
                                                                 isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-blue-500 shadow-[0px_0px_20px_0px_#0900ff] ring-1 ring-blue-500/50'
+                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-blue-500 ring-1 ring-blue-500/50 shadow-md'
                                                                     : 'bg-neutral-900/60 hover:bg-neutral-800/80 hover:border-neutral-700'
                                                             )}
                                                         >
@@ -926,7 +926,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             Final Confirmation & Provisioning
                                         </h3>
 
-                                        <Card className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-neutral-800 shadow-[0px_-13px_300px_0px_#0900ff] text-white relative overflow-hidden'>
+                                        <Card className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-neutral-800 shadow-xl text-white relative overflow-hidden'>
                                             <div className='flex items-center gap-4 pb-4 border-b border-neutral-700 mb-4'>
                                                 {selectedTemplate && (
                                                     <img src={selectedTemplate.icon_svg} alt={selectedTemplate.name} className='w-10 h-10 object-contain shrink-0' />
