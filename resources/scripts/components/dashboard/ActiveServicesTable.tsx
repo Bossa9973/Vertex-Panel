@@ -90,7 +90,6 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-    return (
         <div className='relative overflow-hidden bg-[#0d0d0f]/80 border border-neutral-800/90 rounded-xl p-6 mb-8 font-sans transition-all text-left'>
             {/* Section Header */}
             <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-8 pb-4 border-b border-neutral-800/80 text-left'>
