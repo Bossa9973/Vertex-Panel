@@ -52,9 +52,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div
-            className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border border-neutral-800 shadow-[0px_-13px_300px_0px_#0900ff] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'
-        >
+        <div className='p-6 bg-neutral-900/60 backdrop-blur-sm border border-white/[0.04] border-t border-t-blue-500/30 shadow-[0px_0px_120px_-20px_#0900ff] text-white relative rounded-2xl mb-8 font-sans text-left'>
             {/* Subtle top-to-bottom overlay gradient */}
             <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0' />
 
