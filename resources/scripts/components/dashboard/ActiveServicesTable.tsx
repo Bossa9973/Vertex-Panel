@@ -50,7 +50,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
             <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-neutral-700/80 text-left'>
                 <div className='flex items-center gap-3'>
                     <h2 className='text-lg font-bold text-white tracking-tight font-sans'>Active Services</h2>
-                    <span className='px-2.5 py-0.5 rounded-full bg-neutral-900/90 border border-gray-700/80 text-gray-400 text-xs font-mono font-medium'>
+                    <span className='bg-neutral-900/90 border border-gray-700/80 text-gray-400 text-xs rounded-full px-2 py-0.5 font-mono font-medium'>
                         {servers.length}
                     </span>
                 </div>
@@ -83,40 +83,40 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                     <div className='overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'>
                         <table className='w-full text-left border-collapse font-sans'>
                             <thead>
-                                <tr className='border-b border-neutral-700/80 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-gray-400'>
-                                    <th className='py-3 px-3.5'>Service Name</th>
-                                    <th className='py-3 px-3.5'>Location</th>
-                                    <th className='py-3 px-3.5'>IP</th>
-                                    <th className='py-3 px-3.5'>CPU</th>
-                                    <th className='py-3 px-3.5'>Price</th>
-                                    <th className='py-3 px-3.5'>Due Date</th>
-                                    <th className='py-3 px-3.5'>Status</th>
-                                    <th className='py-3 px-3.5 text-right'>Action</th>
+                                <tr className='border-b border-neutral-700/80 text-xs font-bold uppercase tracking-wider text-gray-400 pb-3'>
+                                    <th className='py-3 px-4'>Service Name</th>
+                                    <th className='py-3 px-4'>Location</th>
+                                    <th className='py-3 px-4'>IP</th>
+                                    <th className='py-3 px-4'>CPU</th>
+                                    <th className='py-3 px-4'>Price</th>
+                                    <th className='py-3 px-4'>Due Date</th>
+                                    <th className='py-3 px-4'>Status</th>
+                                    <th className='py-3 px-4 text-right'>Action</th>
                                 </tr>
                             </thead>
-                            <tbody className='divide-y divide-neutral-700/60 text-xs font-medium text-gray-300'>
+                            <tbody className='divide-y divide-neutral-700/80 text-xs font-medium text-gray-300'>
                                 {servers.map((srv) => {
                                     const isRevealed = !!revealedIps[srv.ip]
 
                                     return (
                                         <tr
                                             key={srv.id}
-                                            className='h-12 hover:bg-neutral-800/80 transition-colors duration-150 group border-l-2 border-l-transparent hover:border-l-blue-500'
+                                            className='h-[52px] border-b border-neutral-700/80 hover:bg-white/[0.03] transition-colors duration-150 group'
                                         >
                                             {/* Service Name & Subdomain */}
-                                            <td className='py-3 px-3.5 align-middle'>
-                                                <div className='text-xs sm:text-sm font-bold text-white font-sans tracking-tight'>
+                                            <td className='py-3 px-4 align-middle'>
+                                                <div className='font-bold text-white text-sm font-sans tracking-tight'>
                                                     <Link to={`/servers/${srv.id}`} className='hover:text-blue-400 transition-colors'>
                                                         {srv.name}
                                                     </Link>
                                                 </div>
-                                                <div className='text-[10px] text-gray-400 font-mono tracking-tight mt-0.5'>
+                                                <div className='text-[11px] text-gray-400 font-mono tracking-tight mt-0.5'>
                                                     {srv.hostname}
                                                 </div>
                                             </td>
 
                                             {/* Location */}
-                                            <td className='py-3 px-3.5 align-middle'>
+                                            <td className='py-3 px-4 align-middle'>
                                                 <div className='flex items-center gap-2 text-gray-300 text-xs font-medium'>
                                                     {srv.flag && (srv.flag.startsWith('http://') || srv.flag.startsWith('https://') || srv.flag.startsWith('/')) ? (
                                                         <img
@@ -134,7 +134,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                             </td>
 
                                             {/* IP Address */}
-                                            <td className='py-3 px-3.5 align-middle min-w-[150px] font-mono'>
+                                            <td className='py-3 px-4 align-middle min-w-[150px] font-mono'>
                                                 {isRevealed ? (
                                                     <div className='inline-flex items-center gap-2 text-xs text-gray-200 font-mono'>
                                                         <span>{srv.ip}</span>
@@ -168,28 +168,28 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                             </td>
 
                                             {/* CPU Percentage */}
-                                            <td className='py-3 px-3.5 align-middle font-mono text-xs text-gray-300'>
+                                            <td className='py-3 px-4 align-middle font-mono text-xs text-gray-300'>
                                                 {srv.cpu_usage}%
                                             </td>
 
                                             {/* Price: Match plan card 10 BOLTs style with BoltIcon */}
-                                            <td className='py-3 px-3.5 align-middle font-mono text-xs'>
-                                                <div className='flex items-center gap-1 text-amber-400 font-bold font-sans text-xs'>
-                                                    <BoltIcon className='w-4 h-4 fill-amber-400/20 text-amber-400 shrink-0' />
-                                                    <span>{Math.round(srv.price ?? 30)} BOLTs</span>
-                                                    <span className='text-[10px] text-gray-400 font-normal font-sans ml-0.5'>/ 30d</span>
+                                            <td className='py-3 px-4 align-middle font-mono text-xs'>
+                                                <div className='flex items-center gap-1 font-sans text-xs'>
+                                                    <BoltIcon className='w-4 h-4 text-amber-400 fill-amber-400/20 shrink-0' />
+                                                    <span className='text-amber-400 font-semibold'>{Math.round(srv.price ?? 30)} BOLTs</span>
+                                                    <span className='text-gray-400 text-xs ml-1'>/ 30d</span>
                                                 </div>
                                             </td>
 
                                             {/* Due Date */}
-                                            <td className='py-3 px-3.5 align-middle font-mono text-xs text-gray-400'>
+                                            <td className='py-3 px-4 align-middle font-mono text-xs text-gray-400'>
                                                 {srv.due_date}
                                             </td>
 
                                             {/* Status: Match "Online" badge from Step 2 node row */}
-                                            <td className='py-3 px-3.5 align-middle'>
+                                            <td className='py-3 px-4 align-middle'>
                                                 <span
-                                                    className={`text-[9px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider font-mono ${
+                                                    className={`text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold uppercase tracking-wider font-mono ${
                                                         srv.status === 'Active'
                                                             ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                                                             : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
@@ -200,11 +200,11 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                             </td>
 
                                             {/* Action Button: Match "Back" button from modal footer */}
-                                            <td className='py-3 px-3.5 text-right align-middle'>
+                                            <td className='py-3 px-4 text-right align-middle'>
                                                 <button
                                                     onClick={() => onRenew(srv)}
                                                     disabled={renewingId === srv.internal_id}
-                                                    className='py-1.5 px-3.5 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition hover:border-neutral-700 shadow-sm disabled:opacity-50'
+                                                    className='py-2.5 px-5 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs cursor-pointer transition inline-flex items-center gap-1.5 disabled:opacity-50'
                                                 >
                                                     {renewingId === srv.internal_id && (
                                                         <RotateCw className='w-3 h-3 animate-spin text-blue-400' />

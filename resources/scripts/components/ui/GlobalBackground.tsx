@@ -8,7 +8,7 @@ export const GlobalBackground: React.FC = () => {
             <div className='absolute top-0 left-0 right-0 h-[600px] w-full overflow-hidden [mask-image:radial-gradient(50%_50%,white,transparent)] pointer-events-none z-0'>
                 <SparklesComp
                     id='global-space-sparkles'
-                    density={1600}
+                    density={1800}
                     direction='bottom'
                     speed={1}
                     color='#FFFFFF'
@@ -25,7 +25,7 @@ export const GlobalBackground: React.FC = () => {
                             border: '200px solid #3131f5',
                             filter: 'blur(92px)',
                             WebkitFilter: 'blur(92px)',
-                            opacity: 0.15,
+                            opacity: 0.25,
                         }}
                     />
                 </div>
@@ -36,7 +36,7 @@ export const GlobalBackground: React.FC = () => {
                 className='absolute top-0 left-[10%] right-[10%] w-[80%] h-full z-0 pointer-events-none'
                 style={{
                     backgroundImage: `radial-gradient(circle at center, #206ce8 0%, transparent 70%)`,
-                    opacity: 0.35,
+                    opacity: 0.5,
                     mixBlendMode: 'multiply',
                 }}
             />

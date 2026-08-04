@@ -8,6 +8,8 @@ import VpsDeployModal from '@/components/dashboard/VpsDeployModal'
 import PromoBannersRow from '@/components/dashboard/PromoBannersRow'
 import QuickServicesGrid from '@/components/dashboard/QuickServicesGrid'
 import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
+import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
+import { RocketLaunchIcon } from '@heroicons/react/24/outline'
 
 const LOCATION_FLAGS: Record<string, string> = {
     'New York, USA': 'https://flagcdn.com/us.svg',
@@ -172,19 +174,27 @@ export const DashboardContainer: React.FC = () => {
         <PageContentBlock title='Dashboard' showFlashKey='dashboard'>
             <div className='flex items-start justify-between font-sans mb-8 text-left'>
                 <div>
-                    <h2 className='text-2xl font-extrabold text-white tracking-tighter'>
-                        Cloud Instances & VPS
+                    <h2 className='text-2xl sm:text-3xl font-medium text-white flex gap-1.5'>
+                        <VerticalCutReveal
+                            splitBy='words'
+                            staggerDuration={0.12}
+                            staggerFrom='first'
+                            reverse={true}
+                            containerClassName='gap-1.5'
+                        >
+                            Cloud Instances & VPS
+                        </VerticalCutReveal>
                     </h2>
-                    <p className='text-xs text-neutral-400 mt-1 tracking-normal'>
+                    <p className='text-xs text-gray-300 font-normal mt-1'>
                         Manage, monitor, deploy, and scale your active cloud virtual servers.
                     </p>
                 </div>
 
                 <button
                     onClick={() => setDeployModalOpen(true)}
-                    className='px-4 py-2 bg-white hover:bg-neutral-200 text-black text-xs font-semibold rounded-[4px] shadow-sm transition-all duration-150 cursor-pointer flex items-center gap-1.5 shrink-0 border border-white'
+                    className='py-2.5 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs cursor-pointer transition flex items-center gap-2 shrink-0 active:scale-95'
                 >
-                    <span className='text-sm font-medium line-none'>+</span> Deploy VPS
+                    <RocketLaunchIcon className='w-4 h-4' /> Deploy VPS
                 </button>
             </div>
 
