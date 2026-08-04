@@ -170,21 +170,21 @@ export const DashboardContainer: React.FC = () => {
     return (
         <PageMaintenanceGuard pageKey='dashboard'>
         <PageContentBlock title='Dashboard' showFlashKey='dashboard'>
-            <div className='flex items-center justify-between font-sans mb-6'>
+            <div className='flex items-start justify-between font-sans mb-8 text-left'>
                 <div>
-                    <h2 className='text-2xl font-bold text-white tracking-tight'>
+                    <h2 className='text-2xl font-extrabold text-white tracking-tighter'>
                         Cloud Instances & VPS
                     </h2>
-                    <p className='text-xs text-gray-400 mt-1'>
+                    <p className='text-xs text-neutral-400 mt-1 tracking-normal'>
                         Manage, monitor, deploy, and scale your active cloud virtual servers.
                     </p>
                 </div>
 
                 <button
                     onClick={() => setDeployModalOpen(true)}
-                    className='px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/30 border border-blue-400/30 transition cursor-pointer flex items-center gap-1.5 shrink-0'
+                    className='px-4 py-2 bg-white hover:bg-neutral-200 text-black text-xs font-semibold rounded-[4px] shadow-sm transition-all duration-150 cursor-pointer flex items-center gap-1.5 shrink-0 border border-white'
                 >
-                    <span className='text-base font-normal line-none'>+</span> Deploy VPS
+                    <span className='text-sm font-medium line-none'>+</span> Deploy VPS
                 </button>
             </div>
 

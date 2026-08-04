@@ -90,49 +90,37 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div className='relative overflow-hidden bg-white/80 dark:bg-neutral-900/60 border border-slate-200/80 dark:border-white/10 rounded-2xl p-6 shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-blue-950/20 mb-8 backdrop-blur-xl font-sans hover:border-slate-300 dark:hover:border-white/20 transition-all'>
-            {/* Border Beam Accent Animation */}
-            <BorderBeam size={280} duration={14} delay={0} colorFrom='#3b82f6' colorTo='#8b5cf6' borderWidth={1.5} />
-
+    return (
+        <div className='relative overflow-hidden bg-[#0d0d0f]/80 border border-neutral-800/90 rounded-xl p-6 mb-8 font-sans transition-all text-left'>
             {/* Section Header */}
-            <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200/80 dark:border-white/[0.08]'>
-                <div className='flex items-center gap-3.5'>
-                    <div className='w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-center text-blue-500 dark:text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]'>
-                        <ServerSvgIcon className='w-5 h-5 text-blue-500 dark:text-blue-400' />
-                    </div>
-                    <div>
-                        <div className='flex items-center gap-2.5'>
-                            <h2 className='text-lg font-bold text-slate-900 dark:text-white tracking-tight font-sans'>Active Services</h2>
-                            <span className='px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-mono font-bold'>
-                                {servers.length}
-                            </span>
-                        </div>
-                        <p className='text-xs text-slate-400 mt-0.5 font-sans'>
-                            Virtual server instances deployed on your account. Each server lasts 30 days before expiration.
-                        </p>
-                    </div>
+            <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-8 pb-4 border-b border-neutral-800/80 text-left'>
+                <div className='flex items-center gap-3'>
+                    <h2 className='text-lg font-bold text-white tracking-tight font-sans'>Active Services</h2>
+                    <span className='px-2 py-0.5 rounded-full border border-neutral-700 text-neutral-400 text-xs font-mono font-normal bg-transparent'>
+                        {servers.length}
+                    </span>
                 </div>
             </div>
 
             {/* Table Content */}
             <div className='relative z-10'>
                 {loading ? (
-                    <div className='text-center py-16 text-slate-400 text-xs font-semibold flex flex-col items-center justify-center gap-3 font-sans'>
-                        <RotateCw className='w-6 h-6 animate-spin text-blue-500' />
-                        <span>Loading active services from panel...</span>
+                    <div className='text-center py-16 text-neutral-400 text-xs font-semibold flex flex-col items-center justify-center gap-3 font-sans'>
+                        <RotateCw className='w-5 h-5 animate-spin text-neutral-400' />
+                        <span>Loading active services...</span>
                     </div>
                 ) : servers.length === 0 ? (
-                    <div className='text-center py-14 px-4 border border-dashed border-white/[0.08] rounded-2xl bg-white/[0.02] backdrop-blur-xs font-sans'>
-                        <div className='w-14 h-14 mx-auto rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-slate-400 mb-3.5 shadow-lg'>
-                            <Layers className='w-7 h-7' />
+                    <div className='text-center py-14 px-4 border border-dashed border-neutral-800 rounded-xl bg-neutral-900/30 font-sans'>
+                        <div className='w-12 h-12 mx-auto rounded-xl bg-neutral-800/50 border border-neutral-700 flex items-center justify-center text-neutral-400 mb-3'>
+                            <Layers className='w-6 h-6' />
                         </div>
-                        <h3 className='text-sm font-bold text-slate-200'>No Active Virtual Services</h3>
-                        <p className='text-xs text-slate-400 mt-1 max-w-sm mx-auto leading-relaxed'>
+                        <h3 className='text-sm font-bold text-neutral-200'>No Active Virtual Services</h3>
+                        <p className='text-xs text-neutral-400 mt-1 max-w-sm mx-auto leading-relaxed'>
                             You haven't requested any VPS instances yet. Use your account BOLTs to deploy a 30-day server instance.
                         </p>
                         <button
                             onClick={onDeploy}
-                            className='mt-4 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs inline-flex items-center gap-2 shadow-lg shadow-blue-600/25 transition cursor-pointer active:scale-95'
+                            className='mt-4 px-4 py-2 rounded-[4px] bg-white hover:bg-neutral-200 text-black font-semibold text-xs inline-flex items-center gap-2 transition cursor-pointer shadow-sm'
                         >
                             <Plus className='w-4 h-4' /> Deploy VPS Instance Now
                         </button>
@@ -141,147 +129,128 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                     <div className='overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'>
                         <table className='w-full text-left border-collapse font-sans'>
                             <thead>
-                                <tr className='border-b border-white/[0.08] text-xs font-medium text-slate-400 pb-3 tracking-wide'>
-                                    <th className='py-3.5 px-3.5'>Service Name</th>
-                                    <th className='py-3.5 px-3.5'>Location</th>
-                                    <th className='py-3.5 px-3.5'>IP</th>
-                                    <th className='py-3.5 px-3.5'>CPU</th>
-                                    <th className='py-3.5 px-3.5'>Price</th>
-                                    <th className='py-3.5 px-3.5'>Due Date</th>
-                                    <th className='py-3.5 px-3.5'>Status</th>
-                                    <th className='py-3.5 px-3.5 text-right'>Action</th>
+                                <tr className='border-b border-neutral-800 text-[11px] font-medium text-neutral-400 tracking-wider uppercase'>
+                                    <th className='py-2.5 px-3.5'>Service Name</th>
+                                    <th className='py-2.5 px-3.5'>Location</th>
+                                    <th className='py-2.5 px-3.5'>IP</th>
+                                    <th className='py-2.5 px-3.5'>CPU</th>
+                                    <th className='py-2.5 px-3.5'>Price</th>
+                                    <th className='py-2.5 px-3.5'>Due Date</th>
+                                    <th className='py-2.5 px-3.5'>Status</th>
+                                    <th className='py-2.5 px-3.5 text-right'>Action</th>
                                 </tr>
                             </thead>
-                            <tbody className='divide-y divide-white/[0.04] text-xs font-medium text-slate-200'>
+                            <tbody className='divide-y divide-neutral-800/50 text-xs font-medium text-neutral-200'>
                                 {servers.map((srv) => {
                                     const isRevealed = !!revealedIps[srv.ip]
 
                                     return (
-                                        <tr key={srv.id} className='hover:bg-white/[0.03] transition-colors duration-150 group'>
-                                            {/* Service Name & SVG Icon */}
-                                            <td className='py-4 px-3.5 align-middle'>
-                                                <div className='font-bold text-white flex items-center gap-2.5 text-xs font-sans tracking-tight'>
-                                                    <ServerSvgIcon className='w-4 h-4 text-blue-400 shrink-0' />
-                                                    <Link to={`/servers/${srv.id}`} className='hover:text-blue-400 transition-colors'>
+                                        <tr
+                                            key={srv.id}
+                                            className='h-11 hover:bg-[#ffffff06] transition-colors duration-150 group border-l-2 border-l-transparent hover:border-l-emerald-500'
+                                        >
+                                            {/* Service Name */}
+                                            <td className='py-2.5 px-3.5 align-middle'>
+                                                <div className='font-semibold text-white flex items-center gap-2 text-xs font-sans tracking-tight'>
+                                                    <Link to={`/servers/${srv.id}`} className='hover:text-neutral-300 transition-colors'>
                                                         {srv.name}
                                                     </Link>
                                                 </div>
-                                                <div className='text-[10px] text-slate-500 font-mono tracking-tight mt-0.5 pl-6.5'>
-                                                    {srv.hostname}
-                                                </div>
                                             </td>
 
-                                            {/* Location (Circular Flag / Emoji + Text) */}
-                                            <td className='py-4 px-3.5 align-middle'>
-                                                <div className='flex items-center gap-2.5'>
+                                            {/* Location */}
+                                            <td className='py-2.5 px-3.5 align-middle'>
+                                                <div className='flex items-center gap-2'>
                                                     {srv.flag && (srv.flag.startsWith('http://') || srv.flag.startsWith('https://') || srv.flag.startsWith('/')) ? (
                                                         <img
                                                             src={srv.flag}
                                                             alt={srv.location}
-                                                            className='w-5 h-5 rounded-full object-cover shadow-xs border border-white/10 shrink-0'
+                                                            className='w-4 h-4 rounded-full object-cover border border-neutral-700 shrink-0'
                                                         />
                                                     ) : (
-                                                        <span className='text-sm leading-none shrink-0 flex items-center justify-center w-5.5 h-5.5 rounded-full bg-white/10 border border-white/15 shadow-xs font-sans'>
+                                                        <span className='text-xs leading-none shrink-0 font-sans'>
                                                             {srv.flag || '🌐'}
                                                         </span>
                                                     )}
-                                                    <span className='text-slate-300 font-semibold text-xs font-sans tracking-tight'>{srv.location}</span>
+                                                    <span className='text-neutral-300 font-medium text-xs font-sans'>{srv.location}</span>
                                                 </div>
                                             </td>
 
-                                            {/* IP Address Column: Blurred text with floating hover message bubble */}
-                                            <td className='py-4 px-3.5 align-middle min-w-[170px]'>
+                                            {/* IP Address Column */}
+                                            <td className='py-2.5 px-3.5 align-middle min-w-[150px] font-mono'>
                                                 {isRevealed ? (
-                                                    <div className='inline-flex items-center gap-2 font-mono text-xs text-slate-200 font-semibold bg-[#0d0e11] border border-blue-500/30 px-2.5 py-1 rounded-lg shadow-sm tracking-tight'>
+                                                    <div className='inline-flex items-center gap-2 text-xs text-neutral-200 font-mono'>
                                                         <span>{srv.ip}</span>
-                                                        <div className='flex items-center gap-1 border-l border-white/[0.08] pl-1.5 ml-0.5'>
-                                                            <button
-                                                                onClick={(e) => handleCopyIp(srv.ip, e)}
-                                                                title='Copy IP address'
-                                                                className='text-slate-400 hover:text-white transition-colors cursor-pointer p-0.5 rounded'
-                                                            >
-                                                                {copiedIp === srv.ip ? (
-                                                                    <Check className='w-3.5 h-3.5 text-emerald-400' />
-                                                                ) : (
-                                                                    <Copy className='w-3.5 h-3.5' />
-                                                                )}
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => toggleRevealIp(srv.ip, e)}
-                                                                title='Hide IP address'
-                                                                className='text-slate-400 hover:text-slate-200 transition-colors cursor-pointer p-0.5 rounded'
-                                                            >
-                                                                <EyeOff className='w-3.5 h-3.5' />
-                                                            </button>
-                                                        </div>
+                                                        <button
+                                                            onClick={(e) => handleCopyIp(srv.ip, e)}
+                                                            title='Copy IP address'
+                                                            className='text-neutral-400 hover:text-white transition-colors cursor-pointer p-0.5'
+                                                        >
+                                                            {copiedIp === srv.ip ? (
+                                                                <Check className='w-3.5 h-3.5 text-emerald-400' />
+                                                            ) : (
+                                                                <Copy className='w-3 h-3' />
+                                                            )}
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => toggleRevealIp(srv.ip, e)}
+                                                            title='Hide IP address'
+                                                            className='text-neutral-400 hover:text-white transition-colors cursor-pointer p-0.5'
+                                                        >
+                                                            <EyeOff className='w-3 h-3' />
+                                                        </button>
                                                     </div>
                                                 ) : (
-                                                    <div className='relative inline-block group/ip'>
-                                                        {/* Blurred IP text - clicking toggles reveal */}
-                                                        <span
-                                                            onClick={(e) => toggleRevealIp(srv.ip, e)}
-                                                            className='font-mono text-xs text-slate-300 blur-[4px] hover:blur-[2px] select-none cursor-pointer tracking-wider inline-block py-1 px-1.5 rounded transition-all duration-200 hover:text-white'
-                                                        >
-                                                            {srv.ip}
-                                                        </span>
-
-                                                        {/* Floating Tooltip Bubble on Hover */}
-                                                        <div className='absolute bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none opacity-0 group-hover/ip:opacity-100 transition-all duration-200 z-30 transform group-hover/ip:-translate-y-1'>
-                                                            <div className='bg-black/90 text-white text-[10px] font-sans font-semibold px-2.5 py-1 rounded-md border border-white/[0.1] shadow-xl whitespace-nowrap flex items-center gap-1.5'>
-                                                                <Eye className='w-3 h-3 text-blue-400' />
-                                                                <span>Click to review</span>
-                                                            </div>
-                                                            {/* Tooltip arrow */}
-                                                            <div className='w-2 h-2 bg-black/90 border-r border-b border-white/[0.1] rotate-45 mx-auto -mt-1' />
-                                                        </div>
-                                                    </div>
+                                                    <span
+                                                        onClick={(e) => toggleRevealIp(srv.ip, e)}
+                                                        className='font-mono text-xs text-neutral-400 blur-[3px] hover:blur-none select-none cursor-pointer tracking-wider inline-block transition-all duration-150 hover:text-white'
+                                                    >
+                                                        {srv.ip}
+                                                    </span>
                                                 )}
                                             </td>
 
-                                            {/* Dynamic CPU Usage Bar */}
-                                            <td className='py-4 px-3.5 align-middle'>
-                                                {renderDynamicCpuMeter(srv.cpu_usage)}
+                                            {/* CPU Percentage in Monospace (No Progress Bar) */}
+                                            <td className='py-2.5 px-3.5 align-middle font-mono text-xs text-neutral-300'>
+                                                {srv.cpu_usage}%
                                             </td>
 
-                                            {/* Price */}
-                                            <td className='py-4 px-3.5 align-middle font-mono text-xs font-semibold tracking-tight'>
-                                                <div className='inline-flex items-center gap-1.5 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg shadow-xs'>
-                                                    <BoltSvgIcon className='w-3.5 h-3.5 text-amber-400 shrink-0' />
-                                                    <span>{(srv.price ?? 5.00).toFixed(2)} BOLTs / 30d</span>
+                                            {/* Price Column */}
+                                            <td className='py-2.5 px-3.5 align-middle font-mono text-xs'>
+                                                <div className='inline-flex items-baseline text-neutral-300'>
+                                                    <span>{Math.round(srv.price ?? 30)} BOLTs</span>
+                                                    <span className='text-[10px] text-neutral-500 font-sans ml-1'>/ 30d</span>
                                                 </div>
                                             </td>
 
-                                            {/* Due Date */}
-                                            <td className='py-4 px-3.5 align-middle text-xs text-slate-300 font-medium font-sans tracking-tight'>
+                                            {/* Due Date in Monospace */}
+                                            <td className='py-2.5 px-3.5 align-middle font-mono text-xs text-neutral-400'>
                                                 {srv.due_date}
                                             </td>
 
-                                            {/* Status Badge */}
-                                            <td className='py-4 px-3.5 align-middle'>
-                                                <span
-                                                    className={`px-3.5 py-1 rounded-full text-xs font-mono font-semibold inline-block text-center transition-all tracking-tight ${
-                                                        srv.status === 'Active'
-                                                            ? 'bg-[#192f25] border border-[#22c55e]/30 text-[#22c55e]'
-                                                            : 'bg-[#37191e] border border-[#ef4444]/30 text-[#ef4444]'
-                                                    }`}
-                                                >
-                                                    {srv.status}
-                                                </span>
+                                            {/* Status: 4px dot + "Active" in small-caps, no background */}
+                                            <td className='py-2.5 px-3.5 align-middle'>
+                                                <div className='inline-flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-400'>
+                                                    <span
+                                                        className={`w-1 h-1 rounded-full shrink-0 ${
+                                                            srv.status === 'Active' ? 'bg-emerald-500' : 'bg-rose-500'
+                                                        }`}
+                                                    />
+                                                    <span>{srv.status === 'Active' ? 'Active' : srv.status.toUpperCase()}</span>
+                                                </div>
                                             </td>
 
-                                            {/* Action Button */}
-                                            <td className='py-4 px-3.5 text-right align-middle'>
+                                            {/* Action Button: Ghost/outline style, sharp corners, hover fill white text dark */}
+                                            <td className='py-2.5 px-3.5 text-right align-middle'>
                                                 <button
                                                     onClick={() => onRenew(srv)}
                                                     disabled={renewingId === srv.internal_id}
-                                                    className='px-3.5 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] text-slate-200 text-xs font-sans font-semibold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-95 cursor-pointer disabled:opacity-50 hover:text-white'
+                                                    className='px-3 py-1 rounded-[4px] border border-neutral-700/80 bg-transparent text-neutral-300 text-xs font-medium hover:bg-white hover:text-black hover:border-white transition-all duration-150 cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5 group/btn'
                                                 >
-                                                    {renewingId === srv.internal_id ? (
-                                                        <RotateCw className='w-3.5 h-3.5 text-blue-400 animate-spin' />
-                                                    ) : (
-                                                        <Calendar className='w-3.5 h-3.5 text-blue-400' />
+                                                    {renewingId === srv.internal_id && (
+                                                        <RotateCw className='w-3 h-3 animate-spin text-neutral-400' />
                                                     )}
-                                                    <span>Renew (+30d)</span>
+                                                    <span>Renew</span>
                                                 </button>
                                             </td>
                                         </tr>

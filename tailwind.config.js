@@ -47,8 +47,8 @@ module.exports = {
                 },
             },
             fontFamily: {
-                sans: ['"Plus Jakarta Sans"', 'Inter', ...defaultTheme.fontFamily.sans],
-                mono: ['"JetBrains Mono"', ...defaultTheme.fontFamily.mono],
+                sans: ['"Geist"', '"DM Sans"', ...defaultTheme.fontFamily.sans],
+                mono: ['"Geist Mono"', '"JetBrains Mono"', ...defaultTheme.fontFamily.mono],
             },
             boxShadow: {
                 light: '0 4px 4px 0 rgba(0,0,0,.02)',
