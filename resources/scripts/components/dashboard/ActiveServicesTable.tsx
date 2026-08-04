@@ -93,7 +93,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                     <div className='overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'>
                         <table className='w-full text-left border-collapse font-sans'>
                             <thead>
-                                <tr className='border-b border-neutral-700/80 text-xs font-bold uppercase tracking-wider text-gray-400 pb-3'>
+                                <tr className='border-b border-neutral-700/80 text-xs font-bold uppercase tracking-wider text-gray-400 opacity-100 pb-3'>
                                     <th className='py-3 px-4'>Service Name</th>
                                     <th className='py-3 px-4'>Location</th>
                                     <th className='py-3 px-4'>IP</th>
@@ -117,12 +117,12 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                             <td className='relative py-3 px-4 align-middle'>
                                                 <div className='absolute left-0 top-0 bottom-0 w-[2px] bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150' />
                                                 <div className='flex flex-col justify-center text-left pl-1'>
-                                                    <div className='font-bold text-white text-sm font-sans tracking-tight leading-snug'>
+                                                    <div className='font-semibold text-white text-sm font-sans tracking-tight leading-snug'>
                                                         <Link to={`/servers/${srv.id}`} className='hover:text-blue-400 transition-colors'>
                                                             {srv.name}
                                                         </Link>
                                                     </div>
-                                                    <div className='text-[11px] text-gray-400 font-mono tracking-tight leading-none mt-0.5'>
+                                                    <div className='text-xs text-gray-400 font-mono tracking-tight leading-none mt-0.5'>
                                                         {srv.hostname}
                                                     </div>
                                                 </div>
@@ -204,7 +204,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                             </td>
 
                                             {/* Due Date Cell */}
-                                            <td className='py-3 px-4 align-middle font-mono text-xs text-gray-400 whitespace-nowrap'>
+                                            <td className='py-3 px-4 align-middle font-mono text-xs text-gray-300 whitespace-nowrap'>
                                                 {srv.due_date}
                                             </td>
 

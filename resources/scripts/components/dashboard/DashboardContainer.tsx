@@ -192,9 +192,9 @@ export const DashboardContainer: React.FC = () => {
         <PageMaintenanceGuard pageKey='dashboard'>
         <PageContentBlock title='Dashboard' showFlashKey='dashboard'>
             <div className='pb-12'>
-                <div className='flex items-start justify-between font-sans mb-4 text-left'>
+                <div className='flex items-start justify-between font-sans mb-8 mt-6 text-left'>
                     <div>
-                        <h2 className='text-2xl sm:text-3xl font-medium text-white flex gap-1.5'>
+                        <h2 className='text-3xl font-semibold text-white flex gap-1.5'>
                             <VerticalCutReveal
                                 splitBy='words'
                                 staggerDuration={0.12}
@@ -205,7 +205,7 @@ export const DashboardContainer: React.FC = () => {
                                 Cloud Instances & VPS
                             </VerticalCutReveal>
                         </h2>
-                        <p className='text-[11px] text-gray-400 font-normal mt-1'>
+                        <p className='text-sm text-gray-400 font-normal mt-1'>
                             Manage, monitor, deploy, and scale your active cloud virtual servers.
                         </p>
                     </div>
