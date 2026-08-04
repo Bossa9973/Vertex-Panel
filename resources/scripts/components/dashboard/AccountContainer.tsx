@@ -35,6 +35,7 @@ interface AccountDetails {
     google_id: string | null
     google_email: string | null
     has_password: boolean
+    rootAdmin?: boolean
 }
 
 export const AccountContainer: React.FC = () => {

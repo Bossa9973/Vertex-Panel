@@ -9,7 +9,17 @@ import Card from '@/components/elements/Card'
 
 const ServerTerminalBlock = () => {
     const serverData = ServerContext.useStoreState(state => state.server.data)
+    const uuid = serverData!.uuid
     const rawCreatedAt = (serverData as any)?.createdAt || (serverData as any)?.created_at
+    const { t } = useTranslation('server.overview')
+    const { t: tStrings } = useTranslation('strings')
+
+    const [terminalMode, setTerminalMode] = useState<'both' | 'sshx'>('both')
+    const [sshCmd, setSshCmd] = useState<string | null>(null)
+    const [tmateLoading, setTmateLoading] = useState<boolean>(false)
+    const [modalOpened, setModalOpened] = useState<boolean>(false)
+    const [copiedSsh, setCopiedSsh] = useState<boolean>(false)
+    const [secondsLeft, setSecondsLeft] = useState<number>(0)
 
     useEffect(() => {
         if (!rawCreatedAt) return
