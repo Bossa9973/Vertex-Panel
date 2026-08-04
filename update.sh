@@ -138,9 +138,15 @@ perform_update() {
     spinner_stop
     success "Panel put into maintenance mode"
 
-    # Download latest ZIP release from GitHub
-    local tmp_zip="/tmp/vertex-panel-update.zip"
-    local tmp_dir="/tmp/vertex-panel-update-src"
+    # Track launching script path if executed from a local file
+    local launch_script=""
+    if [[ -n "${0:-}" && -f "$0" ]]; then
+        launch_script="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
+    fi
+
+    # Process-isolated temp paths to prevent workspace/execution path collision
+    local tmp_zip="/tmp/vertex-panel-update-$$.zip"
+    local tmp_dir="/tmp/vertex-panel-update-src-$$"
 
     spinner_start "Downloading latest release from GitHub (${GITHUB_REPO})"
     if curl -fsSL "https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip" -o "$tmp_zip" 2>/tmp/vertex_update.log; then
@@ -180,12 +186,21 @@ perform_update() {
         exit 1
     fi
 
-    # Ensure update.sh is preserved in panel directory and global PATH (never deleted)
+    # Ensure update.sh is preserved in panel directory, global PATH, and original launch location (never deleted)
     if [[ -f "${src_dir}/update.sh" ]]; then
         cp -f "${src_dir}/update.sh" "${INSTALL_DIR}/update.sh" 2>/dev/null || true
         chmod +x "${INSTALL_DIR}/update.sh" 2>/dev/null || true
+
+        cp -f "${src_dir}/update.sh" "/usr/local/bin/update.sh" 2>/dev/null || true
+        chmod +x "/usr/local/bin/update.sh" 2>/dev/null || true
+
         cp -f "${src_dir}/update.sh" "/usr/local/bin/vertex-update" 2>/dev/null || true
         chmod +x "/usr/local/bin/vertex-update" 2>/dev/null || true
+
+        if [[ -n "$launch_script" && -f "$launch_script" ]]; then
+            cp -f "${src_dir}/update.sh" "$launch_script" 2>/dev/null || true
+            chmod +x "$launch_script" 2>/dev/null || true
+        fi
     fi
 
     # Clean up downloaded zip
@@ -255,6 +270,7 @@ print_summary() {
     printf "   ${BOLD}Previous Version:${RESET} ${DIM}%s${RESET}\n" "${OLD_VER:-1.0.0}"
     printf "   ${BOLD}Current Version:${RESET}  ${GREEN}${BOLD}%s${RESET}\n" "${NEW_VER:-1.0.0}"
     printf "   ${BOLD}Panel Dir:${RESET}        ${DIM}%s${RESET}\n" "$INSTALL_DIR"
+    printf "   ${BOLD}Updater Script:${RESET}   ${GREEN}%s/update.sh${RESET} (and ${GREEN}vertex-update${RESET} in PATH)\n" "$INSTALL_DIR"
     printf "\n"
     printf "   ${BOLD}Worker Status:${RESET}\n"
     supervisorctl status 2>/dev/null | sed 's/^/   /' || printf "   Supervisor workers restarted\n"
