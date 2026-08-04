@@ -28,6 +28,13 @@ interface Props {
     renewingId: number | null
 }
 
+const formatOsName = (name?: string) => {
+    if (!name) return 'Ubuntu 22.04'
+    let cleaned = name.replace(/[-_]/g, ' ').replace(/\(.*?\)/g, '').trim()
+    const match = cleaned.match(/^([A-Za-z]+\s*\d+(\.\d+)?)/)
+    return match ? match[1] : cleaned.split(' ')[0] || cleaned
+}
+
 const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }: Props) => {
     const [copiedIp, setCopiedIp] = useState<string | null>(null)
     const [revealedIps, setRevealedIps] = useState<Record<string, boolean>>({})
@@ -47,7 +54,10 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border border-white/[0.06] ring-1 ring-blue-500/10 shadow-[0px_0px_60px_0px_rgba(9,0,255,0.15)] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'>
+        <div className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-t-2 border-t-blue-500/30 border-x border-b border-white/[0.06] shadow-[0px_0px_120px_-20px_rgba(9,0,255,0.4)] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'>
+            {/* Subtle top-to-bottom overlay gradient */}
+            <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0' />
+
             {/* Section Header */}
             <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-neutral-700/80 text-left'>
                 <div className='flex items-center gap-3'>
@@ -103,26 +113,26 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                     return (
                                         <tr
                                             key={srv.id}
-                                            className='relative h-[52px] border-b border-neutral-700/80 group/row hover:bg-white/[0.03] transition-colors duration-150'
+                                            className='h-14 border-b border-neutral-700/80 group/row hover:bg-white/[0.03] transition-colors duration-150'
                                         >
-                                            {/* Hover Left Blue Accent */}
-                                            <div className='absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150' />
-
-                                            {/* Service Name & Subdomain */}
-                                            <td className='py-3 px-4 align-middle'>
-                                                <div className='font-bold text-white text-sm font-sans tracking-tight'>
-                                                    <Link to={`/servers/${srv.id}`} className='hover:text-blue-400 transition-colors'>
-                                                        {srv.name}
-                                                    </Link>
-                                                </div>
-                                                <div className='text-[11px] text-gray-400 font-mono tracking-tight mt-0.5'>
-                                                    {srv.hostname}
+                                            {/* Service Name & Subdomain Cell with Hover Accent */}
+                                            <td className='relative py-3 px-4 align-middle'>
+                                                <div className='absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150' />
+                                                <div className='flex flex-col justify-center text-left'>
+                                                    <div className='font-bold text-white text-sm font-sans tracking-tight leading-snug'>
+                                                        <Link to={`/servers/${srv.id}`} className='hover:text-blue-400 transition-colors'>
+                                                            {srv.name}
+                                                        </Link>
+                                                    </div>
+                                                    <div className='text-[11px] text-gray-400 font-mono tracking-tight leading-none mt-0.5'>
+                                                        {srv.hostname}
+                                                    </div>
                                                 </div>
                                             </td>
 
-                                            {/* Location */}
-                                            <td className='py-3 px-4 align-middle'>
-                                                <div className='flex items-center gap-2 text-gray-300 text-xs font-medium'>
+                                            {/* Location Cell: Single line with flag emoji */}
+                                            <td className='py-3 px-4 align-middle whitespace-nowrap'>
+                                                <div className='flex items-center gap-2 text-gray-300 text-xs font-medium whitespace-nowrap'>
                                                     {srv.flag && (srv.flag.startsWith('http://') || srv.flag.startsWith('https://') || srv.flag.startsWith('/')) ? (
                                                         <img
                                                             src={srv.flag}
@@ -134,12 +144,12 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                             {srv.flag || '🌐'}
                                                         </span>
                                                     )}
-                                                    <span>{srv.location}</span>
+                                                    <span className='whitespace-nowrap'>{srv.location}</span>
                                                 </div>
                                             </td>
 
-                                            {/* IP Address */}
-                                            <td className='py-3 px-4 align-middle min-w-[150px] font-mono'>
+                                            {/* IP Address Cell */}
+                                            <td className='py-3 px-4 align-middle min-w-[150px] font-mono whitespace-nowrap'>
                                                 {isRevealed ? (
                                                     <div className='inline-flex items-center gap-2 text-xs text-gray-200 font-mono'>
                                                         <span>{srv.ip}</span>
@@ -172,9 +182,9 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 )}
                                             </td>
 
-                                            {/* OS Template Column */}
-                                            <td className='py-3 px-4 align-middle text-xs text-gray-300 font-sans'>
-                                                <div className='flex items-center gap-1.5'>
+                                            {/* OS Template Column: Short truncated OS name */}
+                                            <td className='py-3 px-4 align-middle text-xs text-gray-300 font-sans max-w-[120px] whitespace-nowrap overflow-hidden'>
+                                                <div className='flex items-center gap-1.5 truncate'>
                                                     {srv.template_icon ? (
                                                         <img
                                                             src={srv.template_icon}
@@ -182,26 +192,26 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                             className='w-4 h-4 object-contain inline mr-1.5 shrink-0'
                                                         />
                                                     ) : null}
-                                                    <span className='truncate max-w-[120px]'>{srv.os_name || 'Ubuntu 22.04'}</span>
+                                                    <span className='truncate'>{formatOsName(srv.os_name)}</span>
                                                 </div>
                                             </td>
 
-                                            {/* Price: 30 BOLTs in text-amber-400 font-semibold with BoltIcon w-3.5 h-3.5 text-amber-400 fill-amber-400/20 */}
-                                            <td className='py-3 px-4 align-middle font-mono text-xs'>
-                                                <div className='flex items-center gap-1 font-sans text-xs'>
-                                                    <BoltIcon className='w-3.5 h-3.5 text-amber-400 fill-amber-400/20 inline shrink-0' />
+                                            {/* Price Cell: SINGLE cell on one line */}
+                                            <td className='py-3 px-4 align-middle font-mono text-xs whitespace-nowrap'>
+                                                <div className='flex items-center gap-1 font-sans text-xs whitespace-nowrap'>
+                                                    <BoltIcon className='w-3.5 h-3.5 text-amber-400 fill-amber-400/20 inline mr-1 shrink-0' />
                                                     <span className='text-amber-400 font-semibold'>{Math.round(srv.price ?? 30)} BOLTs</span>
                                                     <span className='text-gray-400 text-xs ml-1'>/ 30d</span>
                                                 </div>
                                             </td>
 
-                                            {/* Due Date */}
-                                            <td className='py-3 px-4 align-middle font-mono text-xs text-gray-400'>
+                                            {/* Due Date Cell */}
+                                            <td className='py-3 px-4 align-middle font-mono text-xs text-gray-400 whitespace-nowrap'>
                                                 {srv.due_date}
                                             </td>
 
-                                            {/* Status: EXACTLY node Online pill from Step 2 */}
-                                            <td className='py-3 px-4 align-middle'>
+                                            {/* Status Cell */}
+                                            <td className='py-3 px-4 align-middle whitespace-nowrap'>
                                                 <span
                                                     className={`text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold uppercase tracking-wide ${
                                                         srv.status === 'Active'
@@ -213,8 +223,8 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 </span>
                                             </td>
 
-                                            {/* Action Button: py-2 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white hover:border-neutral-600 font-bold text-xs cursor-pointer transition-all */}
-                                            <td className='py-3 px-4 text-right align-middle'>
+                                            {/* Action Button Cell */}
+                                            <td className='py-3 px-4 text-right align-middle whitespace-nowrap'>
                                                 <button
                                                     onClick={() => onRenew(srv)}
                                                     disabled={renewingId === srv.internal_id}
