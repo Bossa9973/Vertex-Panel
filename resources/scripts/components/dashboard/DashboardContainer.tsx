@@ -40,7 +40,7 @@ const extractIpAddress = (srv: any, idx: number): string => {
     }
     if (srv.ip_address && typeof srv.ip_address === 'string') return srv.ip_address
     if (srv.ip && typeof srv.ip === 'string') return srv.ip
-    return ['185.220.101.42', '45.142.214.18', '194.165.16.89', '103.195.103.5'][idx % 4]
+    return '—'
 }
 
 export const DashboardContainer: React.FC = () => {
