@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ServerContext } from '@/state/server'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid'
-import { CheckIcon, ClipboardDocumentIcon, SparklesIcon, CommandLineIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, ClipboardDocumentIcon, SparklesIcon, CommandLineIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 import { Button, Modal } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 import http from '@/api/http'
@@ -111,7 +111,30 @@ const ServerTerminalBlock = () => {
 
     return (
         <>
-            <Card className='flex flex-col col-span-10 md:col-span-5 font-sans'>
+            <Card className='relative flex flex-col col-span-10 md:col-span-5 font-sans overflow-hidden'>
+                {/* 5-minute Full Component Popup Overlay after Deploy */}
+                {secondsLeft > 0 && (
+                    <div className='absolute inset-0 z-30 backdrop-blur-md bg-neutral-950/92 border border-amber-500/30 rounded-2xl flex flex-col items-center justify-center text-center p-6 space-y-4 shadow-2xl transition-all'>
+                        <div className='w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/10 animate-pulse'>
+                            <LockClosedIcon className='w-6 h-6' />
+                        </div>
+                        <div className='space-y-1.5 max-w-sm'>
+                            <h6 className='font-extrabold text-base text-amber-300 tracking-tight flex items-center justify-center gap-1.5'>
+                                First-Boot Setup in Progress
+                            </h6>
+                            <p className='text-xs text-amber-200/80 leading-relaxed font-sans'>
+                                tmate terminal access is locked for the first 5 minutes post-deployment to ensure Cloud-Init finishes initial OS package installation cleanly.
+                            </p>
+                        </div>
+                        <div className='flex items-center gap-2 bg-amber-950/90 border border-amber-500/40 px-4 py-2 rounded-xl text-amber-300 shadow-inner'>
+                            <span className='text-xs font-bold uppercase tracking-wider text-amber-400/90'>Time Remaining:</span>
+                            <span className='font-mono font-extrabold text-sm text-amber-200 tracking-widest'>
+                                {formatTime(secondsLeft)}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
                 <h5 className='h5'>{t('terminal.title')}</h5>
                 <p className='description-small mt-1'>
                     {t('terminal.description')}

@@ -13,7 +13,6 @@ import NavigationBarProvider from '@/components/NavigationBarProvider'
 
 
 import GlobalBackground from '@/components/ui/GlobalBackground'
-import AudioStreamPlayer from '@/components/ui/AudioStreamPlayer'
 
 export type Route = {
     handle?: Handle
@@ -84,7 +83,6 @@ const router = createBrowserRouter([
                     <div className='relative z-10 min-h-screen text-slate-900 dark:text-stone-100 selection:bg-blue-500/30'>
                         <NavigationBar />
                         <Outlet />
-                        <AudioStreamPlayer />
                     </div>
                 </NavigationBarProvider>
             </AuthenticatedRoutes>
