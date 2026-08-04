@@ -15,6 +15,7 @@ class ServerEloquentData extends Data
         public string           $name,
         public ?string          $description,
         public ?string          $status,
+        public ?string          $created_at,
         public ?string          $expires_at,
         public ServerUsagesData $usages,
         public ServerLimitsData $limits,
