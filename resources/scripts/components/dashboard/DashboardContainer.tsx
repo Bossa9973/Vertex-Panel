@@ -212,9 +212,9 @@ export const DashboardContainer: React.FC = () => {
 
                     <button
                         onClick={() => setDeployModalOpen(true)}
-                        className='py-2.5 px-5 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition shrink-0 active:scale-95'
+                        className='py-3 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-sm flex items-center gap-2.5 cursor-pointer transition shrink-0 active:scale-95'
                     >
-                        <RocketLaunchIcon className='w-4 h-4' /> Deploy VPS
+                        <RocketLaunchIcon className='w-5 h-5' /> Deploy VPS
                     </button>
                 </div>
 
