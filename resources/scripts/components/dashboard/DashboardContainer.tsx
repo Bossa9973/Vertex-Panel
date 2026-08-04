@@ -191,53 +191,55 @@ export const DashboardContainer: React.FC = () => {
     return (
         <PageMaintenanceGuard pageKey='dashboard'>
         <PageContentBlock title='Dashboard' showFlashKey='dashboard'>
-            <div className='flex items-start justify-between font-sans mb-8 text-left'>
-                <div>
-                    <h2 className='text-2xl sm:text-3xl font-medium text-white flex gap-1.5'>
-                        <VerticalCutReveal
-                            splitBy='words'
-                            staggerDuration={0.12}
-                            staggerFrom='first'
-                            reverse={true}
-                            containerClassName='gap-1.5'
-                        >
-                            Cloud Instances & VPS
-                        </VerticalCutReveal>
-                    </h2>
-                    <p className='text-xs text-gray-300 font-normal mt-1'>
-                        Manage, monitor, deploy, and scale your active cloud virtual servers.
-                    </p>
+            <div className='pb-12'>
+                <div className='flex items-start justify-between font-sans mb-4 text-left'>
+                    <div>
+                        <h2 className='text-2xl sm:text-3xl font-medium text-white flex gap-1.5'>
+                            <VerticalCutReveal
+                                splitBy='words'
+                                staggerDuration={0.12}
+                                staggerFrom='first'
+                                reverse={true}
+                                containerClassName='gap-1.5'
+                            >
+                                Cloud Instances & VPS
+                            </VerticalCutReveal>
+                        </h2>
+                        <p className='text-[11px] text-gray-400 font-normal mt-1'>
+                            Manage, monitor, deploy, and scale your active cloud virtual servers.
+                        </p>
+                    </div>
+
+                    <button
+                        onClick={() => setDeployModalOpen(true)}
+                        className='py-2.5 px-5 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition shrink-0 active:scale-95'
+                    >
+                        <RocketLaunchIcon className='w-4 h-4' /> Deploy VPS
+                    </button>
                 </div>
 
-                <button
-                    onClick={() => setDeployModalOpen(true)}
-                    className='py-2.5 px-5 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition shrink-0 active:scale-95'
-                >
-                    <RocketLaunchIcon className='w-4 h-4' /> Deploy VPS
-                </button>
+                <PromoBannersRow />
+
+                <ActiveServicesTable
+                    servers={servers}
+                    loading={loading}
+                    renewingId={renewingId}
+                    onRenew={handleRenew}
+                    onDeploy={() => setDeployModalOpen(true)}
+                />
+
+                <QuickServicesGrid
+                    onDeploy={() => setDeployModalOpen(true)}
+                />
+
+                <VpsDeployModal
+                    opened={deployModalOpen}
+                    onClose={() => setDeployModalOpen(false)}
+                    onSuccess={() => {
+                        fetchServers()
+                    }}
+                />
             </div>
-
-            <PromoBannersRow />
-
-            <ActiveServicesTable
-                servers={servers}
-                loading={loading}
-                renewingId={renewingId}
-                onRenew={handleRenew}
-                onDeploy={() => setDeployModalOpen(true)}
-            />
-
-            <QuickServicesGrid
-                onDeploy={() => setDeployModalOpen(true)}
-            />
-
-            <VpsDeployModal
-                opened={deployModalOpen}
-                onClose={() => setDeployModalOpen(false)}
-                onSuccess={() => {
-                    fetchServers()
-                }}
-            />
         </PageContentBlock>
         </PageMaintenanceGuard>
     )

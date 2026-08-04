@@ -112,7 +112,7 @@ const NavigationBar = () => {
     }
 
     return (
-        <div className={isDark ? 'bg-neutral-950/95 backdrop-blur-2xl w-full border-b border-white/10 font-sans shadow-lg shadow-blue-950/20' : 'bg-white/95 backdrop-blur-2xl w-full border-b border-slate-200/80 font-sans shadow-md'}>
+        <div className={isDark ? 'bg-neutral-950/95 backdrop-blur-2xl w-full border-b border-white/[0.05] font-sans shadow-lg shadow-blue-950/20' : 'bg-white/95 backdrop-blur-2xl w-full border-b border-slate-200/80 font-sans shadow-md'}>
             {isAdminArea && <AdminBanner />}
             <LoadingOverlay visible={isLoggingOut} zIndex={4000} />
             <ContentContainer ref={topBar} className='pt-3 pb-1.5 relative'>

@@ -30,9 +30,7 @@ interface Props {
 
 const formatOsName = (name?: string) => {
     if (!name) return 'Ubuntu 22.04'
-    let cleaned = name.replace(/[-_]/g, ' ').replace(/\(.*?\)/g, '').trim()
-    const match = cleaned.match(/^([A-Za-z]+\s*\d+(\.\d+)?)/)
-    return match ? match[1] : cleaned.split(' ')[0] || cleaned
+    return name.replace(/[-_]/g, ' ').replace(/\(.*?\)/g, '').trim()
 }
 
 const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }: Props) => {
@@ -54,7 +52,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
     }
 
     return (
-        <div className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-t-2 border-t-blue-500/30 border-x border-b border-white/[0.06] shadow-[0px_0px_120px_-20px_rgba(9,0,255,0.4)] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'>
+        <div className='p-6 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-t-2 border-t-blue-500/20 border-x border-b border-white/[0.06] shadow-[0px_0px_120px_-20px_rgba(9,0,255,0.4)] text-white relative overflow-hidden rounded-2xl mb-8 font-sans text-left'>
             {/* Subtle top-to-bottom overlay gradient */}
             <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0' />
 
@@ -62,7 +60,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
             <div className='relative z-10 flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-neutral-700/80 text-left'>
                 <div className='flex items-center gap-3'>
                     <h2 className='text-lg font-bold text-white tracking-tight font-sans'>Active Services</h2>
-                    <span className='bg-neutral-900/90 border border-gray-700/80 text-gray-400 text-xs rounded-full px-2 py-0.5 font-mono font-medium'>
+                    <span className='bg-neutral-800 border border-neutral-700 text-gray-400 text-xs rounded-full px-2 py-0.5 font-mono font-medium'>
                         {servers.length}
                     </span>
                 </div>
@@ -113,12 +111,12 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                     return (
                                         <tr
                                             key={srv.id}
-                                            className='h-14 border-b border-neutral-700/80 group/row hover:bg-white/[0.03] transition-colors duration-150'
+                                            className='relative h-14 border-b border-neutral-700/80 group hover:bg-white/[0.05] transition-colors duration-150'
                                         >
                                             {/* Service Name & Subdomain Cell with Hover Accent */}
                                             <td className='relative py-3 px-4 align-middle'>
-                                                <div className='absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150' />
-                                                <div className='flex flex-col justify-center text-left'>
+                                                <div className='absolute left-0 top-0 bottom-0 w-[2px] bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150' />
+                                                <div className='flex flex-col justify-center text-left pl-1'>
                                                     <div className='font-bold text-white text-sm font-sans tracking-tight leading-snug'>
                                                         <Link to={`/servers/${srv.id}`} className='hover:text-blue-400 transition-colors'>
                                                             {srv.name}
@@ -182,21 +180,21 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 )}
                                             </td>
 
-                                            {/* OS Template Column: Short truncated OS name */}
-                                            <td className='py-3 px-4 align-middle text-xs text-gray-300 font-sans max-w-[120px] whitespace-nowrap overflow-hidden'>
+                                            {/* OS Template Column */}
+                                            <td className='py-3 px-4 align-middle text-xs text-gray-300 font-sans max-w-[140px] whitespace-nowrap overflow-hidden'>
                                                 <div className='flex items-center gap-1.5 truncate'>
                                                     {srv.template_icon ? (
                                                         <img
                                                             src={srv.template_icon}
                                                             alt={srv.os_name || 'OS'}
-                                                            className='w-4 h-4 object-contain inline mr-1.5 shrink-0'
+                                                            className='w-4 h-4 inline mr-1.5 object-contain shrink-0'
                                                         />
                                                     ) : null}
                                                     <span className='truncate'>{formatOsName(srv.os_name)}</span>
                                                 </div>
                                             </td>
 
-                                            {/* Price Cell: SINGLE cell on one line */}
+                                            {/* Price Cell */}
                                             <td className='py-3 px-4 align-middle font-mono text-xs whitespace-nowrap'>
                                                 <div className='flex items-center gap-1 font-sans text-xs whitespace-nowrap'>
                                                     <BoltIcon className='w-3.5 h-3.5 text-amber-400 fill-amber-400/20 inline mr-1 shrink-0' />
@@ -228,7 +226,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                                 <button
                                                     onClick={() => onRenew(srv)}
                                                     disabled={renewingId === srv.internal_id}
-                                                    className='py-2 px-4 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white hover:border-neutral-600 font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 disabled:opacity-50'
+                                                    className='py-2 px-4 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-neutral-500 text-gray-300 hover:text-white font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 disabled:opacity-50'
                                                 >
                                                     {renewingId === srv.internal_id && (
                                                         <RotateCw className='w-3 h-3 animate-spin text-blue-400' />
