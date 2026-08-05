@@ -25,7 +25,12 @@ class RouteServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Route::bind('server', function ($value) {
-            return Server::query()->where(strlen($value) === 8 ? 'uuid_short' : 'uuid', $value)
+            return Server::query()
+                ->where('uuid_short', $value)
+                ->orWhere('uuid', $value)
+                ->when(is_numeric($value), function ($query) use ($value) {
+                    return $query->orWhere('id', (int) $value);
+                })
                 ->firstOrFail();
         });
 

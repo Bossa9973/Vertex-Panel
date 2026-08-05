@@ -103,15 +103,17 @@ const AdminServerRouter = () => {
     )
     const { t: tStrings } = useTranslation('strings')
 
+    const serverId = match?.params.id
+
     const visibleRoutes = [
         {
             name: 'Overview',
-            path: `/admin/servers/:id`,
+            path: `/admin/servers/${serverId}`,
             end: true,
         },
         {
             name: 'Settings',
-            path: `/admin/servers/:id/settings`,
+            path: `/admin/servers/${serverId}/settings`,
         },
     ]
 

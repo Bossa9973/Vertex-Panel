@@ -124,34 +124,36 @@ export const routes: Route[] = [
 ]
 
 const AdminNodeRouter = () => {
+    const match = useMatch('/admin/nodes/:nodeId/*')
+    const nodeId = match?.params.nodeId
     const { t: tStrings } = useTranslation('strings')
     const { data: node } = useNodeSWR()
 
     const routes = [
         {
             name: 'Overview',
-            path: `/admin/nodes/:nodeId`,
+            path: `/admin/nodes/${nodeId}`,
             end: true,
         },
         {
             name: 'Servers',
-            path: `/admin/nodes/:nodeId/servers`,
+            path: `/admin/nodes/${nodeId}/servers`,
         },
         {
             name: 'ISOs',
-            path: `/admin/nodes/:nodeId/isos`,
+            path: `/admin/nodes/${nodeId}/isos`,
         },
         {
             name: 'Templates',
-            path: `/admin/nodes/:nodeId/templates`,
+            path: `/admin/nodes/${nodeId}/templates`,
         },
         {
             name: 'IP Addresses',
-            path: `/admin/nodes/:nodeId/addresses`,
+            path: `/admin/nodes/${nodeId}/addresses`,
         },
         {
             name: 'Settings',
-            path: `/admin/nodes/:nodeId/settings`,
+            path: `/admin/nodes/${nodeId}/settings`,
         },
     ]
 
