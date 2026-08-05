@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { WrenchScrewdriverIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
-import { Button } from '@mantine/core'
 import { useStoreState } from 'easy-peasy'
 import http from '@/api/http'
-import Card from '@/components/elements/Card'
+import GlobalBackground from '@/components/ui/GlobalBackground'
 
 export type MaintenancePageKey = 'dashboard' | 'servers' | 'earn' | 'billing' | 'account' | 'store' | 'tickets'
 
@@ -70,14 +69,16 @@ export const PageMaintenanceGuard: React.FC<Props> = ({ pageKey, children }) => 
 
     if (isUnderMaintenance) {
         return (
-            <div className='min-h-[70vh] flex items-center justify-center p-4 font-sans'>
-                <Card className='max-w-xl w-full text-center p-8 bg-neutral-900/90 border border-amber-500/30 rounded-3xl shadow-2xl backdrop-blur-2xl space-y-6'>
-                    <div className='w-20 h-20 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-inner shadow-amber-500/10'>
-                        <WrenchScrewdriverIcon className='w-10 h-10 animate-bounce' />
+            <div className='relative min-h-[70vh] flex items-center justify-center p-4 font-sans'>
+                <GlobalBackground />
+
+                <div className='relative z-10 max-w-md w-full text-center p-8 bg-black/40 backdrop-blur-sm border border-white/[0.04] rounded-2xl shadow-[0px_0px_120px_-20px_#0900ff] border-t border-t-blue-500/20 space-y-6'>
+                    <div className='w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400'>
+                        <WrenchScrewdriverIcon className='w-6 h-6' />
                     </div>
 
                     <div className='space-y-2'>
-                        <span className='px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30 inline-block'>
+                        <span className='bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full text-[10px] px-2.5 py-0.5 font-semibold uppercase tracking-wide inline-block'>
                             Under Maintenance
                         </span>
                         <h2 className='text-2xl font-bold text-white tracking-tight'>
@@ -85,28 +86,27 @@ export const PageMaintenanceGuard: React.FC<Props> = ({ pageKey, children }) => 
                         </h2>
                     </div>
 
-                    <p className='text-sm text-gray-300 leading-relaxed bg-neutral-950/80 p-4 rounded-2xl border border-white/10 text-left'>
+                    <p className='text-sm text-gray-400 text-center max-w-xs mx-auto leading-relaxed'>
                         {status.message || 'This section is currently undergoing scheduled maintenance. Please check back shortly.'}
                     </p>
 
                     <div className='flex items-center justify-center gap-3 pt-2'>
-                        <Button
-                            variant='outline'
-                            className='border-white/20 text-gray-200 hover:bg-white/5 cursor-pointer'
-                            loading={loading}
+                        <button
                             onClick={checkStatus}
+                            disabled={loading}
+                            className='bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white rounded-xl font-bold text-xs py-2.5 px-5 cursor-pointer transition inline-flex items-center justify-center gap-2 disabled:opacity-50'
                         >
-                            <ArrowPathIcon className='w-4 h-4 mr-2' /> Refresh Page Status
-                        </Button>
-                        <Button
-                            component='a'
+                            <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                            <span>Refresh Page Status</span>
+                        </button>
+                        <a
                             href='/'
-                            className='bg-blue-600 hover:bg-blue-500 text-white cursor-pointer'
+                            className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 shadow-lg shadow-blue-800 text-white font-bold text-xs rounded-xl py-2.5 px-5 cursor-pointer transition inline-flex items-center justify-center'
                         >
                             Return to Dashboard
-                        </Button>
+                        </a>
                     </div>
-                </Card>
+                </div>
             </div>
         )
     }
