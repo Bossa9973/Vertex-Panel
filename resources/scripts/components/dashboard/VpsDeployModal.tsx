@@ -633,8 +633,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                 {/* ── STEP 1: Hardware Plans ── */}
                                 {step === 1 && (
                                     <div className='space-y-4 max-w-4xl mx-auto'>
-                                        <PricingSwitch isYearly={isYearly} onToggle={setIsYearly} />
-
                                         <div>
                                             <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'>
                                                 {plans.map((plan) => {
