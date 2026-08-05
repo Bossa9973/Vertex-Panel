@@ -68,40 +68,48 @@ export const PageMaintenanceGuard: React.FC<Props> = ({ pageKey, children }) => 
 
     if (isUnderMaintenance) {
         return (
-            <div className='relative min-h-[70vh] flex items-center justify-center p-4 font-sans'>
-                <div className='relative z-10 max-w-md w-full text-center p-8 bg-black/40 backdrop-blur-sm border border-white/[0.04] rounded-2xl shadow-[0px_0px_120px_-20px_#0900ff] border-t border-t-blue-500/20 space-y-6'>
-                    <div className='w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400'>
-                        <WrenchScrewdriverIcon className='w-6 h-6' />
-                    </div>
-
-                    <div className='space-y-2'>
-                        <span className='bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full text-[10px] px-2.5 py-0.5 font-semibold uppercase tracking-wide inline-block'>
-                            Under Maintenance
+            <div className='min-h-[calc(100vh-140px)] w-full flex items-center justify-center px-6 md:px-12 lg:px-20 font-sans relative z-10'>
+                <div className='flex flex-col md:flex-row items-center justify-between w-full max-w-6xl mx-auto gap-8 py-12'>
+                    {/* LEFT SIDE (60% width) */}
+                    <div className='w-full md:w-[60%] flex flex-col justify-center text-left'>
+                        <span className='text-xs font-mono text-blue-400 uppercase tracking-widest mb-3'>
+                            503 — Service Unavailable
                         </span>
-                        <h2 className='text-2xl font-bold text-white tracking-tight'>
-                            Page Currently Unavailable
-                        </h2>
+                        <h1 className='text-4xl font-semibold text-white leading-tight'>
+                            We're performing scheduled maintenance.
+                        </h1>
+                        <p className='text-sm text-gray-400 mt-3 max-w-sm leading-relaxed'>
+                            {status.message || "Vertex infrastructure is being updated. We'll be back shortly — no data will be affected."}
+                        </p>
+
+                        <div className='border-t border-white/[0.06] my-6 max-w-xs' />
+
+                        <div className='flex items-center gap-3'>
+                            <button
+                                onClick={checkStatus}
+                                disabled={loading}
+                                className='bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white rounded-xl font-bold text-xs py-2.5 px-5 cursor-pointer transition inline-flex items-center justify-center gap-2 disabled:opacity-50'
+                            >
+                                <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                                <span>Refresh Page Status</span>
+                            </button>
+                            <a
+                                href='/'
+                                className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 shadow-lg shadow-blue-800 text-white font-bold text-xs rounded-xl py-2.5 px-5 cursor-pointer transition inline-flex items-center justify-center'
+                            >
+                                Return to Dashboard
+                            </a>
+                        </div>
+
+                        <span className='text-xs text-gray-500 mt-3'>
+                            Expected downtime: ~15 min
+                        </span>
                     </div>
 
-                    <p className='text-sm text-gray-400 text-center max-w-xs mx-auto leading-relaxed'>
-                        {status.message || 'This section is currently undergoing scheduled maintenance. Please check back shortly.'}
-                    </p>
-
-                    <div className='flex items-center justify-center gap-3 pt-2'>
-                        <button
-                            onClick={checkStatus}
-                            disabled={loading}
-                            className='bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white rounded-xl font-bold text-xs py-2.5 px-5 cursor-pointer transition inline-flex items-center justify-center gap-2 disabled:opacity-50'
-                        >
-                            <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                            <span>Refresh Page Status</span>
-                        </button>
-                        <a
-                            href='/'
-                            className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 shadow-lg shadow-blue-800 text-white font-bold text-xs rounded-xl py-2.5 px-5 cursor-pointer transition inline-flex items-center justify-center'
-                        >
-                            Return to Dashboard
-                        </a>
+                    {/* RIGHT SIDE (40% width) */}
+                    <div className='w-full md:w-[40%] flex items-center justify-center relative mt-10 md:mt-0 select-none pointer-events-none'>
+                        <div className='w-64 h-64 rounded-full bg-blue-600/10 blur-3xl absolute -z-10' />
+                        <WrenchScrewdriverIcon className='w-32 h-32 text-blue-500/20' />
                     </div>
                 </div>
             </div>
