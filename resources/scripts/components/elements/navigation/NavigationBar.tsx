@@ -112,7 +112,7 @@ const NavigationBar = () => {
     }
 
     return (
-        <div className='relative z-50 bg-transparent backdrop-blur-md w-full font-sans border-b border-white/[0.05]'>
+        <div className='bg-transparent backdrop-blur-md w-full font-sans border-b border-white/[0.05]'>
             {isAdminArea && <AdminBanner />}
             <LoadingOverlay visible={isLoggingOut} zIndex={4000} />
             <ContentContainer ref={topBar} className='pt-3 pb-1.5 relative'>
