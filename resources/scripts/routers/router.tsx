@@ -79,10 +79,14 @@ const router = createBrowserRouter([
         element: (
             <AuthenticatedRoutes>
                 <NavigationBarProvider>
-                    <GlobalBackground />
-                    <div className='relative z-10 min-h-screen text-slate-900 dark:text-stone-100 selection:bg-blue-500/30'>
-                        <NavigationBar />
-                        <Outlet />
+                    <div className='bg-black relative min-h-screen text-slate-900 dark:text-stone-100 selection:bg-blue-500/30'>
+                        <GlobalBackground />
+                        <div className='relative z-50'>
+                            <NavigationBar />
+                        </div>
+                        <main className='relative z-10'>
+                            <Outlet />
+                        </main>
                     </div>
                 </NavigationBarProvider>
             </AuthenticatedRoutes>

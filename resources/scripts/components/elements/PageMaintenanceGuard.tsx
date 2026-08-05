@@ -68,18 +68,17 @@ export const PageMaintenanceGuard: React.FC<Props> = ({ pageKey, children }) => 
 
     if (isUnderMaintenance) {
         return (
-            <div className='relative z-10 min-h-[calc(100vh-140px)] flex items-center justify-center p-4 font-sans'>
-                <div className='relative z-10 max-w-[480px] w-full text-center p-10 bg-black/40 backdrop-blur-sm rounded-2xl border border-white/[0.06] shadow-[0px_0px_80px_-10px_rgba(9,0,255,0.4)] space-y-6 my-auto'>
-                    <div className='relative w-14 h-14 mx-auto flex items-center justify-center'>
-                        <div className='absolute inset-0 rounded-2xl bg-blue-500/20 border border-blue-500/30 animate-pulse' />
-                        <WrenchScrewdriverIcon className='w-7 h-7 text-blue-400 relative z-10' />
+            <div className='relative min-h-[70vh] flex items-center justify-center p-4 font-sans'>
+                <div className='relative z-10 max-w-md w-full text-center p-8 bg-black/40 backdrop-blur-sm border border-white/[0.04] rounded-2xl shadow-[0px_0px_120px_-20px_#0900ff] border-t border-t-blue-500/20 space-y-6'>
+                    <div className='w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400'>
+                        <WrenchScrewdriverIcon className='w-6 h-6' />
                     </div>
 
-                    <div>
+                    <div className='space-y-2'>
                         <span className='bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full text-[10px] px-2.5 py-0.5 font-semibold uppercase tracking-wide inline-block'>
                             Under Maintenance
                         </span>
-                        <h2 className='text-2xl font-bold text-white tracking-tight mt-3 mb-2'>
+                        <h2 className='text-2xl font-bold text-white tracking-tight'>
                             Page Currently Unavailable
                         </h2>
                     </div>
