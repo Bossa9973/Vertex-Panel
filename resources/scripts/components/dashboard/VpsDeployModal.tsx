@@ -91,21 +91,27 @@ const stepTitles = [
 
 const stepVariants = {
     enter: (dir: number) => ({
-        x: dir > 0 ? 50 : -50,
+        x: dir > 0 ? 35 : -35,
         opacity: 0,
-        filter: 'blur(8px)',
+        scale: 0.98,
     }),
     center: {
         x: 0,
         opacity: 1,
-        filter: 'blur(0px)',
-        transition: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] },
+        scale: 1,
+        transition: {
+            duration: 0.38,
+            ease: [0.16, 1, 0.3, 1],
+        },
     },
     exit: (dir: number) => ({
-        x: dir > 0 ? -50 : 50,
+        x: dir > 0 ? -35 : 35,
         opacity: 0,
-        filter: 'blur(8px)',
-        transition: { duration: 0.25, ease: [0.55, 0, 1, 0.45] },
+        scale: 0.98,
+        transition: {
+            duration: 0.22,
+            ease: [0.7, 0, 0.84, 0],
+        },
     }),
 }
 
@@ -127,7 +133,7 @@ const StepPillSwitch = ({
                             type='button'
                             onClick={() => onSelectStep(s.num)}
                             className={cn(
-                                'relative z-10 w-fit h-9 rounded-full sm:px-5 px-3 py-1 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5',
+                                'relative z-10 w-fit h-9 rounded-full sm:px-5 px-3 py-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center gap-1.5',
                                 isActive ? 'text-white font-bold' : 'text-gray-400 hover:text-gray-200'
                             )}
                         >
@@ -135,7 +141,7 @@ const StepPillSwitch = ({
                                 <motion.span
                                     layoutId='stepSwitch'
                                     className='absolute top-0 left-0 h-9 w-full rounded-full border-2 shadow-sm shadow-blue-600 border-blue-500 bg-gradient-to-t from-blue-600 to-blue-500'
-                                    transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                                    transition={{ type: 'spring', stiffness: 400, damping: 30, mass: 0.8 }}
                                 />
                             )}
                             <span className='relative flex items-center gap-1.5'>
@@ -158,7 +164,7 @@ const PricingSwitch = ({ isYearly, onToggle }: { isYearly: boolean; onToggle: (y
                     type='button'
                     onClick={() => onToggle(false)}
                     className={cn(
-                        'relative z-10 w-fit h-8 rounded-full sm:px-5 px-3 text-xs font-medium transition-colors cursor-pointer',
+                        'relative z-10 w-fit h-8 rounded-full sm:px-5 px-3 text-xs font-medium transition-all duration-200 cursor-pointer',
                         selected === '0' ? 'text-white font-bold' : 'text-gray-400'
                     )}
                 >
@@ -166,7 +172,7 @@ const PricingSwitch = ({ isYearly, onToggle }: { isYearly: boolean; onToggle: (y
                         <motion.span
                             layoutId='pricingPeriodSwitch'
                             className='absolute top-0 left-0 h-8 w-full rounded-full border-2 shadow-sm shadow-blue-600 border-blue-600 bg-gradient-to-t from-blue-500 to-blue-600'
-                            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 30, mass: 0.8 }}
                         />
                     )}
                     <span className='relative'>Monthly</span>
@@ -176,7 +182,7 @@ const PricingSwitch = ({ isYearly, onToggle }: { isYearly: boolean; onToggle: (y
                     type='button'
                     onClick={() => onToggle(true)}
                     className={cn(
-                        'relative z-10 w-fit h-8 flex-shrink-0 rounded-full sm:px-5 px-3 text-xs font-medium transition-colors cursor-pointer',
+                        'relative z-10 w-fit h-8 flex-shrink-0 rounded-full sm:px-5 px-3 text-xs font-medium transition-all duration-200 cursor-pointer',
                         selected === '1' ? 'text-white font-bold' : 'text-gray-400'
                     )}
                 >
@@ -184,7 +190,7 @@ const PricingSwitch = ({ isYearly, onToggle }: { isYearly: boolean; onToggle: (y
                         <motion.span
                             layoutId='pricingPeriodSwitch'
                             className='absolute top-0 left-0 h-8 w-full rounded-full border-2 shadow-sm shadow-blue-600 border-blue-600 bg-gradient-to-t from-blue-500 to-blue-600'
-                            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 30, mass: 0.8 }}
                         />
                     )}
                     <span className='relative flex items-center gap-1.5'>
