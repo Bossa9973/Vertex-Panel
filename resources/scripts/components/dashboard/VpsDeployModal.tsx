@@ -629,7 +629,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                     <div className='space-y-4 max-w-4xl mx-auto'>
                                         <PricingSwitch isYearly={isYearly} onToggle={setIsYearly} />
 
-                                        <div className='max-h-[440px] overflow-y-auto custom-vps-scrollbar pr-1'>
+                                        <div>
                                             <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'>
                                                 {plans.map((plan) => {
                                                     const isSelected = selectedPlanId === plan.id

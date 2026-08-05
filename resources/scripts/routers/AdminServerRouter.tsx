@@ -105,12 +105,12 @@ const AdminServerRouter = () => {
 
     const visibleRoutes = [
         {
-            name: tStrings('overview'),
+            name: 'Overview',
             path: `/admin/servers/:id`,
             end: true,
         },
         {
-            name: tStrings('setting_other'),
+            name: 'Settings',
             path: `/admin/servers/:id/settings`,
         },
     ]

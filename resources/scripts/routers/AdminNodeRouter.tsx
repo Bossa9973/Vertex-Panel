@@ -129,28 +129,28 @@ const AdminNodeRouter = () => {
 
     const routes = [
         {
-            name: tStrings('overview'),
+            name: 'Overview',
             path: `/admin/nodes/:nodeId`,
             end: true,
         },
         {
-            name: tStrings('server_other'),
+            name: 'Servers',
             path: `/admin/nodes/:nodeId/servers`,
         },
         {
-            name: tStrings('iso_other'),
+            name: 'ISOs',
             path: `/admin/nodes/:nodeId/isos`,
         },
         {
-            name: tStrings('template_other'),
+            name: 'Templates',
             path: `/admin/nodes/:nodeId/templates`,
         },
         {
-            name: tStrings('address_other'),
+            name: 'IP Addresses',
             path: `/admin/nodes/:nodeId/addresses`,
         },
         {
-            name: tStrings('setting_other'),
+            name: 'Settings',
             path: `/admin/nodes/:nodeId/settings`,
         },
     ]

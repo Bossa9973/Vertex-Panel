@@ -140,16 +140,16 @@ const ServerRouter = () => {
     const visibleRoutes = useMemo(
         () => [
             {
-                name: tStrings('overview'),
+                name: 'Overview',
                 path: `/servers/${id}`,
                 end: true,
             },
             {
-                name: tStrings('backup_other'),
+                name: 'Backups',
                 path: `/servers/${id}/backups`,
             },
             {
-                name: tStrings('setting_other'),
+                name: 'Settings',
                 path: `/servers/${id}/settings`,
             },
         ],
