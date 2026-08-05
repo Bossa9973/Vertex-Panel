@@ -107,8 +107,10 @@ export const DashboardContainer: React.FC = () => {
 
                     const ip = extractIpAddress(srv, idx)
                     const cpuCores = srv.limits?.cpu ? Math.max(1, Math.round(srv.limits.cpu / 100)) : 1
-                    const ramMb = srv.limits?.memory || 1024
-                    const boltsPrice = cpuCores >= 4 || ramMb >= 8192 ? 30.0 : (cpuCores >= 2 || ramMb >= 4096 ? 15.0 : 5.0)
+                    const ramMb = srv.limits?.memory ? (srv.limits.memory > 100000 ? Math.round(srv.limits.memory / (1024 * 1024)) : srv.limits.memory) : 1024
+                    const boltsPrice = srv.price !== undefined && srv.price !== null && Number(srv.price) > 0
+                        ? Number(srv.price)
+                        : (cpuCores >= 4 || ramMb >= 8192 ? 30.0 : (cpuCores >= 2 || ramMb >= 4096 ? 15.0 : 10.0))
 
                     const osName =
                         srv.template_name ||

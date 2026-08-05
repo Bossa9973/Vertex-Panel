@@ -225,7 +225,23 @@ class ServerDeployController extends Controller
         /** @var Server $server */
         $server = Server::where('user_id', $user->id)->findOrFail($id);
 
-        $renewCost = 5.00;
+        // Calculate actual VPS plan cost for renewal
+        $renewCost = 10.00;
+        if (!empty($server->description) && preg_match('/Plan:\s*([^|]+)/i', $server->description, $matches)) {
+            $planName = trim($matches[1]);
+            $plan = VpsPlan::where('name', $planName)->first();
+            if ($plan) {
+                $renewCost = (float) $plan->price;
+            }
+        } else {
+            $ramMb = $server->memory > 100000 ? (int) round($server->memory / (1024 * 1024)) : (int) $server->memory;
+            if ($ramMb > 0) {
+                $plan = VpsPlan::where('ram', '>=', $ramMb)->orderBy('price', 'asc')->first();
+                if ($plan) {
+                    $renewCost = (float) $plan->price;
+                }
+            }
+        }
 
         if ((float) $user->credits < $renewCost) {
             return response()->json([
