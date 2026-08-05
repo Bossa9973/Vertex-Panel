@@ -79,6 +79,8 @@ class IndexController extends ApiController
             'store' => false,
             'tickets' => false,
             'message' => 'This section is currently undergoing scheduled maintenance. Please check back shortly.',
+            'estimated_downtime' => null,
+            'downtimes' => [],
         ];
 
         $data = $setting ? json_decode($setting->value, true) : $defaults;

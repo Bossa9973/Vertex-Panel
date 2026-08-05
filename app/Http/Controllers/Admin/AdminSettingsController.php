@@ -97,6 +97,8 @@ class AdminSettingsController extends ApiController
             'store' => false,
             'tickets' => false,
             'message' => 'This section is currently undergoing scheduled maintenance. Please check back shortly.',
+            'estimated_downtime' => null,
+            'downtimes' => [],
         ];
 
         $data = $setting ? json_decode($setting->value, true) : $defaults;
@@ -122,6 +124,8 @@ class AdminSettingsController extends ApiController
             'store' => 'nullable|boolean',
             'tickets' => 'nullable|boolean',
             'message' => 'nullable|string|max:500',
+            'estimated_downtime' => 'nullable|string|max:255',
+            'downtimes' => 'nullable|array',
         ]);
 
         $setting = DB::table('settings')->where('key', 'page_maintenance_settings')->first();
@@ -130,7 +134,7 @@ class AdminSettingsController extends ApiController
             $current = [];
         }
 
-        $updated = array_merge($current, array_filter($payload, fn($val) => $val !== null));
+        $updated = array_merge($current, $payload);
 
         DB::table('settings')->updateOrInsert(
             ['key' => 'page_maintenance_settings'],

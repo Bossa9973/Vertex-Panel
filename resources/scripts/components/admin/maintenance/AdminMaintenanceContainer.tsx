@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { WrenchScrewdriverIcon, CheckCircleIcon, ExclamationTriangleIcon, ShieldCheckIcon, SparklesIcon } from '@heroicons/react/24/outline'
-import { Button, Switch, Textarea } from '@mantine/core'
+import { Button, Switch, Textarea, TextInput } from '@mantine/core'
 import http from '@/api/http'
 import PageContentBlock from '@/components/elements/PageContentBlock'
 
@@ -14,6 +14,7 @@ export interface MaintenanceSettings {
     store: boolean
     tickets: boolean
     message: string
+    estimated_downtime?: string | null
 }
 
 const DEFAULT_SETTINGS: MaintenanceSettings = {
@@ -26,6 +27,7 @@ const DEFAULT_SETTINGS: MaintenanceSettings = {
     store: false,
     tickets: false,
     message: 'This section is currently undergoing scheduled maintenance. Please check back shortly.',
+    estimated_downtime: null,
 }
 
 export const AdminMaintenanceContainer: React.FC = () => {
@@ -195,30 +197,56 @@ export const AdminMaintenanceContainer: React.FC = () => {
                     })}
                 </div>
 
-                {/* Maintenance Notice Message */}
-                <div className='bg-neutral-900/80 border border-white/10 rounded-2xl p-6 space-y-3'>
+                {/* Maintenance Notice Message & Downtime */}
+                <div className='bg-neutral-900/80 border border-white/10 rounded-2xl p-6 space-y-4'>
                     <div className='flex items-center gap-2 text-sm font-bold text-white'>
                         <SparklesIcon className='w-4 h-4 text-blue-400' />
-                        <span>Custom Maintenance Banner Message</span>
+                        <span>Custom Maintenance Message & Downtime</span>
                     </div>
                     <p className='text-xs text-gray-400'>
-                        This message will be displayed to users when they visit any page that is currently placed under maintenance.
+                        Customize the notice message and estimated downtime string shown to users when pages are under maintenance.
                     </p>
-                    <Textarea
-                        value={settings.message}
-                        onChange={e => handleToggle('message', e.currentTarget.value as any)}
-                        rows={3}
-                        placeholder='Enter custom maintenance notice...'
-                        className='font-sans text-xs'
-                        styles={{
-                            input: {
-                                backgroundColor: '#0a0c10',
-                                borderColor: 'rgba(255, 255, 255, 0.15)',
-                                color: '#e5e7eb',
-                                borderRadius: '12px',
-                            },
-                        }}
-                    />
+                    <div className='space-y-4'>
+                        <div>
+                            <label className='text-xs font-semibold text-gray-300 block mb-1'>Maintenance Notice Message</label>
+                            <Textarea
+                                value={settings.message || ''}
+                                onChange={e => handleToggle('message', e.currentTarget.value as any)}
+                                rows={3}
+                                placeholder='Enter custom maintenance notice...'
+                                className='font-sans text-xs'
+                                styles={{
+                                    input: {
+                                        backgroundColor: '#0a0c10',
+                                        borderColor: 'rgba(255, 255, 255, 0.15)',
+                                        color: '#e5e7eb',
+                                        borderRadius: '12px',
+                                    },
+                                }}
+                            />
+                        </div>
+
+                        <div>
+                            <label className='text-xs font-semibold text-gray-300 block mb-1'>Estimated Downtime (Optional)</label>
+                            <TextInput
+                                value={settings.estimated_downtime || ''}
+                                onChange={e => handleToggle('estimated_downtime', e.currentTarget.value ? e.currentTarget.value : null as any)}
+                                placeholder='e.g. ~15 minutes, Today at 18:00 UTC, or leave blank to hide'
+                                className='font-sans text-xs'
+                                styles={{
+                                    input: {
+                                        backgroundColor: '#0a0c10',
+                                        borderColor: 'rgba(255, 255, 255, 0.15)',
+                                        color: '#e5e7eb',
+                                        borderRadius: '12px',
+                                    },
+                                }}
+                            />
+                            <p className='text-[11px] text-gray-500 mt-1'>
+                                Displayed as "Estimated back online: &#123;value&#125;" on per-page maintenance mode. Leave blank to hide.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </PageContentBlock>
