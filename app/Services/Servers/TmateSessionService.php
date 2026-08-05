@@ -57,20 +57,23 @@ class TmateSessionService
             }
         }
 
+        // Clear any legacy stale cache key from before this fix (harmless no-op if already gone)
+        Cache::forget("server_tmate_ssh_{$server->vmid}");
+
         $dedupKey = "server_tmate_inprogress_{$server->vmid}";
 
-        // 1. Short 2-second deduplication guard — prevents double-spawning on rapid concurrent clicks.
-        //    Beyond this window every call always spawns a brand-new session (old tmate is killed in execCmd).
-        if ($inProgress = Cache::get($dedupKey)) {
-            // A spawn is already in flight (< 2 s ago); return the fresh result once it lands
-            // by falling through to attemptProxmoxTmateExec which will read the new /tmp/tmate.log
+        // 1. Short dedup guard — if a spawn is already in-flight (within the last 2 s from a concurrent
+        //    request), wait briefly then fall through rather than double-spawning inside the VM.
+        if (Cache::get($dedupKey)) {
+            usleep(2200000); // wait 2.2 s for the in-flight spawn to complete
         }
 
-        // Mark that a spawn is in-flight so concurrent requests within 2 s skip re-spawning
+        // Mark spawn as in-flight for 2 s so concurrent requests don't double-spawn
         Cache::put($dedupKey, true, now()->addSeconds(2));
 
-        // 2. Proxmox QEMU Guest Agent (Direct Command Execution & SSH Command Extraction)
-        //    The execCmd already kills any existing tmate process and writes a fresh session.
+        // 2. Proxmox QEMU Guest Agent — kills any existing tmate process, clears old socket/log,
+        //    installs tmate if missing (works for both fresh and already-running VMs), then starts
+        //    a brand-new session and writes the SSH command to /tmp/tmate.log.
         $sshCmd = $this->attemptProxmoxTmateExec($server, $errorNotice);
 
         // Clear dedup flag immediately after spawn completes
@@ -80,7 +83,7 @@ class TmateSessionService
             return $this->formatResult($sshCmd, $server);
         }
 
-        // 3. Fallback: Return informative diagnostic notice if agent fails/boots
+        // 3. Fallback: Return informative diagnostic notice if agent fails/times out
         $notice = $errorNotice ?: "QEMU Guest Agent is not responding or tmate connection timed out. Please ensure qemu-guest-agent is installed and running inside the VM (sudo systemctl start qemu-guest-agent).";
         return $this->formatResult($notice, $server);
     }
