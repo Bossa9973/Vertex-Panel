@@ -640,10 +640,10 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                             key={plan.id}
                                                             onClick={() => setSelectedPlanId(plan.id)}
                                                             className={cn(
-                                                                'h-full relative cursor-pointer transition-all duration-300 text-white flex flex-col justify-between',
+                                                                'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
                                                                 isSelected
-                                                                    ? 'bg-gradient-to-br from-blue-950/40 via-neutral-900 to-black shadow-[0_20px_80px_-10px_rgba(59,130,246,0.5),0_0_40px_-5px_rgba(59,130,246,0.3)] z-20 border-blue-500 border-t-blue-400/40 border-t-2 ring-2 ring-blue-500/40'
-                                                                    : 'bg-gradient-to-br from-neutral-800 via-neutral-900 to-black border-neutral-700 z-10 hover:border-neutral-600 hover:shadow-[0px_0px_20px_-5px_rgba(59,130,246,0.2)]'
+                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0900ff] z-20 border-blue-500 ring-2 ring-blue-500/40'
+                                                                    : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
                                                             )}
                                                         >
                                                             <CardHeader className='text-left p-5 pb-3'>
@@ -658,8 +658,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                                         <BoltIcon className='w-5 h-5 fill-amber-400/20 text-amber-400 shrink-0' />
                                                                         <NumberFlow
                                                                             value={planPriceValue}
-                                                                            locales='en-US'
-                                                                            format={{ useGrouping: true }}
                                                                             className='text-3xl font-semibold text-amber-400'
                                                                         />
                                                                     </span>
