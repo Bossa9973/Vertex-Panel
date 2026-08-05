@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { WrenchScrewdriverIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useStoreState } from 'easy-peasy'
 import http from '@/api/http'
-import GlobalBackground from '@/components/ui/GlobalBackground'
 
 export type MaintenancePageKey = 'dashboard' | 'servers' | 'earn' | 'billing' | 'account' | 'store' | 'tickets'
 
@@ -69,10 +68,8 @@ export const PageMaintenanceGuard: React.FC<Props> = ({ pageKey, children }) => 
 
     if (isUnderMaintenance) {
         return (
-            <div className='relative min-h-[70vh] flex items-center justify-center p-4 font-sans'>
-                <GlobalBackground />
-
-                <div className='relative z-10 max-w-md w-full text-center p-8 bg-black/40 backdrop-blur-sm border border-white/[0.04] rounded-2xl shadow-[0px_0px_120px_-20px_#0900ff] border-t border-t-blue-500/20 space-y-6'>
+            <div className='relative z-10 min-h-[calc(100vh-180px)] flex items-center justify-center p-4 font-sans'>
+                <div className='relative z-10 max-w-lg w-full text-center p-8 bg-black/40 backdrop-blur-sm border border-white/[0.04] rounded-2xl shadow-[0px_0px_80px_-10px_rgba(9,0,255,0.4)] border-t border-t-blue-500/20 space-y-6 my-auto'>
                     <div className='w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400'>
                         <WrenchScrewdriverIcon className='w-6 h-6' />
                     </div>

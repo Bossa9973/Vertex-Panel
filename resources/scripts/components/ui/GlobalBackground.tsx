@@ -3,7 +3,7 @@ import { Sparkles as SparklesComp } from '@/components/ui/sparkles'
 
 export const GlobalBackground: React.FC = () => {
     return (
-        <div className='fixed inset-0 pointer-events-none z-0 overflow-hidden select-none bg-black'>
+        <div className='fixed inset-0 pointer-events-none z-0 overflow-hidden select-none bg-[#0a0a0f]'>
             {/* 1. Sparkles / Snowflakes Top Layer */}
             <div className='absolute top-0 left-0 right-0 h-[600px] w-full overflow-hidden [mask-image:radial-gradient(50%_50%,white,transparent)] pointer-events-none z-0 [filter:drop-shadow(0_0_5px_rgba(34,197,94,0.8))]'>
                 <SparklesComp
