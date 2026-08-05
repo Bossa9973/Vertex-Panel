@@ -8,9 +8,9 @@ import {
     ArrowUpRight,
     CreditCard,
     TrendingUp,
-    Zap,
     ShieldCheck,
 } from 'lucide-react'
+import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import { useNavigate } from 'react-router-dom'
 
 export interface GlassWalletCardProps {
@@ -80,7 +80,7 @@ export function GlassWalletCard({
                     <div className='flex items-start justify-between'>
                         <div className='flex items-center gap-3'>
                             <div className='flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 backdrop-blur-sm shadow-sm'>
-                                <Zap className='h-5 w-5 fill-amber-400/20' />
+                                <BoltSvgIcon className='h-5 w-5 text-amber-400' />
                             </div>
                             <div>
                                 <p className='text-xs font-medium text-slate-400 font-sans uppercase tracking-wider'>

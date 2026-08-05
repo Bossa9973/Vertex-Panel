@@ -1,8 +1,8 @@
-﻿import PageContentBlock from '@/components/elements/PageContentBlock'
+import PageContentBlock from '@/components/elements/PageContentBlock'
 import { Modal, LoadingOverlay } from '@mantine/core'
 import { useState, useEffect } from 'react'
-import http from '@/api/http'
-import { PlusIcon, MinusIcon, CurrencyDollarIcon, MagnifyingGlassIcon, BoltIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, MinusIcon, CurrencyDollarIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 
 interface UserItem {
     id: number
@@ -122,7 +122,7 @@ const AdminUserBalanceContainer = () => {
                                             {user.servers_count} Server{user.servers_count === 1 ? '' : 's'}
                                         </td>
                                         <td className='py-3.5 px-4 font-extrabold text-amber-400 font-mono text-sm flex items-center gap-1 mt-1'>
-                                            <BoltIcon className='w-4 h-4 text-amber-400 fill-amber-400/20' />
+                                            <BoltSvgIcon className='w-4 h-4 text-amber-400' />
                                             {(user.credits ?? 0).toFixed(2)} BOLTs
                                         </td>
                                         <td className='py-3.5 px-4 text-right'>
@@ -160,7 +160,7 @@ const AdminUserBalanceContainer = () => {
                 onClose={() => setModalOpen(false)}
                 title={
                     <div className='font-bold text-lg text-white flex items-center gap-2'>
-                        <BoltIcon className='w-5 h-5 text-amber-400 fill-amber-400/20' />
+                        <BoltSvgIcon className='w-5 h-5 text-amber-400' />
                         {action === 'add' ? 'Give BOLTs to User' : action === 'remove' ? 'Deduct BOLTs from User' : 'Set User BOLT Balance'}
                     </div>
                 }

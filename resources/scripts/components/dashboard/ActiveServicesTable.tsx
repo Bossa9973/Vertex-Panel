@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RotateCw, Plus, Copy, Check, Layers, EyeOff } from 'lucide-react'
-import { BoltIcon } from '@heroicons/react/24/outline'
+import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 
 export interface ServerItem {
     id: string
@@ -205,7 +205,7 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
                                             {/* Price */}
                                             <td className='py-3 px-4 align-middle font-mono text-xs whitespace-nowrap'>
                                                 <div className='flex items-center gap-1 font-sans text-xs whitespace-nowrap'>
-                                                    <BoltIcon className='w-3.5 h-3.5 text-amber-400 fill-amber-400/20 inline mr-1 shrink-0' />
+                                                    <BoltSvgIcon className='w-3.5 h-3.5 text-amber-400 inline mr-1 shrink-0' />
                                                     <span className='text-amber-400 font-semibold'>{Math.round(srv.price)} BOLTs</span>
                                                     <span className='text-gray-400 text-xs ml-1'>/ 30d</span>
                                                 </div>

@@ -1,8 +1,8 @@
-﻿import PageContentBlock from '@/components/elements/PageContentBlock'
+import PageContentBlock from '@/components/elements/PageContentBlock'
 import { Modal, LoadingOverlay } from '@mantine/core'
 import { useState, useEffect } from 'react'
-import http from '@/api/http'
-import { PlusIcon, TrashIcon, PencilIcon, CpuChipIcon, CircleStackIcon, ServerIcon, BoltIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon, PencilIcon, CpuChipIcon, CircleStackIcon, ServerIcon } from '@heroicons/react/24/outline'
+import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 
 interface VpsPlan {
     id: number
@@ -121,7 +121,7 @@ const AdminVpsPlansContainer = () => {
                                 <div className='flex items-center justify-between mb-2'>
                                     <h3 className='text-lg font-bold text-white'>{plan.name}</h3>
                                     <span className='text-xl font-extrabold text-amber-400 flex items-center gap-1'>
-                                        <BoltIcon className='w-4 h-4 text-amber-400 fill-amber-400/20' />
+                                        <BoltSvgIcon className='w-4 h-4 text-amber-400' />
                                         {(plan.price ?? 0).toFixed(2)} <span className='text-xs text-gray-400 font-normal'>BOLTs/mo</span>
                                     </span>
                                 </div>

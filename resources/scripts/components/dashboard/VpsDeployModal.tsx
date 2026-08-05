@@ -11,7 +11,6 @@ import {
     ServerIcon,
     CheckCircleIcon,
     SparklesIcon,
-    BoltIcon,
     KeyIcon,
     EyeIcon,
     EyeSlashIcon,
@@ -24,6 +23,7 @@ import {
     RocketLaunchIcon,
     XMarkIcon,
 } from '@heroicons/react/24/outline'
+import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import { Sparkles as SparklesComp } from '@/components/ui/sparkles'
 import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -661,7 +661,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                                 </div>
                                                                 <div className='flex items-baseline my-2'>
                                                                     <span className='text-3xl font-semibold flex items-center gap-1 text-amber-400'>
-                                                                        <BoltIcon className='w-5 h-5 fill-amber-400/20 text-amber-400 shrink-0' />
+                                                                        <BoltSvgIcon className='w-5 h-5 text-amber-400 shrink-0' />
                                                                         <NumberFlow
                                                                             value={planPriceValue}
                                                                             className='text-3xl font-semibold text-amber-400'
@@ -963,7 +963,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             <div className='flex items-center justify-between bg-black/50 border border-neutral-800 rounded-xl p-3 text-xs'>
                                                 <span className='text-gray-400 font-medium'>Calculated Cost</span>
                                                 <span className='font-bold text-amber-400 flex items-center gap-1 text-sm'>
-                                                    <BoltIcon className='w-4 h-4 fill-amber-400/20 text-amber-400 shrink-0' />
+                                                    <BoltSvgIcon className='w-4 h-4 text-amber-400 shrink-0' />
                                                     <NumberFlow value={finalPrice} /> BOLTs/{isYearly ? 'year' : 'month'}
                                                 </span>
                                             </div>
@@ -974,7 +974,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             <div>
                                                 <span className='text-[10px] text-gray-400 font-bold uppercase block'>Available Credits</span>
                                                 <span className='text-sm font-bold text-white flex items-center gap-1 mt-0.5'>
-                                                    <BoltIcon className='w-4 h-4 fill-amber-400/20 text-amber-400 shrink-0' />
+                                                    <BoltSvgIcon className='w-4 h-4 text-amber-400 shrink-0' />
                                                     {userCredits.toFixed(2)} BOLTs
                                                 </span>
                                             </div>
