@@ -88,7 +88,17 @@ const NavigationBar = () => {
     useEffect(() => {
         if (logo.current && bottomBar.current && placeholder.current) {
             if (!isVisible) {
-                bottomBar.current.classList.add('fixed', 'top-0', 'left-0', 'right-0', '!shadow-2xl', 'bg-neutral-950/90', 'backdrop-blur-xl', 'border-b', 'border-white/10')
+                bottomBar.current.classList.add(
+                    'fixed',
+                    'top-0',
+                    'left-0',
+                    'right-0',
+                    '!bg-black/90',
+                    '!backdrop-blur-xl',
+                    '!border-b',
+                    '!border-white/10',
+                    '!shadow-2xl'
+                )
                 logo.current.classList.add('!w-8')
                 placeholder.current.classList.remove('hidden')
             } else {
@@ -97,11 +107,11 @@ const NavigationBar = () => {
                     'top-0',
                     'left-0',
                     'right-0',
-                    '!shadow-2xl',
-                    'bg-neutral-950/90',
-                    'backdrop-blur-xl',
-                    'border-b',
-                    'border-white/10'
+                    '!bg-black/90',
+                    '!backdrop-blur-xl',
+                    '!border-b',
+                    '!border-white/10',
+                    '!shadow-2xl'
                 )
                 logo.current.classList.remove('!w-8')
                 placeholder.current.classList.add('hidden')
@@ -162,7 +172,7 @@ const NavigationBar = () => {
             />
             <div
                 ref={bottomBar}
-                className='bg-black/40 backdrop-blur-md shadow-none transition-all w-full border-t border-b border-white/[0.05] z-[2000]'
+                className='bg-transparent backdrop-blur-md shadow-none transition-shadow w-full border-t border-b border-white/[0.05] z-[2000]'
             >
                 <ContentContainer className='flex w-full'>
                     <div
