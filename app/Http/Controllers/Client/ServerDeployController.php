@@ -102,6 +102,16 @@ class ServerDeployController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        // Enforce max VPS instances limit for non-admin users (limit = 2)
+        if (!$user->root_admin) {
+            $existingCount = Server::where('user_id', $user->id)->count();
+            if ($existingCount >= 2) {
+                return response()->json([
+                    'message' => 'Non-admin accounts are limited to a maximum of 2 active VPS instances.',
+                ], 400);
+            }
+        }
+
         /** @var VpsPlan $plan */
         $plan = VpsPlan::findOrFail($validated['plan_id']);
 

@@ -189,6 +189,14 @@ export const DashboardContainer: React.FC = () => {
         }
     }
 
+    const handleOpenDeploy = () => {
+        if (!user?.root_admin && servers.length >= 2) {
+            alert('Non-admin accounts are limited to a maximum of 2 active VPS instances. Please delete an existing instance before deploying a new one.')
+            return
+        }
+        setDeployModalOpen(true)
+    }
+
     return (
         <PageMaintenanceGuard pageKey='dashboard'>
         <PageContentBlock title='Dashboard' showFlashKey='dashboard'>
@@ -212,7 +220,7 @@ export const DashboardContainer: React.FC = () => {
                     </div>
 
                     <button
-                        onClick={() => setDeployModalOpen(true)}
+                        onClick={handleOpenDeploy}
                         className='py-3 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-sm flex items-center gap-2.5 cursor-pointer transition shrink-0 active:scale-95'
                     >
                         <RocketLaunchIcon className='w-5 h-5' /> Deploy VPS
@@ -226,11 +234,11 @@ export const DashboardContainer: React.FC = () => {
                     loading={loading}
                     renewingId={renewingId}
                     onRenew={handleRenew}
-                    onDeploy={() => setDeployModalOpen(true)}
+                    onDeploy={handleOpenDeploy}
                 />
 
                 <QuickServicesGrid
-                    onDeploy={() => setDeployModalOpen(true)}
+                    onDeploy={handleOpenDeploy}
                 />
 
                 <VpsDeployModal
