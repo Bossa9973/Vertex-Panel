@@ -57,18 +57,26 @@ class TmateSessionService
             }
         }
 
-        $cacheKey = "server_tmate_ssh_{$server->vmid}";
+        $dedupKey = "server_tmate_inprogress_{$server->vmid}";
 
-        // 1. Return cached active SSH command if generated within expiration period
-        if ($cachedSsh = Cache::get($cacheKey)) {
-            return $this->formatResult($cachedSsh, $server);
+        // 1. Short 2-second deduplication guard — prevents double-spawning on rapid concurrent clicks.
+        //    Beyond this window every call always spawns a brand-new session (old tmate is killed in execCmd).
+        if ($inProgress = Cache::get($dedupKey)) {
+            // A spawn is already in flight (< 2 s ago); return the fresh result once it lands
+            // by falling through to attemptProxmoxTmateExec which will read the new /tmp/tmate.log
         }
 
+        // Mark that a spawn is in-flight so concurrent requests within 2 s skip re-spawning
+        Cache::put($dedupKey, true, now()->addSeconds(2));
+
         // 2. Proxmox QEMU Guest Agent (Direct Command Execution & SSH Command Extraction)
+        //    The execCmd already kills any existing tmate process and writes a fresh session.
         $sshCmd = $this->attemptProxmoxTmateExec($server, $errorNotice);
 
+        // Clear dedup flag immediately after spawn completes
+        Cache::forget($dedupKey);
+
         if ($sshCmd) {
-            Cache::put($cacheKey, $sshCmd, now()->addHours(3));
             return $this->formatResult($sshCmd, $server);
         }
 

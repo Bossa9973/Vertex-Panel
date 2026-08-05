@@ -71,6 +71,8 @@ class ServerController extends ApiController
         $powerState = $request->enum('state', PowerAction::class);
         if (in_array($powerState, [PowerAction::START, PowerAction::RESTART, PowerAction::RESET])) {
             \Illuminate\Support\Facades\Cache::put("server_last_boot_{$server->vmid}", now()->timestamp, now()->addMinutes(10));
+            // Flush tmate dedup guard so the next tmate request always spawns a fresh session after reboot
+            \Illuminate\Support\Facades\Cache::forget("server_tmate_inprogress_{$server->vmid}");
         }
 
         $this->powerRepository->setServer($server)
