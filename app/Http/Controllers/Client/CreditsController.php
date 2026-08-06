@@ -53,6 +53,10 @@ class CreditsController extends Controller
             'reference_id' => 'PAY-' . Str::upper(Str::random(8)),
         ]);
 
+        \Convoy\Facades\Activity::event('bolts:topup')
+            ->property(['amount' => $amount, 'method' => $method, 'tx_id' => $transaction->reference_id])
+            ->log("User topped up {$amount} BOLTs via {$method}");
+
         return response()->json([
             'success' => true,
             'credits' => (float) $user->credits,

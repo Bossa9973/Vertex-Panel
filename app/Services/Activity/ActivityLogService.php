@@ -218,7 +218,7 @@ class ActivityLogService
 
         if ($actor = $this->targetable->actor()) {
             $this->actor($actor);
-        } elseif ($user = $this->manager->guard()->user()) {
+        } elseif ($user = $this->manager->guard()->user() ?? Request::user() ?? auth()->user()) {
             if ($user instanceof Model) {
                 $this->actor($user);
             }

@@ -45,6 +45,11 @@ class RegisterController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
+        \Convoy\Facades\Activity::event('auth:register')
+            ->actor($user)
+            ->property(['email' => $user->email, 'name' => $user->name])
+            ->log("Registered new user account: {$user->email}");
+
         return response()->json([
             'success' => true,
             'user' => $user->toReactObject(),

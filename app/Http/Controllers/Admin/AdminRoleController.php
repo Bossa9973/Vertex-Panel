@@ -74,6 +74,10 @@ class AdminRoleController extends Controller
 
         $role = AdminRole::create($validated);
 
+        \Convoy\Facades\Activity::event('admin:role-create')
+            ->property(['role' => $role->name, 'permissions' => $role->permissions])
+            ->log("Created admin role '{$role->name}'");
+
         return response()->json([
             'data'    => $this->formatRole($role),
             'message' => "Role '{$role->name}' created successfully.",
@@ -97,6 +101,10 @@ class AdminRoleController extends Controller
 
         $role->update($validated);
 
+        \Convoy\Facades\Activity::event('admin:role-update')
+            ->property(['role' => $role->name])
+            ->log("Updated admin role '{$role->name}'");
+
         return response()->json([
             'data'    => $this->formatRole($role->fresh()),
             'message' => "Role '{$role->name}' updated successfully.",
@@ -113,6 +121,10 @@ class AdminRoleController extends Controller
 
         $name = $role->name;
         $role->delete();
+
+        \Convoy\Facades\Activity::event('admin:role-delete')
+            ->property(['role' => $name])
+            ->log("Deleted admin role '{$name}'");
 
         return response()->json(['message' => "Role '{$name}' deleted. Affected users have been reverted to full access."]);
     }
@@ -160,6 +172,11 @@ class AdminRoleController extends Controller
         $user->hide_ip_in_audit = $validated['hide_ip_in_audit'];
         $user->save();
 
+        \Convoy\Facades\Activity::event('admin:ip-privacy-toggle')
+            ->subject($user)
+            ->property(['target_user' => $user->email, 'hide_ip' => $user->hide_ip_in_audit])
+            ->log("Toggled IP privacy to " . ($user->hide_ip_in_audit ? 'Hidden' : 'Visible') . " for {$user->name}");
+
         return response()->json([
             'success' => true,
             'message' => $user->hide_ip_in_audit
@@ -197,6 +214,11 @@ class AdminRoleController extends Controller
 
         $user->admin_role_id = $validated['role_id'];
         $user->save();
+
+        \Convoy\Facades\Activity::event('admin:role-assign')
+            ->subject($user)
+            ->property(['user' => $user->email, 'role_id' => $validated['role_id']])
+            ->log("Assigned role for admin user {$user->name}");
 
         return response()->json([
             'message' => $validated['role_id']

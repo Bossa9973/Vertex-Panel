@@ -54,6 +54,10 @@ class AccountController extends ApiController
         $user->email = strtolower(trim($request->input('email')));
         $user->save();
 
+        \Convoy\Facades\Activity::event('account:profile-update')
+            ->property(['name' => $user->name, 'email' => $user->email])
+            ->log("Updated account profile details");
+
         return response()->json([
             'success' => true,
             'message' => 'Profile details updated successfully!',
@@ -94,6 +98,10 @@ class AccountController extends ApiController
             $user->google_email = null;
             $user->save();
         }
+
+        \Convoy\Facades\Activity::event('account:unlink-provider')
+            ->property(['provider' => $provider])
+            ->log("Unlinked {$provider} account");
 
         return response()->json([
             'success' => true,

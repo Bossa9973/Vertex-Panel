@@ -79,6 +79,11 @@ class ServerController extends ApiController
         $this->powerRepository->setServer($server)
                               ->send($powerState);
 
+        \Convoy\Facades\Activity::event("vps:power-{$powerState->value}")
+            ->subject($server)
+            ->property(['vmid' => $server->vmid, 'action' => $powerState->value, 'hostname' => $server->hostname])
+            ->log("Triggered {$powerState->value} action on VPS server {$server->name}");
+
         return $this->returnNoContent();
     }
 

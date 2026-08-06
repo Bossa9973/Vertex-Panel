@@ -60,6 +60,11 @@ class UserController extends ApiController
             'root_admin' => $request->root_admin,
         ])->loadCount(['servers']);
 
+        \Convoy\Facades\Activity::event('admin:user-create')
+            ->subject($user)
+            ->property(['email' => $user->email, 'name' => $user->name, 'root_admin' => (bool) $user->root_admin])
+            ->log("Created user account {$user->email}");
+
         return fractal($user, new UserTransformer())->respond();
     }
 
@@ -79,6 +84,11 @@ class UserController extends ApiController
             ]);
         });
 
+        \Convoy\Facades\Activity::event('admin:user-update')
+            ->subject($user)
+            ->property(['email' => $user->email, 'name' => $user->name])
+            ->log("Updated user account {$user->email}");
+
         $user->loadCount(['servers']);
 
         return fractal($user, new UserTransformer())->respond();
@@ -94,9 +104,15 @@ class UserController extends ApiController
             );
         }
 
-        $user->tokens()->delete();
+        $userEmail = $user->email;
+        $userId = $user->id;
 
+        $user->tokens()->delete();
         $user->delete();
+
+        \Convoy\Facades\Activity::event('admin:user-delete')
+            ->property(['email' => $userEmail, 'target_user_id' => $userId])
+            ->log("Deleted user account {$userEmail}");
 
         return $this->returnNoContent();
     }
