@@ -6,7 +6,7 @@ import { Modal, LoadingOverlay } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
-import { useNavigate } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
     ArrowUpRight,
