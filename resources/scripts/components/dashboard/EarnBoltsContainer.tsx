@@ -1,22 +1,17 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useStoreState, useStoreActions } from '@/state'
 import PageContentBlock from '@/components/elements/PageContentBlock'
 import http from '@/api/http'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import DiscordBoostIcon from '@/components/elements/DiscordBoostIcon'
-import BorderTrail from '@/components/ui/border-trail'
-import { Sparkles as SparklesComp } from '@/components/ui/sparkles'
-import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
 import ConnectDiscordModal from '@/components/dashboard/ConnectDiscordModal'
-import { GlassWalletCard } from '@/components/dashboard/GlassWalletCard'
 import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
+import { motion } from 'framer-motion'
 import {
     UserGroupIcon,
     ChatBubbleLeftRightIcon,
     CheckCircleIcon,
     ArrowRightIcon,
-    ShieldCheckIcon,
     LinkIcon,
     ExclamationTriangleIcon,
     GiftIcon,
@@ -48,8 +43,6 @@ export const EarnBoltsContainer: React.FC = () => {
     const [claimingKey, setClaimingKey] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'all' | 'invites' | 'boosts' | 'messages'>('all')
     const [connectModalOpen, setConnectModalOpen] = useState(false)
-
-    const userCredits = user?.credits ?? 0
 
     const fetchStatus = async () => {
         setLoading(true)
@@ -107,201 +100,158 @@ export const EarnBoltsContainer: React.FC = () => {
 
     const filteredTasks = tasks.filter(t => activeTab === 'all' || t.category === activeTab)
     const totalAvailableBolts = tasks.filter(t => !t.is_claimed).reduce((sum, t) => sum + t.reward_bolts, 0)
-    const claimedCount = tasks.filter(t => t.is_claimed).length
+
+    const formattedDiscordUser = discordUsername
+        ? `@${discordUsername.replace(/^@/, '')}`
+        : discordId
+        ? `@${discordId}`
+        : null
 
     return (
         <PageMaintenanceGuard pageKey='earn'>
-        <PageContentBlock title='Earn Free BOLTs'>
-            {/* ── Outer Section ── */}
-            <div className='relative w-full rounded-3xl p-6 md:p-8 overflow-hidden'>
+            <PageContentBlock title='Earn Free BOLTs' showFlashKey='earn'>
+                <div className='font-sans text-left pb-12'>
 
-                {/* Sparkles Star Particle Layer */}
-                <div className='absolute top-0 left-0 right-0 h-96 w-full overflow-hidden [mask-image:radial-gradient(50%_50%,white,transparent)] pointer-events-none z-0'>
-                    <SparklesComp
-                        id='earn-page-sparkles-onboard'
-                        density={1400}
-                        direction='bottom'
-                        speed={0.8}
-                        color='#FFFFFF'
-                        className='absolute inset-x-0 top-0 h-full w-full opacity-60'
-                    />
-                </div>
+                    {/* HERO CARD */}
+                    <div className='p-6 md:p-8 bg-black/40 backdrop-blur-sm border border-white/[0.06] border-t border-t-blue-500/20 rounded-2xl mb-8 relative overflow-hidden font-sans text-left shadow-[0px_0px_120px_-20px_#0900ff]'>
+                        <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0 rounded-2xl' />
 
-                {/* ── Page Content Layer (z-20) ── */}
-                <div className='relative z-20'>
-
-                    {/* Breadcrumb Navigation */}
-                    <div className='flex items-center space-x-2 text-xs font-semibold text-gray-400 font-sans mb-6'>
-                        <Link to='/' className='hover:text-white transition-colors'>
-                            Dashboard
-                        </Link>
-                        <span>&gt;</span>
-                        <span className='text-white font-bold'>
-                            Earn BOLTs
-                        </span>
-                    </div>
-
-                    {/* ── Big Hero Panel — Liquid Glass Card with BorderTrail ── */}
-                    <div className='relative overflow-hidden rounded-2xl p-6 md:p-8 mb-8 border border-blue-500/50 bg-gradient-to-br from-neutral-900/90 via-blue-950/40 to-neutral-950/90 backdrop-blur-md shadow-lg shadow-blue-950/50 ring-1 ring-blue-500/40 transition-all'>
-                        <BorderTrail
-                            className='bg-gradient-to-r from-blue-500 via-indigo-400 to-cyan-400'
-                            size={100}
-                            style={{
-                                boxShadow: '0px 0px 35px 18px rgba(59, 130, 246, 0.6)',
-                            }}
-                        />
-
-                        <div className='relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-6 items-center'>
-                            <div className='lg:col-span-2'>
-                                <div className='flex flex-wrap items-center gap-2.5 mb-3'>
-                                    <span className='px-3.5 py-1 rounded-full text-xs font-medium bg-[#5865F2]/15 text-[#5865F2] border border-[#5865F2]/30 flex items-center gap-1.5 backdrop-blur-md shadow-sm'>
-                                        <GiftIcon className='w-3.5 h-3.5' /> Community Rewards
-                                    </span>
-                                    <span className='px-3.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1.5 backdrop-blur-md shadow-sm'>
-                                        <BoltSvgIcon className='w-3.5 h-3.5' /> {totalAvailableBolts.toLocaleString()} Available
-                                    </span>
-                                </div>
-
-                                <h2 className='text-2xl md:text-3xl font-medium text-white tracking-tight font-sans mb-2'>
-                                    <VerticalCutReveal
-                                        splitBy='words'
-                                        staggerDuration={0.08}
-                                        staggerFrom='first'
-                                        reverse={true}
-                                        containerClassName='gap-1.5'
-                                        transition={{
-                                            type: 'spring',
-                                            stiffness: 250,
-                                            damping: 40,
-                                            delay: 0,
-                                        }}
-                                    >
-                                        Earn Free BOLTs for Community Activity
-                                    </VerticalCutReveal>
-                                </h2>
-                                <p className='text-xs md:text-sm text-gray-300 font-normal leading-relaxed max-w-2xl font-sans mt-1'>
-                                    Complete Discord community challenges, invite new members, boost our server, and chat to earn free BOLTs added directly to your account balance.
-                                </p>
+                        <div className='relative z-10'>
+                            <div className='flex flex-wrap items-center gap-2.5 mb-4'>
+                                <span className='bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-bold text-xs uppercase px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5'>
+                                    <GiftIcon className='w-3.5 h-3.5' /> Community Rewards
+                                </span>
+                                <span className='bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-bold text-xs uppercase px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5'>
+                                    <BoltSvgIcon className='w-3.5 h-3.5' /> {totalAvailableBolts.toLocaleString()} Available
+                                </span>
                             </div>
 
-                            {/* Glass Wallet Balance Card */}
-                            <div className='flex justify-center lg:justify-end'>
-                                <GlassWalletCard
-                                    balance={userCredits.toFixed(2)}
-                                    currency='BOLTs'
-                                    cardHolder={(user as any) ? `${(user as any).firstname || ''} ${(user as any).lastname || ''}`.trim() || (user as any).username || user?.email : 'Account Client'}
-                                    cardNumber={`ACCT •••• •••• ${String((user as any)?.id || 1001).padStart(4, '0')}`}
-                                    expiry={`Tasks: ${claimedCount}/${tasks.length}`}
-                                    address={user?.email ? user.email.split('@')[0] : 'Active'}
-                                    trend='Active'
-                                    className='max-w-none w-full'
-                                />
-                            </div>
+                            <h1 className='text-2xl md:text-3xl font-bold text-white tracking-tight font-sans mb-2'>
+                                Earn Free BOLTs for Community Activity
+                            </h1>
+                            <p className='text-sm text-gray-400 font-normal leading-relaxed max-w-2xl font-sans'>
+                                Complete Discord community challenges, invite new members, boost our server, and chat to earn free BOLTs added directly to your account balance.
+                            </p>
                         </div>
                     </div>
 
-                    {/* Discord Connection Panel — Liquid Glass */}
-                    <div className='relative overflow-hidden rounded-2xl p-5 mb-8 border border-blue-500/50 bg-gradient-to-br from-neutral-900/90 via-blue-950/40 to-neutral-950/90 backdrop-blur-md shadow-lg shadow-blue-950/50 ring-1 ring-blue-500/40 transition-all'>
-                        <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
+                    {/* DISCORD CONNECTION CARD */}
+                    <div className='p-5 bg-black/40 backdrop-blur-sm border border-white/[0.06] border-t border-t-blue-500/20 rounded-2xl mb-8 relative overflow-hidden font-sans text-left shadow-[0px_0px_120px_-20px_#0900ff]'>
+                        <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0 rounded-2xl' />
+
+                        <div className='relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4'>
                             <div className='flex items-center gap-3.5'>
-                                <div className='w-11 h-11 rounded-2xl bg-[#5865F2]/15 border border-[#5865F2]/30 flex items-center justify-center text-[#5865F2] shrink-0 shadow-lg shadow-[#5865F2]/10 backdrop-blur-md'>
+                                <div className='w-10 h-10 rounded-xl bg-[#5865F2]/15 border border-[#5865F2]/30 flex items-center justify-center text-[#5865F2] shrink-0 shadow-inner'>
                                     <UserGroupIcon className='w-5 h-5' />
                                 </div>
                                 <div>
-                                    <div className='flex items-center gap-2'>
+                                    <div className='flex items-center gap-2.5'>
                                         <h4 className='text-sm font-bold text-white tracking-tight'>
-                                            Discord Account Connection
+                                            Discord Connection
                                         </h4>
                                         {discordId ? (
-                                            <span className='px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 backdrop-blur-md'>
-                                                <CheckCircleIcon className='w-3.5 h-3.5' /> Connected
+                                            <span className='bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider font-mono shrink-0 inline-flex items-center gap-1'>
+                                                <CheckCircleIcon className='w-3.5 h-3.5' /> CONNECTED
                                             </span>
                                         ) : (
-                                            <span className='px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1 backdrop-blur-md'>
-                                                <ExclamationTriangleIcon className='w-3.5 h-3.5' /> Link Required
+                                            <span className='bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider font-mono shrink-0 inline-flex items-center gap-1'>
+                                                <ExclamationTriangleIcon className='w-3.5 h-3.5' /> LINK REQUIRED
                                             </span>
                                         )}
                                     </div>
-                                    <p className='text-xs text-gray-400 font-sans mt-0.5'>
-                                        {discordId
-                                            ? `Linked Discord: ${discordUsername || discordId} (${discordId})`
+                                    <p className='text-xs text-gray-400 font-sans mt-1'>
+                                        {formattedDiscordUser
+                                            ? `Discord: ${formattedDiscordUser}`
                                             : 'Link your Discord account to enable invite, boost, and chat reward verification.'}
                                     </p>
                                 </div>
                             </div>
 
-                            <div className='flex items-center gap-3'>
-                                <button
-                                    onClick={() => setConnectModalOpen(true)}
-                                    className='px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#5865F2] to-[#4752C4] hover:from-[#4752C4] hover:to-[#3c45a5] text-white font-bold text-xs shadow-lg shadow-[#5865F2]/30 border border-[#7983f5]/40 transition-all cursor-pointer flex items-center gap-2 active:scale-95'
-                                >
-                                    <LinkIcon className='w-4 h-4' />
-                                    {discordId ? 'Manage Discord Link' : 'Connect Discord Account'}
-                                </button>
-                            </div>
+                            <button
+                                type='button'
+                                onClick={() => setConnectModalOpen(true)}
+                                className='bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer active:scale-95 flex items-center gap-2 shrink-0 self-start md:self-auto'
+                            >
+                                <LinkIcon className='w-4 h-4 text-blue-400' />
+                                <span>{discordId ? 'Manage Discord Link' : 'Connect Discord Account'}</span>
+                            </button>
                         </div>
                     </div>
 
-                    {/* Filter Tabs — Liquid Glass Pill Bar */}
+                    {/* FILTER TABS & JOIN DISCORD CTA */}
                     <div className='flex flex-wrap items-center justify-between gap-4 mb-6 font-sans'>
-                        <div className='flex items-center space-x-1.5 bg-neutral-900/60 p-1.5 rounded-full border border-blue-500/30 backdrop-blur-md shadow-md ring-1 ring-blue-500/20'>
+                        {/* StepPillSwitch Filter Tabs */}
+                        <div className='relative z-10 flex w-fit rounded-full bg-neutral-900/90 border border-gray-700/80 p-1 backdrop-blur-md'>
                             {[
                                 { id: 'all', label: 'All Tasks' },
-                                { id: 'invites', label: 'Invites Rewards' },
+                                { id: 'invites', label: 'Invites' },
                                 { id: 'boosts', label: 'Server Boosts' },
                                 { id: 'messages', label: 'Chat Activity' },
-                            ].map(tab => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id as any)}
-                                    className={`px-4 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
-                                        activeTab === tab.id
-                                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 border border-blue-400/40 text-white font-bold shadow-lg shadow-blue-600/30'
-                                            : 'text-gray-400 hover:text-white font-medium bg-transparent'
-                                    }`}
-                                >
-                                    {tab.label}
-                                </button>
-                            ))}
+                            ].map(tab => {
+                                const isActive = activeTab === tab.id
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        type='button'
+                                        onClick={() => setActiveTab(tab.id as any)}
+                                        className={`relative z-10 w-fit h-8 rounded-full px-4 py-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
+                                            isActive ? 'text-white font-bold' : 'text-gray-400 hover:text-gray-200'
+                                        }`}
+                                    >
+                                        {isActive && (
+                                            <motion.span
+                                                layoutId='earnFilterSwitch'
+                                                className='absolute top-0 left-0 h-8 w-full rounded-full border-2 shadow-sm shadow-blue-600 border-blue-500 bg-gradient-to-t from-blue-600 to-blue-500'
+                                                transition={{ type: 'spring', stiffness: 400, damping: 30, mass: 0.8 }}
+                                            />
+                                        )}
+                                        <span className='relative flex items-center gap-1.5'>
+                                            {tab.label}
+                                        </span>
+                                    </button>
+                                )
+                            })}
                         </div>
 
+                        {/* Join Official Discord Button */}
                         <a
                             href='https://discord.gg'
                             target='_blank'
                             rel='noreferrer'
-                            className='flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#5865F2] to-[#4752C4] hover:from-[#4752C4] hover:to-[#3c45a5] text-white font-bold text-xs shadow-lg shadow-[#5865F2]/25 border border-[#7983f5]/40 transition-all cursor-pointer active:scale-95'
+                            className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 rounded-xl shadow-lg shadow-blue-800 text-white font-bold text-xs px-4 py-2 inline-flex items-center gap-2 transition cursor-pointer active:scale-95'
                         >
-                            Join Official Discord <ArrowRightIcon className='w-3.5 h-3.5' />
+                            <span>Join Official Discord</span>
+                            <ArrowRightIcon className='w-3.5 h-3.5' />
                         </a>
                     </div>
 
-                    {/* Tasks Section */}
-                    <div className='relative rounded-3xl overflow-hidden'>
+                    {/* TASK CARDS GRID */}
+                    <div className='relative'>
                         {!discordId && (
-                            <div className='absolute inset-0 z-20 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-950/90 via-neutral-950/80 to-blue-950/90 backdrop-blur-xl rounded-3xl border border-blue-500/20 text-center font-sans'>
-                                <div className='w-14 h-14 rounded-2xl bg-[#5865F2]/20 border border-[#5865F2]/40 flex items-center justify-center text-[#5865F2] mb-3 shadow-[0_0_30px_rgba(88,101,242,0.4)]'>
-                                    <UserGroupIcon className='w-7 h-7' />
+                            <div className='absolute inset-0 z-20 flex flex-col items-center justify-center p-6 bg-black/80 backdrop-blur-md rounded-2xl border border-white/[0.06] text-center font-sans'>
+                                <div className='w-12 h-12 rounded-xl bg-[#5865F2]/20 border border-[#5865F2]/40 flex items-center justify-center text-[#5865F2] mb-3 shadow-lg'>
+                                    <UserGroupIcon className='w-6 h-6' />
                                 </div>
-                                <h3 className='text-xl font-bold text-white tracking-tight mb-1'>
+                                <h3 className='text-lg font-bold text-white tracking-tight mb-1'>
                                     Discord Connection Required
                                 </h3>
-                                <p className='text-xs text-gray-300 max-w-md leading-relaxed mb-5 font-sans'>
-                                    You must link your Discord account to verify server invites, boost status, and chat activity rewards!
+                                <p className='text-xs text-gray-400 max-w-md leading-relaxed mb-4 font-sans'>
+                                    Link your Discord account to verify server invites, boost status, and chat activity rewards!
                                 </p>
                                 <button
                                     onClick={() => setConnectModalOpen(true)}
-                                    className='px-6 py-3 rounded-xl bg-gradient-to-r from-[#5865F2] to-[#4752C4] hover:from-[#4752C4] hover:to-[#3c45a5] text-white font-bold text-xs shadow-xl shadow-[#5865F2]/30 border border-[#7983f5]/40 transition cursor-pointer flex items-center gap-2 active:scale-95'
+                                    className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 rounded-xl shadow-lg shadow-blue-800 text-white font-bold text-xs px-5 py-2.5 inline-flex items-center gap-2 transition cursor-pointer active:scale-95'
                                 >
                                     <LinkIcon className='w-4 h-4' /> Connect Discord Account Now
                                 </button>
                             </div>
                         )}
 
-                        <div className={!discordId ? 'filter blur-[4px] select-none pointer-events-none opacity-50 transition-all duration-500' : ''}>
+                        <div className={!discordId ? 'filter blur-[4px] select-none pointer-events-none opacity-40 transition-all duration-300' : ''}>
                             {loading ? (
                                 <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
                                     {[1, 2, 3, 4, 5, 6].map(i => (
-                                        <div key={i} className='h-52 rounded-2xl bg-neutral-900/40 border border-blue-500/20 backdrop-blur-xl animate-pulse' />
+                                        <div key={i} className='h-56 rounded-2xl bg-neutral-900/60 border border-white/[0.06] animate-pulse' />
                                     ))}
                                 </div>
                             ) : (
@@ -309,6 +259,9 @@ export const EarnBoltsContainer: React.FC = () => {
                                     {filteredTasks.map(task => {
                                         const isClaimed = task.is_claimed
                                         const isClaiming = claimingKey === task.key
+                                        const current = isClaimed ? task.target_count : (task.current_count ?? 0)
+                                        const target = task.target_count
+                                        const pct = Math.min(100, Math.round((current / target) * 100))
 
                                         let icon = <UserGroupIcon className='w-5 h-5 text-blue-400' />
                                         if (task.category === 'boosts') {
@@ -318,101 +271,79 @@ export const EarnBoltsContainer: React.FC = () => {
                                         }
 
                                         return (
-                                            /* ── Liquid Glass Card with BorderTrail ── */
                                             <div
                                                 key={task.key}
-                                                className={`relative overflow-hidden rounded-xl border p-6 backdrop-blur-md transition-all duration-300 flex flex-col justify-between group hover:scale-[1.01] ${
-                                                    isClaimed
-                                                        ? 'bg-emerald-950/20 border-emerald-500/30 opacity-90 shadow-lg'
-                                                        : 'border-blue-500/50 bg-gradient-to-br from-neutral-900/90 via-blue-950/40 to-neutral-950/90 shadow-lg shadow-blue-950/50 ring-1 ring-blue-500/40 hover:border-blue-400/60 hover:ring-blue-400/50'
-                                                }`}
+                                                className='bg-black/40 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-6 transition-all duration-150 relative group hover:bg-white/[0.05] flex flex-col justify-between text-left'
                                             >
-                                                <BorderTrail
-                                                    className={isClaimed ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-500 via-indigo-400 to-cyan-400'}
-                                                    size={80}
-                                                    style={{
-                                                        boxShadow: isClaimed
-                                                            ? '0px 0px 25px 12px rgba(16, 185, 129, 0.5)'
-                                                            : '0px 0px 30px 15px rgba(59, 130, 246, 0.6)',
-                                                    }}
-                                                />
+                                                <div className='absolute left-0 top-0 bottom-0 w-[2px] bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-l-2xl' />
 
                                                 <div>
                                                     {/* Task Header */}
                                                     <div className='flex items-center justify-between gap-3 mb-4'>
-                                                        <div className='w-11 h-11 rounded-xl bg-black/40 border border-blue-500/30 backdrop-blur-md flex items-center justify-center shrink-0 shadow-inner'>
+                                                        <div className='w-10 h-10 rounded-xl bg-black/60 border border-neutral-800 flex items-center justify-center shrink-0 shadow-inner'>
                                                             {icon}
                                                         </div>
-                                                        <span className='px-3.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 font-sans backdrop-blur-md flex items-center gap-1.5 shadow-sm'>
+                                                        <span className='bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg px-2.5 py-1 font-mono text-xs font-semibold min-w-[110px] text-right inline-flex items-center justify-center gap-1.5'>
                                                             <BoltSvgIcon className='w-3.5 h-3.5 text-amber-400' /> +{task.reward_bolts.toLocaleString()} BOLTs
                                                         </span>
                                                     </div>
 
-                                                    {/* Title & Requirements */}
+                                                    {/* Title & Description */}
                                                     <h3 className='text-base font-bold text-white tracking-tight mb-1'>
                                                         {task.title}
                                                     </h3>
-                                                    <p className='text-xs text-gray-300 font-normal leading-relaxed mb-5'>
+                                                    <p className='text-xs text-gray-400 font-normal leading-relaxed mb-4'>
                                                         {task.requirement_text}
                                                     </p>
 
-                                                    {/* Inset Box */}
-                                                    {(() => {
-                                                        const current = isClaimed ? task.target_count : (task.current_count ?? 0)
-                                                        const target = task.target_count
-                                                        const pct = Math.min(100, Math.round((current / target) * 100))
-
-                                                        return (
-                                                            <div className='space-y-1.5 mb-6 p-3 rounded-lg border border-neutral-800/80 bg-neutral-900/40 backdrop-blur-md shadow-inner'>
-                                                                <div className='flex justify-between text-xs font-medium text-gray-300'>
-                                                                    <span>Progress</span>
-                                                                    <span className='text-white font-semibold font-sans'>
-                                                                        {current.toLocaleString()} / {target.toLocaleString()} ({pct}%)
-                                                                    </span>
-                                                                </div>
-                                                                <div className='w-full h-2 rounded-full bg-black/80 border border-white/10 overflow-hidden p-0.5'>
-                                                                    <div
-                                                                        style={{ width: `${pct}%` }}
-                                                                        className={`h-full rounded-full transition-all duration-500 ${
-                                                                            isClaimed
-                                                                                ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
-                                                                                : pct >= 100
-                                                                                ? 'bg-gradient-to-r from-blue-500 to-emerald-400 shadow-[0_0_12px_rgba(59,130,246,0.6)]'
-                                                                                : 'bg-gradient-to-r from-amber-500 to-amber-400'
-                                                                        }`}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        )
-                                                    })()}
+                                                    {/* Progress Bar & Label */}
+                                                    <div className='space-y-1.5 mb-6'>
+                                                        <div className='flex justify-between text-xs text-gray-400 font-sans'>
+                                                            <span>Progress</span>
+                                                            <span className='text-white font-semibold font-mono'>
+                                                                {current.toLocaleString()} / {target.toLocaleString()} ({pct}%)
+                                                            </span>
+                                                        </div>
+                                                        <div className='w-full h-1.5 rounded-full bg-neutral-800 overflow-hidden'>
+                                                            <div
+                                                                style={{ width: `${pct}%` }}
+                                                                className={`h-full rounded-full transition-all duration-500 ${
+                                                                    isClaimed || pct >= 100
+                                                                        ? 'bg-emerald-500'
+                                                                        : pct > 0
+                                                                        ? 'bg-amber-500'
+                                                                        : 'bg-neutral-700'
+                                                                }`}
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
 
-                                                {/* Action Button */}
+                                                {/* Action Buttons */}
                                                 <div>
                                                     {isClaimed ? (
-                                                        <button
-                                                            disabled
-                                                            className='w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-xs bg-gradient-to-r from-emerald-950/80 to-teal-950/80 text-emerald-400 border border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.25)] backdrop-blur-md cursor-default font-sans'
-                                                        >
+                                                        <div className='bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-semibold px-3 py-2 w-full flex items-center justify-center gap-1.5 font-sans'>
                                                             <CheckCircleIcon className='w-4 h-4 text-emerald-400' /> Reward Claimed ({task.reward_bolts.toLocaleString()} BOLTs)
-                                                        </button>
+                                                        </div>
                                                     ) : task.is_eligible ? (
                                                         <button
+                                                            type='button'
                                                             onClick={() => handleClaim(task)}
                                                             disabled={isClaiming}
-                                                            className='w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-xs bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_25px_rgba(59,130,246,0.5)] border border-blue-400/50 transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-50 font-sans'
+                                                            className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 rounded-xl shadow-lg shadow-blue-800 text-white font-bold text-xs px-4 py-2.5 w-full flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 disabled:opacity-50 font-sans'
                                                         >
-                                                            <SparklesIcon className='w-4 h-4 text-cyan-300 animate-pulse' />
-                                                            {isClaiming ? 'Verifying Requirement...' : `Verify & Claim +${task.reward_bolts.toLocaleString()} BOLTs`}
+                                                            <SparklesIcon className='w-4 h-4 text-amber-300 animate-pulse' />
+                                                            <span>{isClaiming ? 'Verifying Requirement...' : `Verify & Claim +${task.reward_bolts.toLocaleString()} BOLTs`}</span>
                                                         </button>
                                                     ) : (
                                                         <button
+                                                            type='button'
                                                             onClick={() => handleClaim(task)}
                                                             disabled={isClaiming}
-                                                            className='w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-xs bg-gradient-to-r from-neutral-900/90 via-blue-950/60 to-neutral-950/90 hover:from-blue-950/80 hover:to-indigo-950/80 text-blue-300 border border-blue-500/30 hover:border-blue-400/50 shadow-md backdrop-blur-md transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-50 font-sans'
+                                                            className='bg-neutral-800 border border-neutral-700 text-gray-400 rounded-xl text-xs font-semibold px-3 py-2.5 w-full flex items-center justify-center gap-1.5 hover:text-white transition cursor-pointer active:scale-95 disabled:opacity-50 font-sans'
                                                         >
-                                                            <ArrowRightIcon className='w-3.5 h-3.5 text-blue-400' />
-                                                            {isClaiming ? 'Checking Eligibility...' : `In Progress (${(task.current_count ?? 0).toLocaleString()} / ${task.target_count})`}
+                                                            <span>{isClaiming ? 'Checking Eligibility...' : `In Progress (${(task.current_count ?? 0).toLocaleString()} / ${task.target_count})`}</span>
+                                                            <ArrowRightIcon className='w-3 h-3 text-gray-400' />
                                                         </button>
                                                     )}
                                                 </div>
@@ -424,21 +355,20 @@ export const EarnBoltsContainer: React.FC = () => {
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Connect Discord Mantine Modal */}
-            <ConnectDiscordModal
-                opened={connectModalOpen}
-                onClose={() => setConnectModalOpen(false)}
-                currentDiscordId={discordId}
-                onSuccess={(newId, newUsername) => {
-                    setDiscordId(newId)
-                    setDiscordUsername(newUsername)
-                    setConnectModalOpen(false)
-                    fetchStatus()
-                }}
-            />
-        </PageContentBlock>
+                {/* Connect Discord Modal */}
+                <ConnectDiscordModal
+                    opened={connectModalOpen}
+                    onClose={() => setConnectModalOpen(false)}
+                    currentDiscordId={discordId}
+                    onSuccess={(newId, newUsername) => {
+                        setDiscordId(newId)
+                        setDiscordUsername(newUsername)
+                        setConnectModalOpen(false)
+                        fetchStatus()
+                    }}
+                />
+            </PageContentBlock>
         </PageMaintenanceGuard>
     )
 }
