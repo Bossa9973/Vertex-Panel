@@ -13,7 +13,6 @@ import {
     CheckCircleIcon,
     ArrowRightIcon,
     LinkIcon,
-    ExclamationTriangleIcon,
     GiftIcon,
     SparklesIcon,
 } from '@heroicons/react/24/outline'
@@ -112,74 +111,54 @@ export const EarnBoltsContainer: React.FC = () => {
             <PageContentBlock title='Earn Free BOLTs' showFlashKey='earn'>
                 <div className='font-sans text-left pb-12'>
 
-                    {/* HERO CARD */}
-                    <div className='p-6 md:p-8 bg-black/40 backdrop-blur-sm border border-white/[0.06] border-t border-t-blue-500/20 rounded-2xl mb-8 relative overflow-hidden font-sans text-left shadow-[0px_0px_120px_-20px_#0900ff]'>
-                        <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0 rounded-2xl' />
-
-                        <div className='relative z-10'>
-                            <div className='flex flex-wrap items-center gap-2.5 mb-4'>
-                                <span className='bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-bold text-xs uppercase px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5'>
-                                    <GiftIcon className='w-3.5 h-3.5' /> Community Rewards
-                                </span>
-                                <span className='bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-bold text-xs uppercase px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5'>
-                                    <BoltSvgIcon className='w-3.5 h-3.5' /> {totalAvailableBolts.toLocaleString()} Available
-                                </span>
-                            </div>
-
-                            <h1 className='text-2xl md:text-3xl font-bold text-white tracking-tight font-sans mb-2'>
-                                Earn Free BOLTs for Community Activity
-                            </h1>
-                            <p className='text-sm text-gray-400 font-normal leading-relaxed max-w-2xl font-sans'>
-                                Complete Discord community challenges, invite new members, boost our server, and chat to earn free BOLTs added directly to your account balance.
-                            </p>
+                    {/* HERO SECTION — Floating directly on page background */}
+                    <div className='mt-8 mb-6 font-sans text-left'>
+                        <div className='flex flex-wrap items-center gap-2.5 mb-3'>
+                            <span className='bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-bold text-xs uppercase px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5'>
+                                <GiftIcon className='w-3.5 h-3.5' /> COMMUNITY REWARDS
+                            </span>
+                            <span className='bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-bold text-xs uppercase px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5'>
+                                <BoltSvgIcon className='w-3.5 h-3.5' /> {totalAvailableBolts.toLocaleString()} AVAILABLE
+                            </span>
                         </div>
+
+                        <h1 className='text-4xl font-semibold text-white tracking-tight max-w-xl font-sans'>
+                            Earn Free BOLTs for Community Activity
+                        </h1>
+                        <p className='text-sm text-gray-400 max-w-md mt-2 font-normal leading-relaxed font-sans'>
+                            Complete Discord community challenges, invite new members, boost our server, and chat to earn free BOLTs added directly to your account balance.
+                        </p>
                     </div>
 
-                    {/* DISCORD CONNECTION CARD */}
-                    <div className='p-5 bg-black/40 backdrop-blur-sm border border-white/[0.06] border-t border-t-blue-500/20 rounded-2xl mb-8 relative overflow-hidden font-sans text-left shadow-[0px_0px_120px_-20px_#0900ff]'>
-                        <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0 rounded-2xl' />
-
-                        <div className='relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4'>
-                            <div className='flex items-center gap-3.5'>
-                                <div className='w-10 h-10 rounded-xl bg-[#5865F2]/15 border border-[#5865F2]/30 flex items-center justify-center text-[#5865F2] shrink-0 shadow-inner'>
-                                    <UserGroupIcon className='w-5 h-5' />
-                                </div>
-                                <div>
-                                    <div className='flex items-center gap-2.5'>
-                                        <h4 className='text-sm font-bold text-white tracking-tight'>
-                                            Discord Connection
-                                        </h4>
-                                        {discordId ? (
-                                            <span className='bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider font-mono shrink-0 inline-flex items-center gap-1'>
-                                                <CheckCircleIcon className='w-3.5 h-3.5' /> CONNECTED
-                                            </span>
-                                        ) : (
-                                            <span className='bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider font-mono shrink-0 inline-flex items-center gap-1'>
-                                                <ExclamationTriangleIcon className='w-3.5 h-3.5' /> LINK REQUIRED
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className='text-xs text-gray-400 font-sans mt-1'>
-                                        {formattedDiscordUser
-                                            ? `Discord: ${formattedDiscordUser}`
-                                            : 'Link your Discord account to enable invite, boost, and chat reward verification.'}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <button
-                                type='button'
-                                onClick={() => setConnectModalOpen(true)}
-                                className='bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer active:scale-95 flex items-center gap-2 shrink-0 self-start md:self-auto'
-                            >
-                                <LinkIcon className='w-4 h-4 text-blue-400' />
-                                <span>{discordId ? 'Manage Discord Link' : 'Connect Discord Account'}</span>
-                            </button>
+                    {/* DISCORD CONNECTION — Inline Slim Status Bar */}
+                    <div className='flex flex-wrap items-center justify-between gap-3 py-3 px-0 border-b border-white/[0.06] mb-6 font-sans text-left'>
+                        <div className='flex items-center gap-3'>
+                            <UserGroupIcon className='w-5 h-5 text-gray-400 shrink-0' />
+                            <span className='text-sm text-gray-300 font-sans'>
+                                {formattedDiscordUser ? `Connected as ${formattedDiscordUser}` : 'Discord connection required to verify rewards'}
+                            </span>
+                            {discordId ? (
+                                <span className='bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider font-mono shrink-0'>
+                                    CONNECTED
+                                </span>
+                            ) : (
+                                <span className='bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider font-mono shrink-0'>
+                                    LINK REQUIRED
+                                </span>
+                            )}
                         </div>
+
+                        <button
+                            type='button'
+                            onClick={() => setConnectModalOpen(true)}
+                            className='text-blue-400 hover:text-blue-300 text-xs font-semibold cursor-pointer transition-colors'
+                        >
+                            {discordId ? 'Manage' : 'Connect Account'}
+                        </button>
                     </div>
 
                     {/* FILTER TABS & JOIN DISCORD CTA */}
-                    <div className='flex flex-wrap items-center justify-between gap-4 mb-6 font-sans'>
+                    <div className='flex flex-wrap items-center justify-between gap-4 mt-4 mb-6 font-sans'>
                         {/* StepPillSwitch Filter Tabs */}
                         <div className='relative z-10 flex w-fit rounded-full bg-neutral-900/90 border border-gray-700/80 p-1 backdrop-blur-md'>
                             {[
@@ -249,13 +228,13 @@ export const EarnBoltsContainer: React.FC = () => {
 
                         <div className={!discordId ? 'filter blur-[4px] select-none pointer-events-none opacity-40 transition-all duration-300' : ''}>
                             {loading ? (
-                                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+                                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5'>
                                     {[1, 2, 3, 4, 5, 6].map(i => (
-                                        <div key={i} className='h-56 rounded-2xl bg-neutral-900/60 border border-white/[0.06] animate-pulse' />
+                                        <div key={i} className='h-52 rounded-2xl bg-white/[0.02] border border-white/[0.05] animate-pulse' />
                                     ))}
                                 </div>
                             ) : (
-                                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans mb-8'>
+                                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 font-sans mb-8'>
                                     {filteredTasks.map(task => {
                                         const isClaimed = task.is_claimed
                                         const isClaiming = claimingKey === task.key
@@ -263,88 +242,79 @@ export const EarnBoltsContainer: React.FC = () => {
                                         const target = task.target_count
                                         const pct = Math.min(100, Math.round((current / target) * 100))
 
-                                        let icon = <UserGroupIcon className='w-5 h-5 text-blue-400' />
+                                        let icon = <UserGroupIcon className='w-8 h-8 text-gray-500 mb-3' />
                                         if (task.category === 'boosts') {
-                                            icon = <DiscordBoostIcon className='w-5 h-5' />
+                                            icon = <DiscordBoostIcon className='w-8 h-8 text-gray-500 mb-3' />
                                         } else if (task.category === 'messages') {
-                                            icon = <ChatBubbleLeftRightIcon className='w-5 h-5 text-emerald-400' />
+                                            icon = <ChatBubbleLeftRightIcon className='w-8 h-8 text-gray-500 mb-3' />
                                         }
 
                                         return (
                                             <div
                                                 key={task.key}
-                                                className='bg-black/40 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-6 transition-all duration-150 relative group hover:bg-white/[0.05] flex flex-col justify-between text-left'
+                                                className='bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 hover:bg-white/[0.04] hover:border-white/[0.08] transition-all duration-200 flex flex-col justify-between text-left relative group'
                                             >
-                                                <div className='absolute left-0 top-0 bottom-0 w-[2px] bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-l-2xl' />
-
                                                 <div>
-                                                    {/* Task Header */}
-                                                    <div className='flex items-center justify-between gap-3 mb-4'>
-                                                        <div className='w-10 h-10 rounded-xl bg-black/60 border border-neutral-800 flex items-center justify-center shrink-0 shadow-inner'>
-                                                            {icon}
-                                                        </div>
-                                                        <span className='bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg px-2.5 py-1 font-mono text-xs font-semibold min-w-[110px] text-right inline-flex items-center justify-center gap-1.5'>
-                                                            <BoltSvgIcon className='w-3.5 h-3.5 text-amber-400' /> +{task.reward_bolts.toLocaleString()} BOLTs
+                                                    {/* Header row with Icon & Top-Right Badge */}
+                                                    <div className='flex items-start justify-between gap-3'>
+                                                        <div>{icon}</div>
+                                                        <span className='bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[10px] px-2.5 py-1 font-semibold font-mono shrink-0 inline-flex items-center gap-1'>
+                                                            <BoltSvgIcon className='w-3 h-3 text-amber-400' /> {task.reward_bolts.toLocaleString()}
                                                         </span>
                                                     </div>
 
                                                     {/* Title & Description */}
-                                                    <h3 className='text-base font-bold text-white tracking-tight mb-1'>
+                                                    <h3 className='text-base font-semibold text-white tracking-tight'>
                                                         {task.title}
                                                     </h3>
-                                                    <p className='text-xs text-gray-400 font-normal leading-relaxed mb-4'>
+                                                    <p className='text-xs text-gray-500 mt-0.5 mb-4 font-normal leading-relaxed'>
                                                         {task.requirement_text}
                                                     </p>
 
-                                                    {/* Progress Bar & Label */}
-                                                    <div className='space-y-1.5 mb-6'>
-                                                        <div className='flex justify-between text-xs text-gray-400 font-sans'>
+                                                    {/* Progress Label & Bar */}
+                                                    <div className='space-y-1 mb-5'>
+                                                        <div className='flex justify-between text-[10px] text-gray-500 font-sans'>
                                                             <span>Progress</span>
-                                                            <span className='text-white font-semibold font-mono'>
+                                                            <span className='text-gray-400 font-mono'>
                                                                 {current.toLocaleString()} / {target.toLocaleString()} ({pct}%)
                                                             </span>
                                                         </div>
-                                                        <div className='w-full h-1.5 rounded-full bg-neutral-800 overflow-hidden'>
+                                                        <div className='w-full h-1 rounded-full bg-white/[0.06] overflow-hidden'>
                                                             <div
                                                                 style={{ width: `${pct}%` }}
                                                                 className={`h-full rounded-full transition-all duration-500 ${
                                                                     isClaimed || pct >= 100
-                                                                        ? 'bg-emerald-500'
+                                                                        ? 'bg-emerald-400'
                                                                         : pct > 0
-                                                                        ? 'bg-amber-500'
-                                                                        : 'bg-neutral-700'
+                                                                        ? 'bg-amber-400'
+                                                                        : ''
                                                                 }`}
                                                             />
                                                         </div>
                                                     </div>
                                                 </div>
 
-                                                {/* Action Buttons */}
+                                                {/* Action Element at Bottom — NO heavy button background */}
                                                 <div>
                                                     {isClaimed ? (
-                                                        <div className='bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-semibold px-3 py-2 w-full flex items-center justify-center gap-1.5 font-sans'>
-                                                            <CheckCircleIcon className='w-4 h-4 text-emerald-400' /> Reward Claimed ({task.reward_bolts.toLocaleString()} BOLTs)
+                                                        <div className='text-emerald-400 text-xs flex items-center gap-1.5 font-semibold py-1'>
+                                                            <CheckCircleIcon className='w-4 h-4 text-emerald-400' />
+                                                            <span>✓ Reward claimed · {task.reward_bolts.toLocaleString()} BOLTs</span>
                                                         </div>
                                                     ) : task.is_eligible ? (
                                                         <button
                                                             type='button'
                                                             onClick={() => handleClaim(task)}
                                                             disabled={isClaiming}
-                                                            className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 rounded-xl shadow-lg shadow-blue-800 text-white font-bold text-xs px-4 py-2.5 w-full flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 disabled:opacity-50 font-sans'
+                                                            className='text-blue-400 hover:text-blue-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer py-1 transition-colors'
                                                         >
                                                             <SparklesIcon className='w-4 h-4 text-amber-300 animate-pulse' />
-                                                            <span>{isClaiming ? 'Verifying Requirement...' : `Verify & Claim +${task.reward_bolts.toLocaleString()} BOLTs`}</span>
+                                                            <span>{isClaiming ? 'Verifying requirement...' : `Verify & Claim +${task.reward_bolts.toLocaleString()} BOLTs`}</span>
                                                         </button>
                                                     ) : (
-                                                        <button
-                                                            type='button'
-                                                            onClick={() => handleClaim(task)}
-                                                            disabled={isClaiming}
-                                                            className='bg-neutral-800 border border-neutral-700 text-gray-400 rounded-xl text-xs font-semibold px-3 py-2.5 w-full flex items-center justify-center gap-1.5 hover:text-white transition cursor-pointer active:scale-95 disabled:opacity-50 font-sans'
-                                                        >
-                                                            <span>{isClaiming ? 'Checking Eligibility...' : `In Progress (${(task.current_count ?? 0).toLocaleString()} / ${task.target_count})`}</span>
-                                                            <ArrowRightIcon className='w-3 h-3 text-gray-400' />
-                                                        </button>
+                                                        <div className='text-gray-500 text-xs flex items-center gap-1.5 py-1'>
+                                                            <span>→ In progress · {current.toLocaleString()}/{target.toLocaleString()}</span>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
