@@ -15,6 +15,7 @@ class UserTransformer extends TransformerAbstract
             'email' => $user->email,
             'email_verified_at' => $user->email_verified_at,
             'root_admin' => $user->root_admin,
+            'hide_ip_in_audit' => (bool) $user->hide_ip_in_audit,
             'servers_count' => (int) $user->servers_count,
         ];
     }

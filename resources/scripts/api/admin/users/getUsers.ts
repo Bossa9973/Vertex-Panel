@@ -6,6 +6,7 @@ export interface User {
     email: string
     emailVerifiedAt: Date | null
     rootAdmin: boolean
+    hideIpInAudit?: boolean
     serversCount: number
 }
 
@@ -17,6 +18,7 @@ export const rawDataToUser = (data: any): User => ({
         ? new Date(data.email_verified_at)
         : null,
     rootAdmin: data.root_admin,
+    hideIpInAudit: Boolean(data.hide_ip_in_audit),
     serversCount: data.servers_count,
 })
 

@@ -1,11 +1,13 @@
 import usePagination from '@/util/usePagination'
 import { CheckIcon } from '@heroicons/react/20/solid'
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
 import { useDebouncedValue } from '@mantine/hooks'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { User } from '@/api/admin/users/getUsers'
 import useUsersSWR from '@/api/admin/users/useUsersSWR'
+import { toggleUserIpPrivacy } from '@/api/admin/roles/adminRoles'
 
 import PageContentBlock from '@/components/elements/PageContentBlock'
 import Pagination from '@/components/elements/Pagination'
@@ -15,6 +17,50 @@ import Table, { ColumnArray } from '@/components/elements/displays/Table'
 import SearchBar from '@/components/admin/SearchBar'
 import CreateUserModal from '@/components/admin/users/CreateUserModal'
 
+const IpPrivacyCell = ({ row }: { row: User }) => {
+    const [hidden, setHidden] = useState(Boolean(row.hideIpInAudit))
+    const [loading, setLoading] = useState(false)
+
+    const handleToggle = async () => {
+        setLoading(true)
+        try {
+            await toggleUserIpPrivacy(row.id, !hidden)
+            setHidden(!hidden)
+        } catch (e: any) {
+            alert(e.response?.data?.message || 'Failed to toggle IP privacy.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <div className='flex items-center justify-center'>
+            <button
+                type='button'
+                onClick={handleToggle}
+                disabled={loading}
+                title={hidden ? 'IP address is hidden in audit logs. Click to make visible.' : 'IP address is visible in audit logs. Click to hide.'}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer active:scale-95 disabled:opacity-50 ${
+                    hidden
+                        ? 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25'
+                        : 'bg-neutral-800 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+                }`}
+            >
+                {hidden ? (
+                    <>
+                        <EyeSlashIcon className='w-3.5 h-3.5 text-amber-400' />
+                        <span>IP Hidden</span>
+                    </>
+                ) : (
+                    <>
+                        <EyeIcon className='w-3.5 h-3.5 text-gray-400' />
+                        <span>IP Visible</span>
+                    </>
+                )}
+            </button>
+        </div>
+    )
+}
 
 const columns: ColumnArray<User> = [
     {
@@ -23,7 +69,7 @@ const columns: ColumnArray<User> = [
         cell: ({ value, row }) => (
             <Link
                 to={`/admin/users/${row.id}/settings`}
-                className='link text-foreground'
+                className='link text-foreground font-medium'
             >
                 {value}
             </Link>
@@ -47,6 +93,12 @@ const columns: ColumnArray<User> = [
                 ) : null}
             </div>
         ),
+    },
+    {
+        accessor: 'hideIpInAudit',
+        header: 'Audit Privacy',
+        align: 'center',
+        cell: ({ row }) => <IpPrivacyCell row={row} />,
     },
     {
         accessor: 'serversCount',
