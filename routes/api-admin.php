@@ -247,6 +247,7 @@ Route::prefix('/roles')->group(function () {
     Route::get('/permissions', [Admin\AdminRoleController::class, 'permissions']);
     Route::get('/admin-users', [Admin\AdminRoleController::class, 'adminUsers']);
     Route::post('/assign', [Admin\AdminRoleController::class, 'assignRole']);
+    Route::post('/toggle-ip-privacy', [Admin\AdminRoleController::class, 'toggleIpPrivacy']);
     Route::get('/', [Admin\AdminRoleController::class, 'index']);
     Route::post('/', [Admin\AdminRoleController::class, 'store']);
     Route::put('/{role}', [Admin\AdminRoleController::class, 'update']);

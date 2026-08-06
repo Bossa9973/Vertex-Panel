@@ -136,9 +136,40 @@ class AdminRoleController extends Controller
                 'admin_role_name'  => $u->adminRole?->name,
                 'admin_role_color' => $u->adminRole?->color,
                 'is_super_admin' => $u->email === $this->superAdminEmail(),
+                'hide_ip_in_audit' => (bool) $u->hide_ip_in_audit,
             ]);
 
         return response()->json(['data' => $users]);
+    }
+
+    /**
+     * POST /api/admin/roles/toggle-ip-privacy
+     */
+    public function toggleIpPrivacy(Request $request): JsonResponse
+    {
+        if (! $request->user()?->hasAdminPermission('manage_ip_privacy')) {
+            abort(403, 'Only Head Admin or authorized roles can manage user IP privacy.');
+        }
+
+        $validated = $request->validate([
+            'user_id'          => 'required|integer|exists:users,id',
+            'hide_ip_in_audit' => 'required|boolean',
+        ]);
+
+        $user = User::findOrFail($validated['user_id']);
+        $user->hide_ip_in_audit = $validated['hide_ip_in_audit'];
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => $user->hide_ip_in_audit
+                ? "IP hiding enabled for {$user->name}."
+                : "IP hiding disabled for {$user->name}.",
+            'data' => [
+                'user_id'          => $user->id,
+                'hide_ip_in_audit' => (bool) $user->hide_ip_in_audit,
+            ],
+        ]);
     }
 
     /**

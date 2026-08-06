@@ -24,6 +24,7 @@ export interface AdminUser {
     admin_role_name: string | null
     admin_role_color: string | null
     is_super_admin: boolean
+    hide_ip_in_audit?: boolean
 }
 
 export const getRoles = (): Promise<AdminRole[]> =>
@@ -54,3 +55,6 @@ export const deleteRole = (id: number): Promise<void> =>
 
 export const assignRole = (userId: number, roleId: number | null): Promise<void> =>
     http.post('/api/admin/roles/assign', { user_id: userId, role_id: roleId })
+
+export const toggleUserIpPrivacy = (userId: number, hideIp: boolean): Promise<void> =>
+    http.post('/api/admin/roles/toggle-ip-privacy', { user_id: userId, hide_ip_in_audit: hideIp })

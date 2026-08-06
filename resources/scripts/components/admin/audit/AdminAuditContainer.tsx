@@ -422,26 +422,32 @@ const AdminAuditContainer = () => {
 
                                             {/* IP Address */}
                                             <td className='py-3.5 px-4 text-right whitespace-nowrap'>
-                                                <div className='flex items-center justify-end gap-1.5'>
-                                                    <button
-                                                        onClick={() => setFilterIp(log.ip)}
-                                                        className='font-mono text-xs text-gray-300 hover:text-blue-400 bg-gray-800/60 px-2 py-1 rounded border border-gray-700/80 transition cursor-pointer'
-                                                        title='Filter by this IP'
-                                                    >
-                                                        {log.ip}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleCopyIp(log.ip)}
-                                                        className='text-gray-500 hover:text-gray-300 p-1 transition'
-                                                        title='Copy IP'
-                                                    >
-                                                        {copiedIp === log.ip ? (
-                                                            <CheckIcon className='w-3.5 h-3.5 text-emerald-400' />
-                                                        ) : (
-                                                            <ClipboardDocumentIcon className='w-3.5 h-3.5' />
-                                                        )}
-                                                    </button>
-                                                </div>
+                                                {log.ip === '[Hidden Privacy]' ? (
+                                                    <span className='font-mono text-xs text-amber-400/80 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 italic inline-block'>
+                                                        Hidden (Privacy)
+                                                    </span>
+                                                ) : (
+                                                    <div className='flex items-center justify-end gap-1.5'>
+                                                        <button
+                                                            onClick={() => setFilterIp(log.ip)}
+                                                            className='font-mono text-xs text-gray-300 hover:text-blue-400 bg-gray-800/60 px-2 py-1 rounded border border-gray-700/80 transition cursor-pointer'
+                                                            title='Filter by this IP'
+                                                        >
+                                                            {log.ip}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleCopyIp(log.ip)}
+                                                            className='text-gray-500 hover:text-gray-300 p-1 transition'
+                                                            title='Copy IP'
+                                                        >
+                                                            {copiedIp === log.ip ? (
+                                                                <CheckIcon className='w-3.5 h-3.5 text-emerald-400' />
+                                                            ) : (
+                                                                <ClipboardDocumentIcon className='w-3.5 h-3.5' />
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </td>
                                         </tr>
                                     ))

@@ -47,6 +47,7 @@ class AdminRole extends Model
         'view_plans'       => ['label' => 'View VPS Plans',    'section' => 'Plans',        'category' => 'Visibility'],
         'view_tokens'      => ['label' => 'View API Tokens',   'section' => 'API Tokens',   'category' => 'Visibility'],
         'view_maintenance' => ['label' => 'View Maintenance',  'section' => 'Maintenance',  'category' => 'Visibility'],
+        'view_audit_logs'  => ['label' => 'View System Audit Logs', 'section' => 'Audit Logs', 'category' => 'Visibility'],
         // Action permissions
         'manage_balances'  => ['label' => 'Manage BOLT Balances',    'section' => 'User Balances', 'category' => 'Actions'],
         'manage_users'     => ['label' => 'Manage User Accounts',    'section' => 'Users',         'category' => 'Actions'],
@@ -54,6 +55,7 @@ class AdminRole extends Model
         'manage_nodes'     => ['label' => 'Manage Nodes',            'section' => 'Nodes',         'category' => 'Actions'],
         'manage_plans'     => ['label' => 'Manage VPS Plans',        'section' => 'Plans',         'category' => 'Actions'],
         'manage_settings'  => ['label' => 'Manage System Settings',  'section' => 'Maintenance',   'category' => 'Actions'],
+        'manage_ip_privacy'=> ['label' => 'Manage User Audit IP Privacy', 'section' => 'Audit Logs', 'category' => 'Actions'],
     ];
 
     // ─── Relationships ──────────────────────────────────────────────────────

@@ -42,6 +42,7 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         'password',
         'root_admin',
         'admin_role_id',
+        'hide_ip_in_audit',
     ];
 
     /**
@@ -77,6 +78,7 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         'email_verified_at' => 'datetime',
         'root_admin' => 'boolean',
         'credits' => 'float',
+        'hide_ip_in_audit' => 'boolean',
     ];
 
     public function toReactObject(): array
@@ -88,6 +90,7 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         $data['google_id'] = $this->google_id;
         $data['google_email'] = $this->google_email;
         $data['primary_auth_provider'] = $this->primary_auth_provider ?? 'email';
+        $data['hide_ip_in_audit'] = (bool) $this->hide_ip_in_audit;
 
         // Include admin role permissions so the frontend can hide nav items
         if ($this->root_admin) {

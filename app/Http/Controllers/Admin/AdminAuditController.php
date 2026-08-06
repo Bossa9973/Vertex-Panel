@@ -13,6 +13,10 @@ class AdminAuditController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        if (! $request->user()?->hasAdminPermission('view_audit_logs')) {
+            abort(403, 'You do not have permission to view audit logs.');
+        }
+
         $query = ActivityLog::with(['actor'])->orderBy('id', 'desc');
 
         // 1. Tab / Category Filter
@@ -91,6 +95,9 @@ class AdminAuditController extends Controller
 
             // Extract IP & User Agent metadata if stored in properties
             $ip = $properties['ip'] ?? $log->ip ?? 'Unknown';
+            if ($actor?->hide_ip_in_audit) {
+                $ip = '[Hidden Privacy]';
+            }
             $userAgent = $properties['useragent'] ?? $properties['user_agent'] ?? null;
 
             return [
@@ -104,10 +111,11 @@ class AdminAuditController extends Controller
                 'created_at'  => $log->created_at ? $log->created_at->toIso8601String() : null,
                 'timestamp'   => $log->created_at ? $log->created_at->timestamp : time(),
                 'actor'       => $actor ? [
-                    'id'         => $actor->id,
-                    'name'       => $actor->name,
-                    'email'      => $actor->email,
-                    'root_admin' => (bool) ($actor->root_admin ?? false),
+                    'id'               => $actor->id,
+                    'name'             => $actor->name,
+                    'email'            => $actor->email,
+                    'root_admin'       => (bool) ($actor->root_admin ?? false),
+                    'hide_ip_in_audit' => (bool) ($actor->hide_ip_in_audit ?? false),
                 ] : null,
             ];
         });

@@ -11,6 +11,8 @@ import {
     CheckBadgeIcon,
     XMarkIcon,
     UserCircleIcon,
+    EyeIcon,
+    EyeSlashIcon,
 } from '@heroicons/react/24/outline'
 import {
     getRoles,
@@ -20,6 +22,7 @@ import {
     updateRole,
     deleteRole,
     assignRole,
+    toggleUserIpPrivacy,
     type AdminRole,
     type PermissionMeta,
     type AdminUser,
@@ -334,6 +337,20 @@ const AdminRolesContainer = () => {
         }
     }
 
+    const [togglingIp, setTogglingIp] = useState<Record<number, boolean>>({})
+
+    const handleToggleIpPrivacy = async (userId: number, hideIp: boolean) => {
+        setTogglingIp(prev => ({ ...prev, [userId]: true }))
+        try {
+            await toggleUserIpPrivacy(userId, hideIp)
+            setAdminUsers(prev => prev.map(u => u.id === userId ? { ...u, hide_ip_in_audit: hideIp } : u))
+        } catch (e: any) {
+            alert(e.response?.data?.message || 'Failed to toggle IP privacy.')
+        } finally {
+            setTogglingIp(prev => ({ ...prev, [userId]: false }))
+        }
+    }
+
     return (
         <PageContentBlock title='Admin › Roles'>
             {/* Page header */}
@@ -486,6 +503,32 @@ const AdminRolesContainer = () => {
                                 </div>
 
                                 <div className='flex items-center gap-3'>
+                                    {isCeo && (
+                                        <button
+                                            type='button'
+                                            onClick={() => handleToggleIpPrivacy(u.id, !u.hide_ip_in_audit)}
+                                            disabled={togglingIp[u.id]}
+                                            title={u.hide_ip_in_audit ? 'IP is hidden in audit logs. Click to make visible.' : 'IP is visible in audit logs. Click to hide.'}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition cursor-pointer active:scale-95 disabled:opacity-50 ${
+                                                u.hide_ip_in_audit
+                                                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25'
+                                                    : 'bg-neutral-800 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+                                            }`}
+                                        >
+                                            {u.hide_ip_in_audit ? (
+                                                <>
+                                                    <EyeSlashIcon className='w-3.5 h-3.5 text-amber-400' />
+                                                    <span>IP Hidden</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <EyeIcon className='w-3.5 h-3.5 text-gray-400' />
+                                                    <span>IP Visible</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+
                                     {u.is_super_admin ? (
                                         <span className='flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold'>
                                             <CheckBadgeIcon className='w-3.5 h-3.5' /> Super Admin
