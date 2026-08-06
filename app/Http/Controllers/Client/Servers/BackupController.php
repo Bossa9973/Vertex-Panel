@@ -54,6 +54,11 @@ class BackupController extends ApiController
                 isLocked       : $request->input('locked', false),
             );
 
+        \Convoy\Facades\Activity::event('server:backup-create')
+            ->subject($server)
+            ->property(['name' => $backup->name, 'backup_id' => $backup->id])
+            ->log("Created backup '{$backup->name}' for server {$server->name}");
+
         return fractal($backup, new BackupTransformer())->respond();
     }
 
@@ -61,12 +66,23 @@ class BackupController extends ApiController
     {
         $this->restoreFromBackupService->handle($server, $backup);
 
+        \Convoy\Facades\Activity::event('server:backup-restore')
+            ->subject($server)
+            ->property(['name' => $backup->name, 'backup_id' => $backup->id])
+            ->log("Restored server {$server->name} from backup '{$backup->name}'");
+
         return $this->returnNoContent();
     }
 
     public function destroy(DeleteBackupRequest $request, Server $server, Backup $backup)
     {
+        $backupName = $backup->name;
         $this->backupDeletionService->handle($backup);
+
+        \Convoy\Facades\Activity::event('server:backup-delete')
+            ->subject($server)
+            ->property(['name' => $backupName])
+            ->log("Deleted backup '{$backupName}' for server {$server->name}");
 
         return $this->returnNoContent();
     }

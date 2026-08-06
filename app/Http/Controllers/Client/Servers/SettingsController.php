@@ -51,6 +51,11 @@ class SettingsController extends ApiController
             $server->update($request->validated());
         });
 
+        \Convoy\Facades\Activity::event('server:rename')
+            ->subject($server)
+            ->property(['hostname' => $request->hostname])
+            ->log("Renamed server to {$request->hostname}");
+
         return fractal($server, new RenamedServerTransformer())->respond();
     }
 
@@ -97,6 +102,11 @@ class SettingsController extends ApiController
             $this->buildDispatchService->rebuild($deployment);
         });
 
+        \Convoy\Facades\Activity::event('server:reinstall')
+            ->subject($server)
+            ->property(['template_uuid' => $request->template_uuid])
+            ->log("Reinstalled OS on server {$server->name}");
+
         return $this->returnNoContent();
     }
 
@@ -121,6 +131,10 @@ class SettingsController extends ApiController
     public function updateBootOrder(UpdateBootOrderRequest $request, Server $server)
     {
         $this->allocationService->setBootOrder($server, $request->order);
+
+        \Convoy\Facades\Activity::event('server:boot-order')
+            ->subject($server)
+            ->log("Updated boot order for server {$server->name}");
 
         return $this->returnNoContent();
     }
@@ -157,12 +171,22 @@ class SettingsController extends ApiController
     {
         $this->allocationService->mountIso($server, $iso);
 
+        \Convoy\Facades\Activity::event('server:iso-mount')
+            ->subject($server)
+            ->property(['iso_name' => $iso->name])
+            ->log("Mounted ISO '{$iso->name}' on server {$server->name}");
+
         return $this->returnNoContent();
     }
 
     public function unmountMedia(Server $server, ISO $iso)
     {
         $this->allocationService->unmountIso($server, $iso);
+
+        \Convoy\Facades\Activity::event('server:iso-unmount')
+            ->subject($server)
+            ->property(['iso_name' => $iso->name])
+            ->log("Unmounted ISO '{$iso->name}' from server {$server->name}");
 
         return $this->returnNoContent();
     }
@@ -177,6 +201,10 @@ class SettingsController extends ApiController
     public function updateNetworkSettings(UpdateNetworkRequest $request, Server $server)
     {
         $this->cloudinitService->updateNameservers($server, $request->nameservers);
+
+        \Convoy\Facades\Activity::event('server:network-update')
+            ->subject($server)
+            ->log("Updated network settings for server {$server->name}");
 
         return fractal()->item([
             'nameservers' => $this->cloudinitService->getNameservers($server),
@@ -197,6 +225,10 @@ class SettingsController extends ApiController
         } else {
             $this->authService->updatePassword($server, $request->password);
         }
+
+        \Convoy\Facades\Activity::event('server:auth-update')
+            ->subject($server)
+            ->log("Updated authentication credentials for server {$server->name}");
 
         return $this->returnNoContent();
     }
