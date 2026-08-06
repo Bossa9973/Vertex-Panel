@@ -9,11 +9,84 @@ import { Route } from '@/routers/router'
 import { HomeIcon } from '@heroicons/react/20/solid'
 import { lazy, useContext, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, Outlet, useMatch } from 'react-router-dom'
+import { Link, Outlet, useMatch, Navigate } from 'react-router-dom'
 import { useStoreState } from '@/state'
 
 import ContentContainer from '@/components/elements/ContentContainer'
 import { NavigationBarContext } from '@/components/elements/navigation/NavigationBar'
+
+// ─── Permission Helpers & Guards ─────────────────────────────────────────────
+
+export function getFirstAllowedAdminPath(user: any): string {
+    if (!user) return '/admin/roles'
+
+    const isCeo = user.email === 'ceo@vertexnodes.top'
+    const permissions = user.adminPermissions ?? null
+
+    // CEO or null permissions = full access
+    if (isCeo || permissions === null) {
+        return '/admin'
+    }
+
+    const hasPerm = (perm: string) => Array.isArray(permissions) && permissions.includes(perm)
+
+    if (hasPerm('view_overview')) return '/admin'
+    if (hasPerm('view_locations')) return '/admin/locations'
+    if (hasPerm('view_nodes')) return '/admin/nodes'
+    if (hasPerm('view_servers')) return '/admin/servers'
+    if (hasPerm('view_plans')) return '/admin/plans'
+    if (hasPerm('manage_balances')) return '/admin/user-balances'
+    if (hasPerm('view_ipam')) return '/admin/ipam'
+    if (hasPerm('view_users')) return '/admin/users'
+    if (hasPerm('view_coterms')) return '/admin/coterms'
+    if (hasPerm('view_tokens')) return '/admin/tokens'
+    if (hasPerm('view_audit_logs')) return '/admin/audit'
+    if (hasPerm('view_maintenance')) return '/admin/maintenance'
+
+    return '/admin/roles'
+}
+
+export function RequireAdminPermission({ perm, children }: { perm?: string; children: React.ReactNode }) {
+    const user = useStoreState(s => s.user.data)
+    const isCeo = user?.email === 'ceo@vertexnodes.top'
+    const permissions = user?.adminPermissions ?? null
+
+    if (!perm || isCeo || permissions === null) {
+        return <>{children}</>
+    }
+
+    const hasPerm = Array.isArray(permissions) && permissions.includes(perm)
+    if (!hasPerm) {
+        const allowedPath = getFirstAllowedAdminPath(user)
+        return <Navigate to={allowedPath} replace />
+    }
+
+    return <>{children}</>
+}
+
+function wrapRoutesWithPerm(routesList: Route[], perm: string): Route[] {
+    return routesList.map(r => ({
+        ...r,
+        element: r.element ? <RequireAdminPermission perm={perm}>{r.element}</RequireAdminPermission> : r.element,
+        ...(r.children ? { children: wrapRoutesWithPerm(r.children, perm) } : {}),
+    }))
+}
+
+const OverviewComponent = lazy(() => import('@/components/admin/overview/OverviewContainer'))
+const OverviewRouteWrapper = () => {
+    const user = useStoreState(s => s.user.data)
+    const isCeo = user?.email === 'ceo@vertexnodes.top'
+    const permissions = user?.adminPermissions ?? null
+
+    const hasOverview = isCeo || permissions === null || (Array.isArray(permissions) && permissions.includes('view_overview'))
+
+    if (!hasOverview) {
+        const fallback = getFirstAllowedAdminPath(user)
+        return <Navigate to={fallback} replace />
+    }
+
+    return lazyLoad(OverviewComponent)
+}
 
 export const routes: Route[] = [
     {
@@ -38,82 +111,64 @@ export const routes: Route[] = [
         children: [
             {
                 index: true,
-                element: lazyLoad(
-                    lazy(
-                        () =>
-                            import(
-                                '@/components/admin/overview/OverviewContainer'
-                            )
-                    )
-                ),
+                element: <OverviewRouteWrapper />,
             },
             {
                 path: 'locations',
-                element: lazyLoad(
-                    lazy(
-                        () =>
-                            import(
-                                '@/components/admin/locations/LocationsContainer'
-                            )
-                    )
+                element: (
+                    <RequireAdminPermission perm='view_locations'>
+                        {lazyLoad(lazy(() => import('@/components/admin/locations/LocationsContainer')))}
+                    </RequireAdminPermission>
                 ),
             },
-            ...adminNodeRoutes,
-            ...adminServerRoutes,
-            ...adminIpamRoutes,
-            ...adminUserRoutes,
-            ...adminCotermRoutes,
+            ...wrapRoutesWithPerm(adminNodeRoutes, 'view_nodes'),
+            ...wrapRoutesWithPerm(adminServerRoutes, 'view_servers'),
+            ...wrapRoutesWithPerm(adminIpamRoutes, 'view_ipam'),
+            ...wrapRoutesWithPerm(adminUserRoutes, 'view_users'),
+            ...wrapRoutesWithPerm(adminCotermRoutes, 'view_coterms'),
             {
                 path: 'plans',
-                element: lazyLoad(
-                    lazy(
-                        () =>
-                            import('@/components/admin/plans/AdminVpsPlansContainer')
-                    )
+                element: (
+                    <RequireAdminPermission perm='view_plans'>
+                        {lazyLoad(lazy(() => import('@/components/admin/plans/AdminVpsPlansContainer')))}
+                    </RequireAdminPermission>
                 ),
             },
             {
                 path: 'user-balances',
-                element: lazyLoad(
-                    lazy(
-                        () =>
-                            import('@/components/admin/users/AdminUserBalanceContainer')
-                    )
+                element: (
+                    <RequireAdminPermission perm='manage_balances'>
+                        {lazyLoad(lazy(() => import('@/components/admin/users/AdminUserBalanceContainer')))}
+                    </RequireAdminPermission>
                 ),
             },
             {
                 path: 'tokens',
-                element: lazyLoad(
-                    lazy(
-                        () =>
-                            import('@/components/admin/tokens/TokensContainer')
-                    )
+                element: (
+                    <RequireAdminPermission perm='view_tokens'>
+                        {lazyLoad(lazy(() => import('@/components/admin/tokens/TokensContainer')))}
+                    </RequireAdminPermission>
                 ),
             },
             {
                 path: 'audit',
-                element: lazyLoad(
-                    lazy(
-                        () => import('@/components/admin/audit/AdminAuditContainer')
-                    )
+                element: (
+                    <RequireAdminPermission perm='view_audit_logs'>
+                        {lazyLoad(lazy(() => import('@/components/admin/audit/AdminAuditContainer')))}
+                    </RequireAdminPermission>
                 ),
             },
             {
                 path: 'maintenance',
-                element: lazyLoad(
-                    lazy(
-                        () =>
-                            import('@/components/admin/maintenance/AdminMaintenanceContainer')
-                    )
+                element: (
+                    <RequireAdminPermission perm='view_maintenance'>
+                        {lazyLoad(lazy(() => import('@/components/admin/maintenance/AdminMaintenanceContainer')))}
+                    </RequireAdminPermission>
                 ),
             },
             {
                 path: 'roles',
-                element: lazyLoad(
-                    lazy(
-                        () => import('@/components/admin/roles/AdminRolesContainer')
-                    )
-                ),
+                element: lazyLoad(lazy(() => import('@/components/admin/roles/AdminRolesContainer'))),
             },
         ],
     },
@@ -143,7 +198,7 @@ const AdminDashboardRouter = () => {
     const adminPermissions = user?.adminPermissions ?? null
     const isCeo = user?.email === 'ceo@vertexnodes.top'
 
-    const hasPerm = (perm: string) => adminPermissions === null || adminPermissions.includes(perm)
+    const hasPerm = (perm: string) => isCeo || adminPermissions === null || (Array.isArray(adminPermissions) && adminPermissions.includes(perm))
 
     const getLabel = (key: string, fallback: string) => {
         const val = tStrings(key)
@@ -161,9 +216,8 @@ const AdminDashboardRouter = () => {
         ...(hasPerm('view_users') ? [{ name: getLabel('user_other', 'Users'), path: '/admin/users' }] : []),
         ...(hasPerm('view_coterms') ? [{ name: 'Coterms', path: '/admin/coterms' }] : []),
         ...(hasPerm('view_tokens') ? [{ name: getLabel('token_other', 'API Tokens'), path: '/admin/tokens' }] : []),
-        { name: '📋 Audit Logs', path: '/admin/audit' },
+        ...(hasPerm('view_audit_logs') ? [{ name: '📋 Audit Logs', path: '/admin/audit' }] : []),
         ...(hasPerm('view_maintenance') ? [{ name: 'Maintenance', path: '/admin/maintenance' }] : []),
-        // Roles tab — always visible to all admins (read-only for non-CEO)
         { name: '🛡 Roles', path: '/admin/roles' },
     ]
 
