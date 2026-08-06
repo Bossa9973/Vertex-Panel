@@ -4,6 +4,7 @@ import { useStoreActions, useStoreState } from '@/state'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import {
     ClipboardIcon,
+    ArrowUpRightIcon,
 } from '@heroicons/react/24/outline'
 import { Modal, LoadingOverlay } from '@mantine/core'
 import { useEffect, useState } from 'react'
@@ -11,6 +12,7 @@ import useSWR, { mutate } from 'swr'
 import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
 import { motion } from 'framer-motion'
 import { Copy, Check, RotateCw, CreditCard } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const formatTxDescription = (desc: string) => {
     if (!desc) return { title: 'Transaction Statement', detail: 'Account balance update' }
@@ -80,6 +82,21 @@ const formatDateClean = (dateStr: string) => {
     }
 }
 
+const formatMemberSinceDate = (dateStr?: string | null) => {
+    if (!dateStr) return '12 Jan 2025'
+    try {
+        const d = new Date(dateStr)
+        if (isNaN(d.getTime())) return '12 Jan 2025'
+        const day = String(d.getDate()).padStart(2, '0')
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const month = months[d.getMonth()]
+        const year = d.getFullYear()
+        return `${day} ${month} ${year}`
+    } catch {
+        return '12 Jan 2025'
+    }
+}
+
 const CreditsContainer = () => {
     const user = useStoreState(state => state.user.data)
     const updateCredits = useStoreActions(actions => actions.user.updateCredits)
@@ -143,19 +160,25 @@ const CreditsContainer = () => {
         .filter(tx => tx.type === 'deduction' || tx.amount < 0)
         .reduce((acc, tx) => acc + Math.abs(tx.amount), 0)
 
+    const balanceVal = (user?.credits ?? 0).toFixed(2)
+    const [wholePart, decimalPart] = balanceVal.split('.')
+
+    const userCreatedAt = (user as any)?.createdAt || (user as any)?.created_at
+    const memberSinceFormatted = formatMemberSinceDate(userCreatedAt)
+
     const renderTxAmount = (tx: CreditTransaction) => {
         const isDeduction = tx.type === 'deduction' || tx.amount < 0
         const absVal = Math.abs(tx.amount).toFixed(2)
 
         if (isDeduction) {
             return (
-                <div className='bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg px-2.5 py-1 font-mono text-xs font-semibold min-w-[120px] text-right inline-block ml-auto'>
+                <div className='bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg px-2.5 py-1 font-mono text-xs font-semibold min-w-[130px] text-right inline-block ml-auto'>
                     -{absVal} BOLTs
                 </div>
             )
         }
         return (
-            <div className='bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg px-2.5 py-1 font-mono text-xs font-semibold min-w-[120px] text-right inline-block ml-auto'>
+            <div className='bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg px-2.5 py-1 font-mono text-xs font-semibold min-w-[130px] text-right inline-block ml-auto'>
                 +{absVal} BOLTs
             </div>
         )
@@ -180,10 +203,12 @@ const CreditsContainer = () => {
                                 </span>
                             </div>
 
-                            <div className='text-5xl font-bold text-white tracking-tight flex items-center gap-2 mt-3'>
-                                <BoltSvgIcon className='w-10 h-10 text-amber-400 shrink-0' />
-                                <span>{(user?.credits ?? 0).toFixed(2)}</span>
-                                <span className='text-lg font-bold text-gray-400 ml-1'>BOLTs</span>
+                            {/* Split balance number with smaller decimal */}
+                            <div className='text-5xl font-bold text-white tracking-tight flex items-baseline gap-1 mt-3'>
+                                <BoltSvgIcon className='w-10 h-10 text-amber-400 shrink-0 self-center' />
+                                <span className='text-5xl font-bold text-white'>{wholePart}</span>
+                                <span className='text-2xl font-bold text-gray-400'>.{decimalPart}</span>
+                                <span className='text-lg font-bold text-gray-400 ml-1.5'>BOLTs</span>
                             </div>
 
                             <div className='border-t border-white/[0.06] my-4' />
@@ -198,19 +223,38 @@ const CreditsContainer = () => {
                                 <div className='flex items-center justify-between text-xs text-gray-400'>
                                     <span>Member Since</span>
                                     <span className='font-mono text-white font-semibold'>
-                                        {(user as any)?.created_at ? formatDateClean((user as any).created_at).split(',')[0] : 'Active Member'}
+                                        {memberSinceFormatted}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        <div className='relative z-10 mt-6 pt-2'>
-                            <button
-                                onClick={() => setOpened(true)}
-                                className='w-full py-2.5 px-4 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95'
-                            >
-                                <BoltSvgIcon className='w-4 h-4 text-amber-300' /> Top Up BOLTs Balance
-                            </button>
+                        {/* Circular Action Buttons */}
+                        <div className='relative z-10 flex items-center gap-6 mt-6'>
+                            {/* "Top Up" */}
+                            <div className='flex flex-col items-center gap-1.5'>
+                                <button
+                                    type='button'
+                                    onClick={() => setOpened(true)}
+                                    className='w-12 h-12 rounded-full bg-blue-500 shadow-lg shadow-blue-500/40 flex items-center justify-center cursor-pointer active:scale-95 transition hover:bg-blue-400'
+                                    title='Top Up'
+                                >
+                                    <ArrowUpRightIcon className='w-5 h-5 text-white' />
+                                </button>
+                                <span className='text-xs text-gray-400 font-sans font-medium'>Top Up</span>
+                            </div>
+
+                            {/* "Earn Free" */}
+                            <div className='flex flex-col items-center gap-1.5'>
+                                <Link
+                                    to='/earn'
+                                    className='w-12 h-12 rounded-full bg-amber-500 shadow-lg shadow-amber-500/40 flex items-center justify-center cursor-pointer active:scale-95 transition hover:bg-amber-400'
+                                    title='Earn Free'
+                                >
+                                    <BoltSvgIcon className='w-5 h-5 text-white' />
+                                </Link>
+                                <span className='text-xs text-gray-400 font-sans font-medium'>Earn Free</span>
+                            </div>
                         </div>
                     </div>
 
@@ -218,16 +262,32 @@ const CreditsContainer = () => {
                     <div className='p-6 bg-neutral-900/60 backdrop-blur-sm border border-white/[0.06] rounded-2xl shadow-[0px_0px_120px_-20px_#0900ff] text-white relative font-sans text-left flex flex-col justify-between'>
                         <div className='absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none z-0 rounded-2xl' />
 
-                        <div className='relative z-10'>
-                            <span className='text-xs font-bold uppercase tracking-wider text-gray-400 block'>
-                                BILLING &amp; REFERRAL INFO
-                            </span>
+                        <div className='relative z-10 space-y-4'>
+                            <div>
+                                <span className='text-xs font-bold uppercase tracking-wider text-gray-400 block'>
+                                    BILLING &amp; REFERRAL INFO
+                                </span>
+                                <p className='text-sm text-gray-400 leading-relaxed mt-2 font-sans'>
+                                    Automated billing dynamically deducts server renewal fees from your active BOLT balance every 30 days. Maintain sufficient balance to ensure uninterrupted service availability.
+                                </p>
+                            </div>
 
-                            <p className='text-sm text-gray-400 leading-relaxed mt-3 font-sans'>
-                                Automated billing dynamically deducts server renewal fees from your active BOLT balance every 30 days. Maintain sufficient balance to ensure uninterrupted service availability.
-                            </p>
+                            <div className='border-t border-white/[0.06] pt-3 space-y-2'>
+                                <div className='flex items-center justify-between text-xs text-gray-400'>
+                                    <span>AUTOMATED BILLING</span>
+                                    <span className='font-mono text-white font-semibold'>Active</span>
+                                </div>
+                                <div className='flex items-center justify-between text-xs text-gray-400'>
+                                    <span>RENEWAL CYCLE</span>
+                                    <span className='font-mono text-white font-semibold'>Every 30 Days</span>
+                                </div>
+                                <div className='flex items-center justify-between text-xs text-gray-400'>
+                                    <span>AUTO-RENEWAL</span>
+                                    <span className='font-mono text-white font-semibold'>Enabled · Every 30 days</span>
+                                </div>
+                            </div>
 
-                            <div className='mt-5 pt-4 border-t border-white/[0.06]'>
+                            <div className='pt-3 border-t border-white/[0.06]'>
                                 <label className='block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5'>
                                     YOUR CLIENT REFERRAL CODE
                                 </label>
