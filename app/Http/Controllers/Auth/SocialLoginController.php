@@ -364,6 +364,15 @@ class SocialLoginController extends Controller
             Auth::login($user);
             $request->session()->regenerate();
 
+            try {
+                \Convoy\Facades\Activity::event('auth:social-login')
+                    ->actor($user)
+                    ->description("User {$user->email} signed in via " . ucfirst($provider))
+                    ->property(['provider' => $provider, 'email' => $user->email])
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $e) {}
+
             return redirect('/');
 
         } catch (\Throwable $e) {

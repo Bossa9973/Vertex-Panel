@@ -209,6 +209,15 @@ class EarnBoltsController extends ApiController
             'reference_id' => $taskKey,
         ]);
 
+        try {
+            \Convoy\Facades\Activity::event('bolts:earn-claim')
+                ->actor($user)
+                ->description("Claimed earn reward (+{$rewardBolts} BOLTs) for Discord Task: {$task['title']}")
+                ->property(['task_key' => $taskKey, 'reward' => $rewardBolts, 'discord_id' => $discordId])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'success' => true,
             'message' => "Congratulations! Successfully verified and claimed " . number_format($rewardBolts, 2) . " BOLTs for {$task['title']}!",

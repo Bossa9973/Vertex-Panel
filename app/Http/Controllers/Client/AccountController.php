@@ -174,6 +174,15 @@ class AccountController extends ApiController
                 ]);
         });
 
+        try {
+            \Convoy\Facades\Activity::event('bolts:redeem-promo')
+                ->actor($user)
+                ->description("Redeemed promo code '{$code}' (+{$promo->amount} BOLTs)")
+                ->property(['code' => $code, 'credits' => (float) $promo->amount])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'success'     => true,
             'message'     => "Code redeemed! {$promo->amount} credits have been added to your account.",

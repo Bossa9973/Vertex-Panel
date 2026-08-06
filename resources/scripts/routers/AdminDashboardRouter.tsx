@@ -91,6 +91,14 @@ export const routes: Route[] = [
                 ),
             },
             {
+                path: 'audit',
+                element: lazyLoad(
+                    lazy(
+                        () => import('@/components/admin/audit/AdminAuditContainer')
+                    )
+                ),
+            },
+            {
                 path: 'maintenance',
                 element: lazyLoad(
                     lazy(
@@ -126,7 +134,7 @@ export const AdminBanner = () => (
 
 const AdminDashboardRouter = () => {
     const { setRoutes } = useContext(NavigationBarContext)
-    const isDashboardArea = useMatch('/admin/:id/')
+    const isDashboardArea = useMatch('/admin/*')
     const isDashboardArea2 = useMatch('/admin')
     const { t: tStrings } = useTranslation('strings')
     const user = useStoreState(s => s.user.data)
@@ -153,6 +161,7 @@ const AdminDashboardRouter = () => {
         ...(hasPerm('view_users') ? [{ name: getLabel('user_other', 'Users'), path: '/admin/users' }] : []),
         ...(hasPerm('view_coterms') ? [{ name: 'Coterms', path: '/admin/coterms' }] : []),
         ...(hasPerm('view_tokens') ? [{ name: getLabel('token_other', 'API Tokens'), path: '/admin/tokens' }] : []),
+        { name: '📋 Audit Logs', path: '/admin/audit' },
         ...(hasPerm('view_maintenance') ? [{ name: 'Maintenance', path: '/admin/maintenance' }] : []),
         // Roles tab — always visible to all admins (read-only for non-CEO)
         { name: '🛡 Roles', path: '/admin/roles' },

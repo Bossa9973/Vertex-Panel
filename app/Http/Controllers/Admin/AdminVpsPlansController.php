@@ -31,9 +31,22 @@ class AdminVpsPlansController extends Controller
         if (!empty($data['id'])) {
             $plan = VpsPlan::findOrFail($data['id']);
             $plan->update($data);
+            $actionEvent = 'admin:plan-update';
+            $msg = "Updated VPS Plan '{$plan->name}' ({$plan->price} BOLTs)";
         } else {
             $plan = VpsPlan::create($data);
+            $actionEvent = 'admin:plan-create';
+            $msg = "Created new VPS Plan '{$plan->name}' ({$plan->price} BOLTs)";
         }
+
+        try {
+            \Convoy\Facades\Activity::event($actionEvent)
+                ->actor($request->user())
+                ->description($msg)
+                ->property(['plan_id' => $plan->id, 'name' => $plan->name, 'price' => $plan->price])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,
@@ -41,10 +54,20 @@ class AdminVpsPlansController extends Controller
         ]);
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
         $plan = VpsPlan::findOrFail($id);
+        $planName = $plan->name;
         $plan->delete();
+
+        try {
+            \Convoy\Facades\Activity::event('admin:plan-delete')
+                ->actor($request->user())
+                ->description("Deleted VPS Plan '{$planName}'")
+                ->property(['plan_id' => $id, 'name' => $planName])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,

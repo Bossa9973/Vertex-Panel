@@ -75,6 +75,25 @@ class AdminUserBalanceController extends Controller
 
         $user->save();
 
+        /** @var User $adminUser */
+        $adminUser = $request->user();
+
+        try {
+            \Convoy\Facades\Activity::event('bolts:admin-update')
+                ->actor($adminUser)
+                ->description("Admin '{$adminUser->name}' {$action} {$amount} BOLTs for user '{$user->name}' ({$user->email}) - New Balance: {$user->credits}")
+                ->property([
+                    'target_user_id'    => $user->id,
+                    'target_user_email' => $user->email,
+                    'action'            => $action,
+                    'amount'            => $amount,
+                    'new_balance'       => (float) $user->credits,
+                    'reason'            => $description,
+                ])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'success' => true,
             'credits' => (float) $user->credits,

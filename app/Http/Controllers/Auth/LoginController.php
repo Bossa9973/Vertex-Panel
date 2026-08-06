@@ -53,15 +53,55 @@ class LoginController extends Controller
 
         if (Auth::attempt($credentials, $request->boolean('rememberMe'))) {
             $request->session()->regenerate();
+            /** @var User $user */
+            $user = Auth::user();
+
+            try {
+                \Convoy\Facades\Activity::event('auth:login')
+                    ->actor($user)
+                    ->description("User {$user->email} signed in via password")
+                    ->property(['email' => $user->email, 'method' => 'password'])
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $e) {}
 
             return response()->json([
                 'success' => true,
-                'user'    => Auth::user(),
+                'user'    => $user,
             ]);
         }
+
+        try {
+            \Convoy\Facades\Activity::event('auth:login-failed')
+                ->anonymous()
+                ->description("Failed sign-in attempt for email '{$credentials['email']}'")
+                ->property(['email' => $credentials['email'], 'method' => 'password'])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'message' => 'The provided email or password does not match our records.',
         ], 422);
+    }
+
+    public function logout(Request $request)
+    {
+        $user = Auth::user();
+        if ($user) {
+            try {
+                \Convoy\Facades\Activity::event('auth:logout')
+                    ->actor($user)
+                    ->description("User {$user->email} logged out")
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $e) {}
+        }
+
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return response()->json(['success' => true]);
     }
 }

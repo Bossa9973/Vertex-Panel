@@ -253,3 +253,5 @@ Route::prefix('/roles')->group(function () {
     Route::delete('/{role}', [Admin\AdminRoleController::class, 'destroy']);
 });
 
+Route::get('/audit-logs', [Admin\AdminAuditController::class, 'index']);
+

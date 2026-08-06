@@ -37,6 +37,15 @@ class AdminSettingsController extends ApiController
             ]
         );
 
+        try {
+            \Convoy\Facades\Activity::event('admin:announcement-toggle')
+                ->actor($request->user())
+                ->description("Admin " . ($enabled ? 'enabled' : 'disabled') . " announcement banner")
+                ->property(['enabled' => $enabled])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'success' => true,
             'message' => 'Announcement row visibility updated.',
@@ -74,6 +83,15 @@ class AdminSettingsController extends ApiController
                 'updated_at' => now(),
             ]
         );
+
+        try {
+            \Convoy\Facades\Activity::event('admin:terminal-mode-update')
+                ->actor($request->user())
+                ->description("Admin updated terminal console mode to '{$mode}'")
+                ->property(['mode' => $mode])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,
@@ -143,6 +161,15 @@ class AdminSettingsController extends ApiController
                 'updated_at' => now(),
             ]
         );
+
+        try {
+            \Convoy\Facades\Activity::event('admin:maintenance-toggle')
+                ->actor($request->user())
+                ->description("Admin updated maintenance mode settings")
+                ->property(['settings' => $updated])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,

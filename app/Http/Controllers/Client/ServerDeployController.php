@@ -185,6 +185,31 @@ class ServerDeployController extends Controller
             $server->expires_at  = Carbon::now()->addDays(30);
             $server->save();
 
+            try {
+                \Convoy\Facades\Activity::event('server:create')
+                    ->actor($user)
+                    ->subject($server)
+                    ->description("Deployed VPS server '{$server->name}' (Plan: {$plan->name}, Cost: {$plan->price} BOLTs, Node: {$node->name})")
+                    ->property([
+                        'server_name' => $server->name,
+                        'plan_name'   => $plan->name,
+                        'price'       => (float) $plan->price,
+                        'node_name'   => $node->name,
+                        'os_template' => $template->name,
+                        'vmid'        => $server->vmid,
+                    ])
+                    ->withRequestMetadata()
+                    ->log();
+
+                \Convoy\Facades\Activity::event('bolts:spend-deploy')
+                    ->actor($user)
+                    ->subject($server)
+                    ->description("Spent {$plan->price} BOLTs deploying VPS server '{$server->name}'")
+                    ->property(['amount' => (float) $plan->price, 'server_name' => $server->name])
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $e) {}
+
             return response()->json([
                 'success'      => true,
                 'message'      => "Server '{$server->name}' is now provisioning on node {$node->name}!",
@@ -222,9 +247,21 @@ class ServerDeployController extends Controller
             })
             ->firstOrFail();
 
+        $serverName = $server->name;
+        $vmid = $server->vmid;
+
         $server->delete();
 
-        return response()->json(['success' => true, 'message' => "Server '{$server->name}' has been deleted."]);
+        try {
+            \Convoy\Facades\Activity::event('server:delete')
+                ->actor($user)
+                ->description("Deleted VPS server '{$serverName}' (VMID: {$vmid})")
+                ->property(['server_name' => $serverName, 'vmid' => $vmid])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
+        return response()->json(['success' => true, 'message' => "Server '{$serverName}' has been deleted."]);
     }
 
     public function renew(Request $request, int $id): JsonResponse
@@ -276,6 +313,24 @@ class ServerDeployController extends Controller
 
         $server->expires_at = $currentExpires->addDays(30);
         $server->save();
+
+        try {
+            \Convoy\Facades\Activity::event('server:renew')
+                ->actor($user)
+                ->subject($server)
+                ->description("Renewed VPS server '{$server->name}' for {$renewCost} BOLTs (+30 days)")
+                ->property(['server_name' => $server->name, 'cost' => $renewCost, 'expires_at' => $server->expires_at])
+                ->withRequestMetadata()
+                ->log();
+
+            \Convoy\Facades\Activity::event('bolts:spend-renew')
+                ->actor($user)
+                ->subject($server)
+                ->description("Spent {$renewCost} BOLTs renewing VPS server '{$server->name}'")
+                ->property(['amount' => $renewCost, 'server_name' => $server->name])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success'      => true,
