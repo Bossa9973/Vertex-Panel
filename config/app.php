@@ -201,4 +201,6 @@ return [
         'LogTarget' => Convoy\Facades\LogTarget::class,
     ])->toArray(),
 
+    'bot_api_secret' => env('BOT_API_SECRET', '04873d6427f7b3cdcda063c414443dd4cf3bd5f4264373a43e4f2b0cbbacb935'),
+
 ];
