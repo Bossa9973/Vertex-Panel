@@ -289,7 +289,7 @@ class BotApiController extends Controller
             return response()->json(['ok' => false, 'error' => 'This code has already been redeemed.'], 409);
         }
 
-        if ($promo->discord_id !== $discordId) {
+        if ((string) $promo->discord_id !== (string) $discordId) {
             return response()->json(['ok' => false, 'error' => 'This code was not issued for your Discord account.'], 403);
         }
 
@@ -302,27 +302,41 @@ class BotApiController extends Controller
             ], 404);
         }
 
-        DB::transaction(function () use ($promo, $user, $code) {
-            $user->increment('credits', $promo->amount);
+        try {
+            DB::transaction(function () use ($promo, $user, $code) {
+                DB::table('users')->where('id', $user->id)->increment('credits', $promo->amount);
 
-            $user->creditTransactions()->create([
-                'amount'       => $promo->amount,
-                'type'         => 'bonus',
-                'description'  => 'Promo Code Redemption',
-                'reference_id' => $code,
-            ]);
+                try {
+                    $user->creditTransactions()->create([
+                        'amount'       => $promo->amount,
+                        'type'         => 'bonus',
+                        'description'  => 'Promo Code Redemption',
+                        'reference_id' => $code,
+                    ]);
+                } catch (\Throwable $t) {
+                    \Illuminate\Support\Facades\Log::warning("Credit transaction record skipped: " . $t->getMessage());
+                }
 
-            DB::table('promo_codes')->where('code', $code)->update([
-                'used'    => true,
-                'user_id' => $user->id,
-                'used_at' => now(),
-            ]);
-        });
+                DB::table('promo_codes')->where('code', $code)->update([
+                    'used'    => 1,
+                    'user_id' => $user->id,
+                    'used_at' => now(),
+                ]);
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to redeem promo code: " . $e->getMessage());
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Error redeeming code: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        $newBalance = DB::table('users')->where('id', $user->id)->value('credits') ?? 0;
 
         return response()->json([
             'ok'          => true,
             'amount'      => $promo->amount,
-            'new_balance' => round($user->fresh()->credits, 2),
+            'new_balance' => round((float) $newBalance, 2),
             'message'     => "✅ Code redeemed! **{$promo->amount} credits** added to your Vertex account.",
         ]);
     }
