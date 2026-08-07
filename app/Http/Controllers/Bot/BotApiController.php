@@ -23,6 +23,7 @@ class BotApiController extends Controller
     public function trackMessage(Request $request): JsonResponse
     {
         $request->validate(['discord_id' => 'required|string|max:32']);
+        $this->ensureTablesExist();
         $this->incrementStat($request->input('discord_id'), 'messages', 1);
 
         return response()->json(['ok' => true]);
@@ -35,6 +36,7 @@ class BotApiController extends Controller
     public function trackBoost(Request $request): JsonResponse
     {
         $request->validate(['discord_id' => 'required|string|max:32']);
+        $this->ensureTablesExist();
         $this->incrementStat($request->input('discord_id'), 'boosts', 1);
 
         return response()->json(['ok' => true]);
