@@ -185,25 +185,35 @@ class BotApiController extends Controller
     {
         $request->validate([
             'discord_id'       => 'required|string|max:32',
-            'amount'           => 'required|integer|min:1',
+            'amount'           => 'required|numeric|min:1',
             'admin_discord_id' => 'required|string|max:32',
         ]);
+
+        $this->ensureTablesExist();
 
         $code = 'LMN-'
             . strtoupper(Str::random(4))
             . '-'
             . strtoupper(Str::random(4));
 
-        DB::table('promo_codes')->insert([
-            'code'                  => $code,
-            'discord_id'            => $request->input('discord_id'),
-            'user_id'               => null,
-            'amount'                => $request->input('amount'),
-            'used'                  => false,
-            'created_by_discord_id' => $request->input('admin_discord_id'),
-            'used_at'               => null,
-            'created_at'            => now(),
-        ]);
+        try {
+            DB::table('promo_codes')->insert([
+                'code'                  => $code,
+                'discord_id'            => (string) $request->input('discord_id'),
+                'user_id'               => null,
+                'amount'                => (int) $request->input('amount'),
+                'used'                  => false,
+                'created_by_discord_id' => (string) $request->input('admin_discord_id'),
+                'used_at'               => null,
+                'created_at'            => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to generate promo code: " . $e->getMessage());
+            return response()->json([
+                'ok' => false,
+                'error' => 'Database error generating promo code: ' . $e->getMessage(),
+            ], 500);
+        }
 
         return response()->json(['ok' => true, 'code' => $code]);
     }
@@ -263,6 +273,8 @@ class BotApiController extends Controller
             'code'       => 'required|string|max:32',
             'discord_id' => 'required|string|max:32',
         ]);
+
+        $this->ensureTablesExist();
 
         $code      = strtoupper(trim($request->input('code')));
         $discordId = $request->input('discord_id');
@@ -338,6 +350,33 @@ class BotApiController extends Controller
             DB::table('discord_stats')
                 ->where('discord_id', $discordId)
                 ->increment($column, $amount, ['updated_at' => now()]);
+        }
+    }
+
+    /**
+     * Ensure bot tables exist in the database.
+     */
+    protected function ensureTablesExist(): void
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('promo_codes')) {
+            try {
+                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+            } catch (\Throwable $e) {}
+        }
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('promo_codes')) {
+            try {
+                \Illuminate\Support\Facades\Schema::create('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->string('code', 32)->primary();
+                    $table->string('discord_id', 32)->index();
+                    $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+                    $table->unsignedInteger('amount');
+                    $table->boolean('used')->default(false)->index();
+                    $table->string('created_by_discord_id', 32);
+                    $table->timestamp('used_at')->nullable();
+                    $table->timestamp('created_at')->useCurrent();
+                });
+            } catch (\Throwable $e) {}
         }
     }
 }
