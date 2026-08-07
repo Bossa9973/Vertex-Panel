@@ -116,6 +116,9 @@ const ServerTerminalBlock = () => {
                 if (cmd) {
                     setSshCmd(cmd)
                     setModalOpened(true)
+                    const lockUntil = Date.now() + 30000
+                    localStorage.setItem(`power_lock_until_${uuid}`, String(lockUntil))
+                    setPowerLockSeconds(30)
                 }
             }
         } catch (err: any) {

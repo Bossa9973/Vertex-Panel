@@ -57,6 +57,28 @@ class TmateSessionService
             }
         }
 
+        // 0c. Enforce 30-second cooldown between requesting new tmate SSH sessions
+        $lastTmateReq = Cache::get("server_last_tmate_req_{$server->vmid}");
+        if ($lastTmateReq) {
+            $elapsedSinceReq = now()->timestamp - (int) $lastTmateReq;
+            if ($elapsedSinceReq >= 0 && $elapsedSinceReq < 30) {
+                $remainingSeconds = 30 - $elapsedSinceReq;
+
+                $notice = "A 30-second cooldown is enforced between requesting new tmate SSH sessions. Please wait {$remainingSeconds} second(s).";
+
+                return [
+                    'ssh_cmd' => null,
+                    'url' => null,
+                    'notice' => $notice,
+                    'restricted' => true,
+                    'remaining_seconds' => $remainingSeconds,
+                ];
+            }
+        }
+
+        // Record timestamp of this new tmate SSH session request
+        Cache::put("server_last_tmate_req_{$server->vmid}", now()->timestamp, now()->addMinutes(5));
+
         // Clear any legacy stale cache key from before this fix (harmless no-op if already gone)
         Cache::forget("server_tmate_ssh_{$server->vmid}");
 
