@@ -23,7 +23,7 @@ class StatsView(discord.ui.View):
         embed.add_field(name="VERIFIED",           value=f"```\n{stats['valid']}\n```",  inline=True)
         embed.add_field(name="DEPARTED",           value=f"```\n{stats['left']}\n```",   inline=True)
         embed.add_field(name="ANOMALIES (FAKE)",   value=f"```\n{stats['fake']}\n```",   inline=False)
-        embed.set_footer(text="LUMEN // ANALYTICS MODULE")
+        embed.set_footer(text="VERTEX // ANALYTICS MODULE")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="Activity", style=discord.ButtonStyle.secondary, custom_id="stats_activity", emoji="⚡")
@@ -40,7 +40,7 @@ class StatsView(discord.ui.View):
             f"**MESSAGES:**\n```\n{stats['messages']}\n```\n"
             f"**SERVER BOOSTS:**\n```\n{stats['boosts']}\n```"
         )
-        embed.set_footer(text="LUMEN // MONITORING MODULE")
+        embed.set_footer(text="VERTEX // MONITORING MODULE")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 
@@ -58,9 +58,9 @@ class Panel(commands.Cog):
             return await ctx.send("❌ Access Denied.", delete_after=5)
 
         embed = discord.Embed(
-            title="Lumen Rewards Dashboard",
+            title="Vertex Rewards Dashboard",
             description=(
-                "Track your community activity and earn **BOLTS** to use in the Lumen Host ecosystem.\n\n"
+                "Track your community activity and earn **BOLTS** to use in the Vertex Host ecosystem.\n\n"
                 "**🎁 Invites:**\n"
                 "• 15 verified invites → 3,500 BOLTS\n"
                 "• 25 verified invites → 5,000 BOLTS\n\n"

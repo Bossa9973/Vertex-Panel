@@ -76,7 +76,7 @@ def is_admin(interaction: discord.Interaction) -> bool:
 
 @bot.tree.command(name="help", description="Show all available commands")
 async def help_cmd(interaction: discord.Interaction):
-    embed = discord.Embed(title="🚀 Lumen Helper | Command Center", color=0x5865F2)
+    embed = discord.Embed(title="🚀 Vertex Helper | Command Center", color=0x5865F2)
     embed.add_field(
         name="🛡️ Admin Commands",
         value=(
@@ -93,7 +93,7 @@ async def help_cmd(interaction: discord.Interaction):
         value="`/redeem <code>` — Redeem a Bolt promo code\n`/help` — Show this menu",
         inline=False,
     )
-    embed.set_footer(text="Lumen Host | Powering the Community")
+    embed.set_footer(text="Vertex Host | Powering the Community")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ─── /redeem (public) ─────────────────────────────────────────────────────────
@@ -166,10 +166,11 @@ async def add_bolts(interaction: discord.Interaction, user: Union[discord.Member
         embed.add_field(
             name="How to Claim",
             value=(
-                "1. Join the Lumen panel\n"
+                "1. Join the [Vertex Panel](https://dash.vertexnodes.top/account)\n"
                 "2. Link your Discord account in Account Settings\n"
                 "3. Use the `/redeem` command here in Discord\n"
-                "4. Or enter the code on the panel website"
+                "4. Or enter the code on the panel website\n\n"
+                "🔗 https://dash.vertexnodes.top/account"
             ),
             inline=False,
         )
