@@ -3,7 +3,7 @@ import { Modal, LoadingOverlay } from '@mantine/core'
 import { useState, useEffect } from 'react'
 import http from '@/api/http'
 import { PlusIcon, MinusIcon, CurrencyDollarIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
-import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
+import AdminCreditsToggle from '@/components/admin/users/AdminCreditsToggle'
 
 interface UserItem {
     id: number
@@ -89,6 +89,8 @@ const AdminUserBalanceContainer = () => {
                     />
                 </div>
             </div>
+
+            <AdminCreditsToggle />
 
             {loading ? (
                 <div className='py-12 text-center text-xs text-gray-500'>Loading user credit balances...</div>

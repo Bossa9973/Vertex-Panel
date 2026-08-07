@@ -177,4 +177,63 @@ class AdminSettingsController extends ApiController
             'data' => $updated,
         ]);
     }
+
+    public function getCreditsSettings()
+    {
+        $topup = DB::table('settings')->where('key', 'credits_topup_enabled')->first();
+        $referral = DB::table('settings')->where('key', 'credits_referral_enabled')->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'topup_enabled' => $topup ? ($topup->value === 'true' || $topup->value === '1') : true,
+                'referral_enabled' => $referral ? ($referral->value === 'true' || $referral->value === '1') : true,
+            ],
+        ]);
+    }
+
+    public function updateCreditsSettings(Request $request)
+    {
+        $request->validate([
+            'topup_enabled' => 'required|boolean',
+            'referral_enabled' => 'required|boolean',
+        ]);
+
+        $topup = (bool) $request->input('topup_enabled');
+        $referral = (bool) $request->input('referral_enabled');
+
+        DB::table('settings')->updateOrInsert(
+            ['key' => 'credits_topup_enabled'],
+            [
+                'value' => $topup ? 'true' : 'false',
+                'updated_at' => now(),
+            ]
+        );
+
+        DB::table('settings')->updateOrInsert(
+            ['key' => 'credits_referral_enabled'],
+            [
+                'value' => $referral ? 'true' : 'false',
+                'updated_at' => now(),
+            ]
+        );
+
+        try {
+            \Convoy\Facades\Activity::event('admin:credits-settings-update')
+                ->actor($request->user())
+                ->description("Admin updated credits settings (Top-Up: " . ($topup ? 'ON' : 'OFF') . ", Referral: " . ($referral ? 'ON' : 'OFF') . ")")
+                ->property(['topup_enabled' => $topup, 'referral_enabled' => $referral])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Credits settings updated successfully.',
+            'data' => [
+                'topup_enabled' => $topup,
+                'referral_enabled' => $referral,
+            ],
+        ]);
+    }
 }

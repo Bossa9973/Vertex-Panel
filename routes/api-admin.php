@@ -19,6 +19,8 @@ Route::get('/settings/terminal', [Admin\AdminSettingsController::class, 'getTerm
 Route::post('/settings/terminal', [Admin\AdminSettingsController::class, 'updateTerminalSetting']);
 Route::get('/settings/maintenance', [Admin\AdminSettingsController::class, 'getMaintenanceSettings']);
 Route::post('/settings/maintenance', [Admin\AdminSettingsController::class, 'updateMaintenanceSettings']);
+Route::get('/settings/credits', [Admin\AdminSettingsController::class, 'getCreditsSettings']);
+Route::post('/settings/credits', [Admin\AdminSettingsController::class, 'updateCreditsSettings']);
 
 /*
 |--------------------------------------------------------------------------

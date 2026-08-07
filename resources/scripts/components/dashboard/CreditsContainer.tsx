@@ -4,6 +4,7 @@ import { useStoreActions, useStoreState } from '@/state'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import {
     ClipboardIcon,
+    LockClosedIcon,
 } from '@heroicons/react/24/outline'
 import { Modal, LoadingOverlay } from '@mantine/core'
 import { useEffect, useState } from 'react'
@@ -183,6 +184,9 @@ const CreditsContainer = () => {
         )
     }
 
+    const topupEnabled = data?.topup_enabled !== false
+    const referralEnabled = data?.referral_enabled !== false
+
     return (
         <PageMaintenanceGuard pageKey='billing'>
             <PageContentBlock title='Billing & BOLTs' showFlashKey='credits'>
@@ -228,12 +232,18 @@ const CreditsContainer = () => {
                         </div>
 
                         <div className='relative z-10 mt-6 pt-2'>
-                            <button
-                                onClick={() => setOpened(true)}
-                                className='w-full py-2.5 px-4 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95'
-                            >
-                                <BoltSvgIcon className='w-4 h-4 text-amber-300' /> Top Up BOLTs Balance
-                            </button>
+                            {topupEnabled ? (
+                                <button
+                                    onClick={() => setOpened(true)}
+                                    className='w-full py-2.5 px-4 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95'
+                                >
+                                    <BoltSvgIcon className='w-4 h-4 text-amber-300' /> Top Up BOLTs Balance
+                                </button>
+                            ) : (
+                                <div className='w-full py-2.5 px-4 rounded-xl bg-neutral-800/80 border border-white/10 text-gray-400 font-bold text-xs flex items-center justify-center gap-2 select-none'>
+                                    <LockClosedIcon className='w-4 h-4 text-amber-400' /> Top-Up Disabled by Admin
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -263,22 +273,29 @@ const CreditsContainer = () => {
                                 <label className='block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5'>
                                     YOUR CLIENT REFERRAL CODE
                                 </label>
-                                <div className='flex items-center w-full'>
-                                    <input
-                                        type='text'
-                                        readOnly
-                                        value={`REF-${String((user as any)?.id || 1001).padStart(5, '0')}`}
-                                        className='w-full px-3.5 py-2.5 rounded-l-xl border border-r-0 border-neutral-700 bg-black/60 text-white font-mono text-xs focus:outline-none select-all'
-                                    />
-                                    <button
-                                        type='button'
-                                        onClick={handleCopyRefCode}
-                                        className='px-3.5 py-2.5 rounded-r-xl border border-neutral-700 bg-neutral-800/90 text-blue-400 hover:text-blue-300 font-mono text-xs font-bold shrink-0 cursor-pointer flex items-center gap-1.5 shadow-inner transition active:scale-95'
-                                    >
-                                        {copiedRef ? <Check className='w-4 h-4 text-emerald-400' /> : <Copy className='w-4 h-4' />}
-                                        <span>{copiedRef ? 'Copied' : 'Copy'}</span>
-                                    </button>
-                                </div>
+                                {referralEnabled ? (
+                                    <div className='flex items-center w-full'>
+                                        <input
+                                            type='text'
+                                            readOnly
+                                            value={`REF-${String((user as any)?.id || 1001).padStart(5, '0')}`}
+                                            className='w-full px-3.5 py-2.5 rounded-l-xl border border-r-0 border-neutral-700 bg-black/60 text-white font-mono text-xs focus:outline-none select-all'
+                                        />
+                                        <button
+                                            type='button'
+                                            onClick={handleCopyRefCode}
+                                            className='px-3.5 py-2.5 rounded-r-xl border border-neutral-700 bg-neutral-800/90 text-blue-400 hover:text-blue-300 font-mono text-xs font-bold shrink-0 cursor-pointer flex items-center gap-1.5 shadow-inner transition active:scale-95'
+                                        >
+                                            {copiedRef ? <Check className='w-4 h-4 text-emerald-400' /> : <Copy className='w-4 h-4' />}
+                                            <span>{copiedRef ? 'Copied' : 'Copy'}</span>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className='p-3 bg-neutral-950/80 border border-white/10 rounded-xl text-xs text-gray-400 flex items-center gap-2'>
+                                        <LockClosedIcon className='w-4 h-4 text-amber-400 shrink-0' />
+                                        <span>Referral program is currently disabled by administrator.</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

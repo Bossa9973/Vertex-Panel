@@ -13,6 +13,8 @@ export interface CreditTransaction {
 
 export interface CreditsResponse {
     credits: number
+    topup_enabled?: boolean
+    referral_enabled?: boolean
     transactions: {
         data: CreditTransaction[]
         current_page: number

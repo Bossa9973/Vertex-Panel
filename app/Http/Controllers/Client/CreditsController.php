@@ -22,8 +22,16 @@ class CreditsController extends Controller
             ->orderBy('id', 'desc')
             ->paginate(15);
 
+        $topupSetting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'credits_topup_enabled')->first();
+        $topupEnabled = $topupSetting ? ($topupSetting->value === 'true' || $topupSetting->value === '1') : true;
+
+        $referralSetting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'credits_referral_enabled')->first();
+        $referralEnabled = $referralSetting ? ($referralSetting->value === 'true' || $referralSetting->value === '1') : true;
+
         return response()->json([
             'credits' => (float) ($user->credits ?? 0.00),
+            'topup_enabled' => $topupEnabled,
+            'referral_enabled' => $referralEnabled,
             'transactions' => $transactions,
         ]);
     }
@@ -33,6 +41,16 @@ class CreditsController extends Controller
      */
     public function topup(Request $request): JsonResponse
     {
+        $topupSetting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'credits_topup_enabled')->first();
+        $topupEnabled = $topupSetting ? ($topupSetting->value === 'true' || $topupSetting->value === '1') : true;
+
+        if (!$topupEnabled) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Top-up BOLTs balance functionality is currently disabled by administrator.',
+            ], 403);
+        }
+
         $request->validate([
             'amount' => 'required|numeric|min:1|max:10000',
             'payment_method' => 'nullable|string',
