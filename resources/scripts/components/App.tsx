@@ -17,6 +17,10 @@ interface ExtendedWindow extends Window {
         root_admin: boolean
         created_at: string
         updated_at: string
+        admin_permissions?: string[] | null
+        admin_role_id?: number | null
+        admin_role_name?: string | null
+        admin_role_color?: string | null
     }
     SiteConfiguration?: {
         version: string

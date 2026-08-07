@@ -1,4 +1,4 @@
-﻿import React, { Component, LazyExoticComponent, ReactNode } from 'react'
+import React, { Component, LazyExoticComponent, ReactNode } from 'react'
 import { BareFetcher, Key, MutatorOptions, mutate } from 'swr'
 
 import Spinner from '@/components/elements/Spinner'
@@ -76,7 +76,7 @@ class ChunkErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundar
 }
 
 export const lazyLoad = (
-    LazyElement: LazyExoticComponent<() => JSX.Element>
+    LazyElement: LazyExoticComponent<React.ComponentType<any>>
 ) => {
     return (
         <ChunkErrorBoundary>

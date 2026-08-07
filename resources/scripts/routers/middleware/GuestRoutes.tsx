@@ -2,7 +2,7 @@ import { useStoreState } from '@/state'
 import { Navigate, useLocation } from 'react-router-dom'
 
 interface Props {
-    children: JSX.Element
+    children: React.ReactNode
 }
 
 const GuestRoutes: React.FC<Props> = ({ children }) => {
@@ -13,7 +13,7 @@ const GuestRoutes: React.FC<Props> = ({ children }) => {
         return <Navigate to='/' state={{ from: location }} replace />
     }
 
-    return children
+    return <>{children}</>
 }
 
 export default GuestRoutes

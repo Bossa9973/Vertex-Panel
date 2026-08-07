@@ -190,7 +190,7 @@ export const DashboardContainer: React.FC = () => {
     }
 
     const handleOpenDeploy = () => {
-        if (!user?.root_admin && servers.length >= 2) {
+        if (!user?.rootAdmin && servers.length >= 2) {
             alert('Non-admin accounts are limited to a maximum of 2 active VPS instances. Please delete an existing instance before deploying a new one.')
             return
         }

@@ -52,7 +52,7 @@ function SparklesInnerComponent({
             color: { value: color },
             move: {
                 enable: true,
-                direction,
+                direction: direction as any,
                 speed: {
                     min: minSpeed ?? speed / 10,
                     max: speed,

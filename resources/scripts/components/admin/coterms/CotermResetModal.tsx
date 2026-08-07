@@ -25,6 +25,7 @@ const CotermResetModal = ({ coterm, onReset, onClose }: Props) => {
     const reset = async () => {
         clearFlashes()
 
+        if (!coterm) return
         try {
             setLoading(true)
             const updatedCoterm = await resetCotermToken(coterm.id)

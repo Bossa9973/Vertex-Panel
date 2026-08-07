@@ -68,7 +68,7 @@ export const ConnectDiscordModal: React.FC<Props> = ({
             padding={0}
             radius={24}
             styles={{
-                content: {
+                modal: {
                     backgroundColor: '#000000',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     boxShadow: '0px 0px 80px 0px rgba(88, 101, 242, 0.3)',

@@ -166,7 +166,7 @@ const AdminVpsPlansContainer = () => {
                 title={<div className='font-bold text-lg text-white'>{editingId ? 'Edit VPS Plan' : 'Create VPS Plan'}</div>}
                 centered
                 styles={{
-                    content: { backgroundColor: '#141619', color: '#fff', border: '1px solid #2a2d34', borderRadius: '16px' },
+                    modal: { backgroundColor: '#141619', color: '#fff', border: '1px solid #2a2d34', borderRadius: '16px' },
                     header: { backgroundColor: '#141619', color: '#fff', borderBottom: '1px solid #2a2d34' },
                     close: { color: '#9ca3af', '&:hover': { backgroundColor: '#1c1e22', color: '#fff' } }
                 }}

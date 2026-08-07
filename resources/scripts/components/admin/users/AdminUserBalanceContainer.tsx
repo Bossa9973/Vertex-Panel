@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import http from '@/api/http'
 import { PlusIcon, MinusIcon, CurrencyDollarIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import AdminCreditsToggle from '@/components/admin/users/AdminCreditsToggle'
+import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 
 interface UserItem {
     id: number
@@ -169,7 +170,7 @@ const AdminUserBalanceContainer = () => {
                 }
                 centered
                 styles={{
-                    content: { backgroundColor: '#141619', color: '#fff', border: '1px solid #2a2d34', borderRadius: '16px' },
+                    modal: { backgroundColor: '#141619', color: '#fff', border: '1px solid #2a2d34', borderRadius: '16px' },
                     header: { backgroundColor: '#141619', color: '#fff', borderBottom: '1px solid #2a2d34' },
                     close: { color: '#9ca3af', '&:hover': { backgroundColor: '#1c1e22', color: '#fff' } }
                 }}

@@ -7,12 +7,12 @@ import {
     useRef,
     useState,
 } from "react"
-import { motion, type DynamicAnimationOptions } from "framer-motion"
+import { motion, type AnimationOptions } from "framer-motion"
 
 interface TextProps {
     children: React.ReactNode
     reverse?: boolean
-    transition?: DynamicAnimationOptions
+    transition?: AnimationOptions
     splitBy?: "words" | "characters" | "lines" | string
     staggerDuration?: number
     staggerFrom?: "first" | "last" | "center" | "random" | number

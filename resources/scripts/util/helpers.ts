@@ -83,7 +83,7 @@ export const capitalize = (word: string) => {
 }
 
 export const convertTimeToSmallest = (seconds: number) => {
-    const units = [
+    const units: Array<[number, string]> = [
         [1, 'seconds'],
         [60, 'minutes'],
         [60 * 60, 'hours'],

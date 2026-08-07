@@ -104,7 +104,7 @@ const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) 
                 Copy UUID
             </Menu.Item>
             <Menu.Item
-                danger
+                color='red'
                 onClick={() => {
                     setSelectedIds([server.internalId])
                     setConfirmOpen(true)

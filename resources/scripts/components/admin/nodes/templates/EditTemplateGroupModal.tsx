@@ -47,14 +47,13 @@ const EditTemplateGroupModal = ({ open, onClose, group }: Props) => {
                     .then(({ name, hidden }) => {
                         handleClose()
 
-                        // @ts-expect-error - groups should be defined. Though, it might not when there's a network error
                         mutate(
                             groups =>
-                                groups.map(g =>
+                                groups?.map(g =>
                                     g.uuid === group.uuid
                                         ? { ...g, name, hidden }
                                         : g
-                                ),
+                                ) ?? [],
                             false
                         )
                     })

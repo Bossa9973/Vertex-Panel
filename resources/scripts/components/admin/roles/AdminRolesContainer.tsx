@@ -162,7 +162,7 @@ const RoleFormModal = ({ opened, onClose, onSaved, permissions, editing }: RoleF
             padding={0}
             radius={20}
             styles={{
-                content: { backgroundColor: '#0a0c12', border: '1px solid rgba(255,255,255,0.08)' },
+                modal: { backgroundColor: '#0a0c12', border: '1px solid rgba(255,255,255,0.08)' },
                 body: { padding: 0 },
                 overlay: { backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' },
             }}
@@ -583,7 +583,7 @@ const AdminRolesContainer = () => {
                 padding={0}
                 radius={16}
                 styles={{
-                    content: { backgroundColor: '#0a0c12', border: '1px solid rgba(255,255,255,0.08)' },
+                    modal: { backgroundColor: '#0a0c12', border: '1px solid rgba(255,255,255,0.08)' },
                     body: { padding: 0 },
                     overlay: { backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' },
                 }}

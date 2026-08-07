@@ -53,10 +53,10 @@ const EditCotermModal = ({coterm, onClose, mutate}: Props) => {
 
     useEffect(() => {
         form.reset(old => ({
-            name: coterm?.name,
-            isTlsEnabled: coterm?.isTlsEnabled,
-            fqdn: coterm?.fqdn,
-            port: coterm?.port,
+            name: coterm?.name ?? '',
+            isTlsEnabled: coterm?.isTlsEnabled ?? false,
+            fqdn: coterm?.fqdn ?? '',
+            port: coterm?.port ?? 443,
             nodeIds: old.nodeIds,
         }))
     }, [coterm])
@@ -93,7 +93,7 @@ const EditCotermModal = ({coterm, onClose, mutate}: Props) => {
                 }
             }, false)
             handleClose()
-        } catch (e) {
+        } catch (e: any) {
             clearAndAddHttpError(e)
         }
     }

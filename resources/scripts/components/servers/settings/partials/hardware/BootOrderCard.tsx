@@ -1,4 +1,3 @@
-// @ts-expect-error
 import DragVerticalIcon from '@/assets/images/icons/drag-vertical.svg'
 import { ServerContext } from '@/state/server'
 import { bytesToString } from '@/util/helpers'

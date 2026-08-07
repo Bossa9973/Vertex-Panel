@@ -3,8 +3,11 @@
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
-import { IoMdCheckmark } from 'react-icons/io'
-import { LuLoader } from 'react-icons/lu'
+import { IoMdCheckmark as RawIoMdCheckmark } from 'react-icons/io'
+import { LuLoader as RawLuLoader } from 'react-icons/lu'
+
+const IoMdCheckmark = RawIoMdCheckmark as React.FC<any>
+const LuLoader = RawLuLoader as React.FC<any>
 
 export interface StepItem {
     id: string
