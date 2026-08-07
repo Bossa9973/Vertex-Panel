@@ -26,15 +26,31 @@ def _headers() -> dict:
 
 async def _post(path: str, payload: dict) -> dict:
     """POST to the panel bot API. Returns the JSON response or raises on error."""
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
         r = await client.post(f"{BASE_URL}{path}", json=payload, headers=_headers())
-        r.raise_for_status()
+        if r.status_code >= 400:
+            try:
+                body = r.json()
+                err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}"
+                raise Exception(err_msg)
+            except Exception as e:
+                if not str(e).startswith("HTTP ") and "error" not in str(e).lower():
+                    raise e
+                raise Exception(f"HTTP {r.status_code}: {r.text}")
         return r.json()
 
 async def _get(path: str) -> dict:
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
         r = await client.get(f"{BASE_URL}{path}", headers=_headers())
-        r.raise_for_status()
+        if r.status_code >= 400:
+            try:
+                body = r.json()
+                err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}"
+                raise Exception(err_msg)
+            except Exception as e:
+                if not str(e).startswith("HTTP ") and "error" not in str(e).lower():
+                    raise e
+                raise Exception(f"HTTP {r.status_code}: {r.text}")
         return r.json()
 
 # ─── Stats tracking ───────────────────────────────────────────────────────────

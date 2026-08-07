@@ -369,11 +369,46 @@ class BotApiController extends Controller
                 \Illuminate\Support\Facades\Schema::create('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
                     $table->string('code', 32)->primary();
                     $table->string('discord_id', 32)->index();
-                    $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+                    $table->unsignedBigInteger('user_id')->nullable()->index();
                     $table->unsignedInteger('amount');
                     $table->boolean('used')->default(false)->index();
                     $table->string('created_by_discord_id', 32);
                     $table->timestamp('used_at')->nullable();
+                    $table->timestamp('created_at')->useCurrent();
+                });
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("Failed creating promo_codes table: " . $e->getMessage());
+            }
+        }
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('discord_stats')) {
+            try {
+                \Illuminate\Support\Facades\Schema::create('discord_stats', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->string('discord_id', 32)->primary();
+                    $table->unsignedBigInteger('messages')->default(0);
+                    $table->unsignedBigInteger('boosts')->default(0);
+                    $table->timestamps();
+                });
+            } catch (\Throwable $e) {}
+        }
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('discord_invites')) {
+            try {
+                \Illuminate\Support\Facades\Schema::create('discord_invites', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->string('code', 32)->primary();
+                    $table->string('inviter_discord_id', 32);
+                    $table->timestamp('created_at')->useCurrent();
+                });
+            } catch (\Throwable $e) {}
+        }
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('discord_invited_users')) {
+            try {
+                \Illuminate\Support\Facades\Schema::create('discord_invited_users', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->string('discord_id', 32)->primary();
+                    $table->string('inviter_discord_id', 32)->index();
+                    $table->boolean('is_fake')->default(false);
+                    $table->string('status', 16)->default('joined');
                     $table->timestamp('created_at')->useCurrent();
                 });
             } catch (\Throwable $e) {}
