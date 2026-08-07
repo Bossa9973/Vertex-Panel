@@ -201,7 +201,7 @@ class BotApiController extends Controller
                 'code'                  => $code,
                 'discord_id'            => (string) $request->input('discord_id'),
                 'user_id'               => null,
-                'amount'                => (int) $request->input('amount'),
+                'amount'                => (float) $request->input('amount'),
                 'used'                  => false,
                 'created_by_discord_id' => (string) $request->input('admin_discord_id'),
                 'used_at'               => null,
@@ -372,6 +372,18 @@ class BotApiController extends Controller
      */
     protected function ensureTablesExist(): void
     {
+        try {
+            DB::statement("ALTER TABLE users MODIFY credits DECIMAL(16,2) NOT NULL DEFAULT 0.00");
+        } catch (\Throwable $e) {}
+
+        try {
+            DB::statement("ALTER TABLE promo_codes MODIFY amount DECIMAL(16,2) NOT NULL");
+        } catch (\Throwable $e) {}
+
+        try {
+            DB::statement("ALTER TABLE credit_transactions MODIFY amount DECIMAL(16,2) NOT NULL");
+        } catch (\Throwable $e) {}
+
         if (!\Illuminate\Support\Facades\Schema::hasTable('promo_codes')) {
             try {
                 \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
@@ -384,7 +396,7 @@ class BotApiController extends Controller
                     $table->string('code', 32)->primary();
                     $table->string('discord_id', 32)->index();
                     $table->unsignedBigInteger('user_id')->nullable()->index();
-                    $table->unsignedInteger('amount');
+                    $table->decimal('amount', 16, 2);
                     $table->boolean('used')->default(false)->index();
                     $table->string('created_by_discord_id', 32);
                     $table->timestamp('used_at')->nullable();
