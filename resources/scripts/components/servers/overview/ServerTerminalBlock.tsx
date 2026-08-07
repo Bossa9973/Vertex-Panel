@@ -11,6 +11,8 @@ const ServerTerminalBlock = () => {
     const serverData = ServerContext.useStoreState(state => state.server.data)
     const uuid = serverData!.uuid
     const rawCreatedAt = (serverData as any)?.createdAt || (serverData as any)?.created_at
+    const statusData = ServerContext.useStoreState(state => state.status.data)
+    const serverLockdown = statusData?.lockdownSecondsRemaining || 0
     const { t } = useTranslation('server.overview')
     const { t: tStrings } = useTranslation('strings')
 
@@ -20,7 +22,9 @@ const ServerTerminalBlock = () => {
     const [modalOpened, setModalOpened] = useState<boolean>(false)
     const [copiedSsh, setCopiedSsh] = useState<boolean>(false)
     const [secondsLeft, setSecondsLeft] = useState<number>(0)
+    const [powerLockSeconds, setPowerLockSeconds] = useState<number>(0)
 
+    // Initial 5-minute boot lock
     useEffect(() => {
         if (!rawCreatedAt) return
 
@@ -47,6 +51,33 @@ const ServerTerminalBlock = () => {
         return () => clearInterval(timer)
     }, [rawCreatedAt])
 
+    // 30-second power lockdown timer
+    useEffect(() => {
+        if (!uuid) return
+
+        const updateLockRemaining = () => {
+            const lockUntilStr = localStorage.getItem(`power_lock_until_${uuid}`)
+            let localRemaining = 0
+            if (lockUntilStr) {
+                const lockUntil = parseInt(lockUntilStr, 10)
+                if (!isNaN(lockUntil)) {
+                    localRemaining = Math.max(0, Math.ceil((lockUntil - Date.now()) / 1000))
+                }
+            }
+
+            const activeLock = Math.max(localRemaining, serverLockdown)
+            setPowerLockSeconds(activeLock)
+        }
+
+        updateLockRemaining()
+
+        const timer = setInterval(() => {
+            updateLockRemaining()
+        }, 1000)
+
+        return () => clearInterval(timer)
+    }, [uuid, serverLockdown])
+
     const formatTime = (secs: number) => {
         const m = Math.floor(secs / 60)
         const s = secs % 60
@@ -64,6 +95,9 @@ const ServerTerminalBlock = () => {
     }, [])
 
     const handleFetchTmateSession = async () => {
+        const totalLock = Math.max(secondsLeft, powerLockSeconds)
+        if (totalLock > 0) return
+
         setTmateLoading(true)
         try {
             const res = await http.post(`/api/client/servers/${uuid}/create-sshx-session`)
@@ -71,6 +105,11 @@ const ServerTerminalBlock = () => {
                 const data = res.data.data
                 if (data.restricted) {
                     setSshCmd(null)
+                    if (data.remaining_seconds) {
+                        const lockUntil = Date.now() + data.remaining_seconds * 1000
+                        localStorage.setItem(`power_lock_until_${uuid}`, String(lockUntil))
+                        setPowerLockSeconds(data.remaining_seconds)
+                    }
                     return
                 }
                 const cmd = data.ssh_cmd || data.url
@@ -114,6 +153,9 @@ const ServerTerminalBlock = () => {
             )
         }
     }
+
+    const totalLock = Math.max(secondsLeft, powerLockSeconds)
+    const isLocked = totalLock > 0
 
     return (
         <>
@@ -171,16 +213,17 @@ const ServerTerminalBlock = () => {
                                 </p>
                             </div>
 
-                            {secondsLeft > 0 && (
-                                <div className='mt-3 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs text-amber-300 space-y-1'>
+                            {isLocked && (
+                                <div className='mt-3 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs text-amber-300 space-y-1 animate-pulse'>
                                     <div className='font-bold flex items-center gap-1.5'>
-                                        <span>⏳ Initial Cloud-Init Boot Setup</span>
+                                        <LockClosedIcon className='w-4 h-4 text-amber-400' />
+                                        <span>Boot / Power Action Lock</span>
                                         <span className='ml-auto font-mono text-amber-200 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30'>
-                                            {formatTime(secondsLeft)} remaining
+                                            {formatTime(totalLock)} remaining
                                         </span>
                                     </div>
                                     <p className='text-[11px] text-amber-300/80 leading-snug'>
-                                        tmate terminal sessions are locked for the first 5 minutes of server boot to allow Cloud-Init to complete initial package setup cleanly.
+                                        tmate terminal sessions are locked for 30 seconds after server boot or power actions to ensure QEMU guest agent and system services initialize cleanly.
                                     </p>
                                 </div>
                             )}
@@ -216,18 +259,18 @@ const ServerTerminalBlock = () => {
                                     className='grow'
                                     variant='outline'
                                     loading={tmateLoading}
-                                    disabled={tmateLoading || secondsLeft > 0}
+                                    disabled={tmateLoading || isLocked}
                                     onClick={handleFetchTmateSession}
                                 >
-                                    {secondsLeft > 0
-                                        ? `tmate Restricted (${formatTime(secondsLeft)})`
+                                    {isLocked
+                                        ? `tmate Restricted (${formatTime(totalLock)})`
                                         : (sshCmd ? 'View tmate SSH Command' : 'Fetch tmate SSH Session')}
                                 </Button>
                                 <Button
                                     variant='outline'
-                                    disabled={tmateLoading || secondsLeft > 0}
+                                    disabled={tmateLoading || isLocked}
                                     onClick={handleFetchTmateSession}
-                                    title={secondsLeft > 0 ? `Locked during Cloud-Init boot (${formatTime(secondsLeft)})` : 'Fetch tmate session'}
+                                    title={isLocked ? `Locked during boot / power action (${formatTime(totalLock)})` : 'Fetch tmate session'}
                                 >
                                     <CommandLineIcon className='w-4 h-4' />
                                 </Button>

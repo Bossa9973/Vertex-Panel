@@ -38,14 +38,14 @@ class TmateSessionService
             }
         }
 
-        // 0b. Restrict tmate session launch during first 1 minute (60 seconds) after server boot/reboot
-        $lastBoot = Cache::get("server_last_boot_{$server->vmid}");
-        if ($lastBoot) {
-            $elapsedSinceBoot = now()->timestamp - (int) $lastBoot;
-            if ($elapsedSinceBoot >= 0 && $elapsedSinceBoot < 60) {
-                $remainingSeconds = 60 - $elapsedSinceBoot;
+        // 0b. Restrict tmate session launch during first 30 seconds after server boot/power action
+        $lastPowerAction = Cache::get("server_last_power_action_{$server->vmid}") ?? Cache::get("server_last_boot_{$server->vmid}");
+        if ($lastPowerAction) {
+            $elapsedSincePower = now()->timestamp - (int) $lastPowerAction;
+            if ($elapsedSincePower >= 0 && $elapsedSincePower < 30) {
+                $remainingSeconds = 30 - $elapsedSincePower;
 
-                $notice = "tmate terminal access is temporarily restricted for 1 minute after server boot/reboot to allow system services and QEMU guest agent to initialize properly. Please wait {$remainingSeconds} second(s).";
+                $notice = "tmate terminal access is temporarily restricted for 30 seconds after server boot/power action to allow system services and QEMU guest agent to initialize properly. Please wait {$remainingSeconds} second(s).";
 
                 return [
                     'ssh_cmd' => null,

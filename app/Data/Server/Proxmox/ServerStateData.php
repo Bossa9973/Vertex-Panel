@@ -13,6 +13,7 @@ class ServerStateData extends Data
         public int   $memory_total,
         public int   $memory_used,
         public int   $uptime,
+        public int   $lockdown_seconds_remaining = 0,
     )
     {
     }

@@ -8,6 +8,7 @@ export interface ServerStateData {
     memoryTotal: number
     memoryUsed: number
     uptime: number
+    lockdownSecondsRemaining?: number
 }
 
 export const rawDataToServerStateData = (data: any) => ({
@@ -16,6 +17,7 @@ export const rawDataToServerStateData = (data: any) => ({
     memoryTotal: data.memory_total,
     memoryUsed: data.memory_used,
     uptime: data.uptime,
+    lockdownSecondsRemaining: data.lockdown_seconds_remaining || 0,
 })
 
 const getState = (uuid: string): Promise<ServerStateData> => {

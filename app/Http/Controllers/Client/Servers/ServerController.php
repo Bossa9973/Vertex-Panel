@@ -61,6 +61,14 @@ class ServerController extends ApiController
             ]);
         }
 
+        $lastPower = \Illuminate\Support\Facades\Cache::get("server_last_power_action_{$server->vmid}");
+        if ($lastPower) {
+            $elapsed = now()->timestamp - (int) $lastPower;
+            if ($elapsed >= 0 && $elapsed < 30) {
+                $state->lockdown_seconds_remaining = 30 - $elapsed;
+            }
+        }
+
         return fractal()->item($state, new ServerStateTransformer())->respond();
     }
 
@@ -68,13 +76,29 @@ class ServerController extends ApiController
     {
         \Illuminate\Support\Facades\Cache::forget("server.{$server->id}.state");
 
-        $powerState = $request->enum('state', PowerAction::class);
-        if (in_array($powerState, [PowerAction::START, PowerAction::RESTART, PowerAction::RESET])) {
-            \Illuminate\Support\Facades\Cache::put("server_last_boot_{$server->vmid}", now()->timestamp, now()->addMinutes(10));
-            // Flush tmate cache so next request always spawns a fresh session after reboot
-            \Illuminate\Support\Facades\Cache::forget("server_tmate_inprogress_{$server->vmid}");
-            \Illuminate\Support\Facades\Cache::forget("server_tmate_ssh_{$server->vmid}"); // legacy key cleanup
+        $lastPowerAction = \Illuminate\Support\Facades\Cache::get("server_last_power_action_{$server->vmid}");
+        if ($lastPowerAction) {
+            $elapsed = now()->timestamp - (int) $lastPowerAction;
+            if ($elapsed >= 0 && $elapsed < 30) {
+                $remaining = 30 - $elapsed;
+                return response()->json([
+                    'errors' => [
+                        [
+                            'code' => 'PowerActionRestrictedException',
+                            'status' => '400',
+                            'detail' => "Power actions are locked for 30 seconds after initiating a server state change to ensure system stability and proper tmate initialization. Please wait {$remaining} second(s).",
+                        ]
+                    ]
+                ], 400);
+            }
         }
+
+        $powerState = $request->enum('state', PowerAction::class);
+        \Illuminate\Support\Facades\Cache::put("server_last_power_action_{$server->vmid}", now()->timestamp, now()->addMinutes(5));
+        \Illuminate\Support\Facades\Cache::put("server_last_boot_{$server->vmid}", now()->timestamp, now()->addMinutes(10));
+        // Flush tmate cache so next request always spawns a fresh session after power action
+        \Illuminate\Support\Facades\Cache::forget("server_tmate_inprogress_{$server->vmid}");
+        \Illuminate\Support\Facades\Cache::forget("server_tmate_ssh_{$server->vmid}"); // legacy key cleanup
 
         $this->powerRepository->setServer($server)
                               ->send($powerState);
