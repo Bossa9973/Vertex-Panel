@@ -5,6 +5,9 @@ export interface UserData {
     email: string
     credits: number
     rootAdmin: boolean
+    root_admin?: boolean
+    is_reseller?: boolean
+    reseller_plan_type?: 'own_inventory' | 'zero_cost' | null
     createdAt: string
     updatedAt: string
     /** null means full access (CEO / no-role admin); array = role's permission keys */

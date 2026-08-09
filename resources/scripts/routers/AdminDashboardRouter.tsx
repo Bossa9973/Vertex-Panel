@@ -170,6 +170,10 @@ export const routes: Route[] = [
                 path: 'roles',
                 element: lazyLoad(lazy(() => import('@/components/admin/roles/AdminRolesContainer'))),
             },
+            {
+                path: 'resellers',
+                element: lazyLoad(lazy(() => import('@/components/admin/reseller/AdminResellerManagementContainer'))),
+            },
         ],
     },
 ]
@@ -212,13 +216,14 @@ const AdminDashboardRouter = () => {
         ...(hasPerm('view_servers') ? [{ name: getLabel('server_other', 'Servers'), path: '/admin/servers' }] : []),
         ...(hasPerm('view_plans') ? [{ name: 'VPS Plans', path: '/admin/plans' }] : []),
         ...(hasPerm('manage_balances') ? [{ name: 'User Balances', path: '/admin/user-balances' }] : []),
+        { name: 'Resellers & Payouts', path: '/admin/resellers' },
         ...(hasPerm('view_ipam') ? [{ name: getLabel('ipam', 'IPAM'), path: '/admin/ipam' }] : []),
         ...(hasPerm('view_users') ? [{ name: getLabel('user_other', 'Users'), path: '/admin/users' }] : []),
         ...(hasPerm('view_coterms') ? [{ name: 'Coterms', path: '/admin/coterms' }] : []),
         ...(hasPerm('view_tokens') ? [{ name: getLabel('token_other', 'API Tokens'), path: '/admin/tokens' }] : []),
-        ...(hasPerm('view_audit_logs') ? [{ name: '📋 Audit Logs', path: '/admin/audit' }] : []),
+        ...(hasPerm('view_audit_logs') ? [{ name: 'Audit Logs', path: '/admin/audit' }] : []),
         ...(hasPerm('view_maintenance') ? [{ name: 'Maintenance', path: '/admin/maintenance' }] : []),
-        { name: '🛡 Roles', path: '/admin/roles' },
+        { name: 'Roles', path: '/admin/roles' },
     ]
 
     useEffect(() => {

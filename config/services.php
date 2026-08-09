@@ -43,4 +43,16 @@ return [
         'redirect' => env('DISCORD_REDIRECT_URI', env('APP_URL', 'http://localhost') . '/auth/social/discord/callback'),
     ],
 
+    'maxelpay' => [
+        'api_key'    => env('MAXELPAY_API_KEY', ''),
+        'secret_key' => env('MAXELPAY_SECRET_KEY', ''),
+        'mode'       => env('MAXELPAY_PAYMENT_MODE', 'STAGING'),
+    ],
+
+    'nowpayments' => [
+        'api_key'    => env('NOWPAYMENTS_API_KEY', ''),
+        'ipn_secret' => env('NOWPAYMENTS_IPN_SECRET', ''),
+        'mode'       => env('NOWPAYMENTS_MODE', 'SANDBOX'),
+    ],
+
 ];

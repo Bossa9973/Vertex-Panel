@@ -258,3 +258,19 @@ Route::prefix('/roles')->group(function () {
 
 Route::get('/audit-logs', [Admin\AdminAuditController::class, 'index']);
 
+/*
+|--------------------------------------------------------------------------
+| Admin Reseller Management Routes
+|--------------------------------------------------------------------------
+|
+| Endpoint: /api/admin/resellers
+|
+*/
+Route::prefix('/resellers')->group(function () {
+    Route::get('/', [Admin\AdminResellerController::class, 'index']);
+    Route::post('/{id}/toggle-status', [Admin\AdminResellerController::class, 'toggleResellerStatus']);
+    Route::get('/withdrawals', [Admin\AdminResellerController::class, 'getWithdrawals']);
+    Route::post('/withdrawals/{id}/approve', [Admin\AdminResellerController::class, 'approveWithdrawal']);
+    Route::post('/withdrawals/{id}/reject', [Admin\AdminResellerController::class, 'rejectWithdrawal']);
+});
+

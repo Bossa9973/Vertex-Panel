@@ -87,3 +87,32 @@ Route::prefix('/servers/{server}')->middleware(
         Route::put('/auth', [Client\Servers\SettingsController::class, 'updateAuthSettings']);
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| Reseller Portal & Payment Links Routes
+|--------------------------------------------------------------------------
+*/
+Route::prefix('/reseller')->middleware(\Convoy\Http\Middleware\AuthenticateReseller::class)->group(function () {
+    Route::get('/overview', [Client\Reseller\ResellerController::class, 'overview']);
+    Route::get('/plans', [Client\Reseller\ResellerController::class, 'getPlans']);
+    Route::post('/plans', [Client\Reseller\ResellerController::class, 'savePlanMarkup']);
+    Route::get('/links', [Client\Reseller\ResellerController::class, 'getPaymentLinks']);
+    Route::post('/links', [Client\Reseller\ResellerController::class, 'createPaymentLink']);
+    Route::post('/withdraw', [Client\Reseller\ResellerController::class, 'withdraw']);
+    Route::get('/withdrawals', [Client\Reseller\ResellerController::class, 'getWithdrawals']);
+});
+
+Route::get('/pay/{uuid}', [Client\Reseller\PublicPaymentLinkController::class, 'show']);
+Route::post('/pay/{uuid}', [Client\Reseller\PublicPaymentLinkController::class, 'pay']);
+
+/*
+|--------------------------------------------------------------------------
+| Payment Gateway Webhooks (no auth, CSRF exempt — verified by HMAC signature)
+|--------------------------------------------------------------------------
+*/
+Route::post('/webhooks/maxelpay', [Client\Reseller\MaxelpayWebhookController::class, 'handle'])
+    ->withoutMiddleware(['auth:sanctum', 'auth', 'verified', \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+Route::post('/webhooks/nowpayments', [Client\Reseller\NowPaymentsWebhookController::class, 'handle'])
+    ->withoutMiddleware(['auth:sanctum', 'auth', 'verified', \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);

@@ -19,5 +19,6 @@ class VerifyCsrfToken extends Middleware
         'social',
         'auth/social',
         'api/bot/*',
+        'api/client/webhooks/*',
     ];
 }
