@@ -208,10 +208,10 @@ class BotApiController extends Controller
                 'created_at'            => now(),
             ]);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("Failed to generate promo code: " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error("Failed to generate promo code: " . $e->getMessage(), ['exception' => $e]);
             return response()->json([
                 'ok' => false,
-                'error' => 'Database error generating promo code: ' . $e->getMessage(),
+                'error' => 'An error occurred while generating the promo code.',
             ], 500);
         }
 
@@ -324,10 +324,10 @@ class BotApiController extends Controller
                 ]);
             });
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("Failed to redeem promo code: " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error("Failed to redeem promo code: " . $e->getMessage(), ['exception' => $e]);
             return response()->json([
                 'ok'    => false,
-                'error' => 'Error redeeming code: ' . $e->getMessage(),
+                'error' => 'An error occurred while redeeming the code.',
             ], 500);
         }
 

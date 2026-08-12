@@ -252,8 +252,9 @@ class ServerDeployController extends Controller
                 'user_credits' => (float) $user->credits,
             ]);
         } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Server provisioning failed for user ID {$user->id}: " . $e->getMessage(), ['exception' => $e]);
             return response()->json([
-                'message' => 'Server provisioning failed: ' . $e->getMessage(),
+                'message' => 'Server provisioning failed due to a hypervisor error. Please try again or contact support.',
             ], 500);
         }
     }
