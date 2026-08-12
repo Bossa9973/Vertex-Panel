@@ -157,8 +157,13 @@ class ServerController extends ApiController
 
     public function sshxWebhook(Request $request, Server $server)
     {
+        $user = $request->user();
+        if (!$user || ($user->id !== $server->user_id && !$user->root_admin)) {
+            return response()->json(['error' => 'Unauthorized access to server webhook.'], 403);
+        }
+
         $request->validate([
-            'url' => 'required|string',
+            'url' => 'required|string|url',
         ]);
 
         $url = $request->input('url');
