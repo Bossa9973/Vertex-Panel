@@ -401,40 +401,50 @@ install_dependencies() {
     step 3 8 "Installing System Dependencies"
 
     if [[ "$OS_FAMILY" == "debian" ]]; then
-        run_or_fail "Updating package repositories" apt-get update -y --fix-missing
-
-        run_or_fail "Installing core packages" \
-            apt-get install -y curl wget unzip git tar gnupg2 ca-certificates lsb-release \
-                apt-transport-https rsync software-properties-common
-
-        # Setup PHP 8.2 repository if native packages unavailable
-        if ! command -v php &>/dev/null; then
-            spinner_start "Configuring PHP repository"
-            if [[ "${OS_NAME}" == "ubuntu" ]]; then
-                run_quietly add-apt-repository -y ppa:ondrej/php
-                run_quietly apt-get update -y
-            elif [[ "${OS_NAME}" == "debian" ]]; then
-                curl -sSLo /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg > /dev/null 2>&1 || true
-                echo "deb https://packages.sury.org/php/ $(lsb_release -sc 2>/dev/null || echo bookworm) main" > /etc/apt/sources.list.d/php.list
-                run_quietly apt-get update -y
-            fi
-            spinner_stop
+        # Check if core utilities are already installed
+        if command -v curl &>/dev/null && command -v wget &>/dev/null && command -v unzip &>/dev/null && command -v git &>/dev/null && command -v rsync &>/dev/null; then
+            success "Core system packages already installed"
+        else
+            run_or_fail "Updating package repositories" apt-get update -y --fix-missing
+            run_or_fail "Installing core packages" \
+                apt-get install -y curl wget unzip git tar gnupg2 ca-certificates lsb-release \
+                    apt-transport-https rsync software-properties-common
         fi
 
-        spinner_start "Installing PHP & required extensions"
-        if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl php-sqlite3 php-gd >> "$LOG_FILE" 2>&1 || \
-           apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp php8.2-redis php8.2-intl php8.2-sqlite3 php8.2-gd >> "$LOG_FILE" 2>&1 || \
-           apt-get install -y php8.3-cli php8.3-fpm php8.3-mysql php8.3-xml php8.3-curl php8.3-mbstring php8.3-zip php8.3-bcmath php8.3-gmp php8.3-redis php8.3-intl php8.3-sqlite3 php8.3-gd >> "$LOG_FILE" 2>&1; then
-            spinner_stop
-            success "PHP & extensions installed"
+        # Setup & Install PHP & required extensions if missing
+        if command -v php &>/dev/null && php -m 2>/dev/null | grep -qi 'pdo_mysql' && php -m 2>/dev/null | grep -qi 'redis' && php -m 2>/dev/null | grep -qi 'mbstring'; then
+            success "PHP $(php -r 'echo PHP_VERSION;' 2>/dev/null || echo '8.2+') & required extensions already installed"
         else
-            spinner_stop
-            error_msg "Failed to install PHP. Check ${LOG_FILE}"
-            return 1
+            if ! command -v php &>/dev/null; then
+                spinner_start "Configuring PHP repository"
+                if [[ "${OS_NAME}" == "ubuntu" ]]; then
+                    run_quietly add-apt-repository -y ppa:ondrej/php
+                    run_quietly apt-get update -y
+                elif [[ "${OS_NAME}" == "debian" ]]; then
+                    curl -sSLo /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg > /dev/null 2>&1 || true
+                    echo "deb https://packages.sury.org/php/ $(lsb_release -sc 2>/dev/null || echo bookworm) main" > /etc/apt/sources.list.d/php.list
+                    run_quietly apt-get update -y
+                fi
+                spinner_stop
+            fi
+
+            spinner_start "Installing PHP & required extensions"
+            if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl php-sqlite3 php-gd >> "$LOG_FILE" 2>&1 || \
+               apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp php8.2-redis php8.2-intl php8.2-sqlite3 php8.2-gd >> "$LOG_FILE" 2>&1 || \
+               apt-get install -y php8.3-cli php8.3-fpm php8.3-mysql php8.3-xml php8.3-curl php8.3-mbstring php8.3-zip php8.3-bcmath php8.3-gmp php8.3-redis php8.3-intl php8.3-sqlite3 php8.3-gd >> "$LOG_FILE" 2>&1; then
+                spinner_stop
+                success "PHP & extensions installed"
+            else
+                spinner_stop
+                error_msg "Failed to install PHP. Check ${LOG_FILE}"
+                return 1
+            fi
         fi
 
         # Database (MySQL / MariaDB)
-        if ! command -v mysql &>/dev/null; then
+        if command -v mysql &>/dev/null || systemctl is-active --quiet mariadb 2>/dev/null || systemctl is-active --quiet mysql 2>/dev/null; then
+            success "Database server (MySQL/MariaDB) already installed & active"
+        else
             spinner_start "Installing Database Server (MySQL / MariaDB)"
             if apt-get install -y mariadb-server >> "$LOG_FILE" 2>&1 || \
                apt-get install -y mysql-server >> "$LOG_FILE" 2>&1; then
@@ -450,15 +460,28 @@ install_dependencies() {
         fi
 
         # Redis
-        if ! command -v redis-server &>/dev/null; then
+        if command -v redis-server &>/dev/null || systemctl is-active --quiet redis-server 2>/dev/null || systemctl is-active --quiet redis 2>/dev/null; then
+            success "Redis server already installed & active"
+        else
             run_or_fail "Installing Redis" apt-get install -y redis-server
             run_quietly systemctl start redis-server
             run_quietly systemctl enable redis-server
         fi
 
         # Nginx & Supervisor
-        [[ ! -x "$(command -v nginx)" ]] && run_or_fail "Installing Nginx" apt-get install -y nginx && run_quietly systemctl enable nginx
-        [[ ! -x "$(command -v supervisorctl)" ]] && run_or_fail "Installing Supervisor" apt-get install -y supervisor && run_quietly systemctl enable supervisor
+        if command -v nginx &>/dev/null; then
+            success "Nginx web server already installed"
+        else
+            run_or_fail "Installing Nginx" apt-get install -y nginx
+            run_quietly systemctl enable nginx
+        fi
+
+        if command -v supervisorctl &>/dev/null; then
+            success "Supervisor process manager already installed"
+        else
+            run_or_fail "Installing Supervisor" apt-get install -y supervisor
+            run_quietly systemctl enable supervisor
+        fi
 
     elif [[ "$OS_FAMILY" == "rhel" ]]; then
         run_or_fail "Installing EPEL repository" dnf install -y epel-release
@@ -486,15 +509,17 @@ install_dependencies() {
     fi
 
     # Composer Installation
-    if ! command -v composer &>/dev/null; then
+    if command -v composer &>/dev/null; then
+        success "Composer $(composer --version 2>/dev/null | awk '{print $3}' || echo '') already installed"
+    else
         run_or_fail "Installing Composer" \
             bash -c "curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer"
-    else
-        success "Composer $(composer --version 2>/dev/null | awk '{print $3}' || echo '') installed"
     fi
 
     # Node.js Installation (Node 20 LTS)
-    if ! command -v node &>/dev/null || [[ $(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v') -lt 18 ]]; then
+    if command -v node &>/dev/null && [[ $(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v') -ge 18 ]]; then
+        success "Node.js $(node --version) already installed"
+    else
         spinner_start "Installing Node.js 20 LTS"
         if curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >> "$LOG_FILE" 2>&1 && $PKG_MANAGER install -y nodejs >> "$LOG_FILE" 2>&1; then
             spinner_stop
@@ -503,8 +528,6 @@ install_dependencies() {
             spinner_stop
             run_or_fail "Installing Node.js via package manager" $PKG_MANAGER install -y nodejs npm
         fi
-    else
-        success "Node.js $(node --version) installed"
     fi
 
     printf "\n"
@@ -513,6 +536,13 @@ install_dependencies() {
 # --- Download panel source archive --------------------------------------------
 download_panel() {
     step 4 8 "Downloading Vertex Panel"
+
+    # Check if panel codebase is already present at INSTALL_DIR
+    if [[ -f "${INSTALL_DIR}/artisan" && -f "${INSTALL_DIR}/composer.json" ]]; then
+        success "Vertex Panel codebase already present at ${INSTALL_DIR} (skipping download)"
+        printf "\n"
+        return 0
+    fi
 
     local archive_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip"
     local tmp_zip="/tmp/vertex-panel.zip"
@@ -634,11 +664,21 @@ FLUSH PRIVILEGES;
         warn "Could not connect to MySQL with root credentials. Attempting direct migration..."
     fi
 
-    run_or_fail "Installing PHP dependencies (Composer)" \
-        php -d memory_limit=-1 $(which composer) install --no-dev --optimize-autoloader --no-interaction
+    # Composer dependencies check
+    if [[ -d "${INSTALL_DIR}/vendor" && -f "${INSTALL_DIR}/vendor/autoload.php" ]]; then
+        success "PHP dependencies (Composer vendor) already installed"
+    else
+        run_or_fail "Installing PHP dependencies (Composer)" \
+            php -d memory_limit=-1 $(which composer) install --no-dev --optimize-autoloader --no-interaction
+    fi
 
-    run_or_fail "Generating Application Encryption Key" \
-        php artisan key:generate --no-interaction --force
+    # Application encryption key check
+    if grep -q "^APP_KEY=base64:" "${INSTALL_DIR}/.env" 2>/dev/null && [[ -n $(grep "^APP_KEY=" "${INSTALL_DIR}/.env" | cut -d= -f2-) ]]; then
+        success "Application Encryption Key already generated"
+    else
+        run_or_fail "Generating Application Encryption Key" \
+            php artisan key:generate --no-interaction --force
+    fi
 
     run_or_fail "Executing Database Migrations" \
         php artisan migrate --force --no-interaction
@@ -654,29 +694,34 @@ FLUSH PRIVILEGES;
     spinner_stop
     success "File permissions configured"
 
-    spinner_start "Installing Frontend Node.js dependencies"
-    if npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund >> "$LOG_FILE" 2>&1; then
-        spinner_stop
-        success "Node.js dependencies installed"
+    # Node.js dependencies & Vite frontend asset build check
+    if [[ -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+        success "Frontend assets (Vite build) already compiled at public/build"
     else
-        spinner_stop
-        warn "Node.js dependencies completed with warnings (proceeding to build)"
-    fi
+        spinner_start "Installing Frontend Node.js dependencies"
+        if npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund >> "$LOG_FILE" 2>&1; then
+            spinner_stop
+            success "Node.js dependencies installed"
+        else
+            spinner_stop
+            warn "Node.js dependencies completed with warnings (proceeding to build)"
+        fi
 
-    spinner_start "Compiling Frontend Assets (Vite)"
-    if npm run build --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1; then
-        spinner_stop
-        success "Frontend assets compiled successfully"
-    else
-        spinner_stop
-        warn "Vite build reported warnings"
-    fi
+        spinner_start "Compiling Frontend Assets (Vite)"
+        if npm run build --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1; then
+            spinner_stop
+            success "Frontend assets compiled successfully"
+        else
+            spinner_stop
+            warn "Vite build reported warnings"
+        fi
 
-    # Prune devDependencies after build — frees ~200 MB of node_modules at runtime
-    spinner_start "Pruning dev Node.js dependencies post-build"
-    npm prune --production --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1 || true
-    spinner_stop
-    success "Dev dependencies pruned (runtime node_modules reduced)"
+        # Prune devDependencies after build — frees ~200 MB of node_modules at runtime
+        spinner_start "Pruning dev Node.js dependencies post-build"
+        npm prune --production --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1 || true
+        spinner_stop
+        success "Dev dependencies pruned (runtime node_modules reduced)"
+    fi
 
     run_or_fail "Optimizing Application Caching" \
         php artisan optimize
