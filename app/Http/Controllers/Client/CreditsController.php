@@ -41,13 +41,14 @@ class CreditsController extends Controller
      */
     public function topup(Request $request): JsonResponse
     {
-        $topupSetting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'credits_topup_enabled')->first();
-        $topupEnabled = $topupSetting ? ($topupSetting->value === 'true' || $topupSetting->value === '1') : true;
+        /** @var User $user */
+        $user = $request->user();
 
-        if (!$topupEnabled) {
+        // Prevent regular users from granting themselves arbitrary free credits via API requests
+        if (!$user->root_admin) {
             return response()->json([
                 'success' => false,
-                'message' => 'Top-up BOLTs balance functionality is currently disabled by administrator.',
+                'message' => 'Direct client top-ups are disabled. Please use an official payment gateway (NowPayments or MaxelPay) to add BOLTs credits.',
             ], 403);
         }
 
@@ -56,10 +57,8 @@ class CreditsController extends Controller
             'payment_method' => 'nullable|string',
         ]);
 
-        /** @var User $user */
-        $user = $request->user();
         $amount = (float) $request->amount;
-        $method = $request->payment_method ?? 'Credit Card';
+        $method = $request->payment_method ?? 'Admin Grant';
 
         $user->credits = (float) ($user->credits ?? 0.00) + $amount;
         $user->save();
@@ -67,19 +66,19 @@ class CreditsController extends Controller
         $transaction = $user->creditTransactions()->create([
             'amount' => $amount,
             'type' => 'topup',
-            'description' => "Account Top-Up via {$method}",
+            'description' => "Admin Top-Up Grant via {$method}",
             'reference_id' => 'PAY-' . Str::upper(Str::random(8)),
         ]);
 
         \Convoy\Facades\Activity::event('bolts:topup')
             ->property(['amount' => $amount, 'method' => $method, 'tx_id' => $transaction->reference_id])
-            ->log("User topped up {$amount} BOLTs via {$method}");
+            ->log("Admin topped up {$amount} BOLTs for user {$user->email}");
 
         return response()->json([
             'success' => true,
             'credits' => (float) $user->credits,
             'transaction' => $transaction,
-            'message' => 'Account top-up successful!',
+            'message' => 'Admin top-up successful!',
         ]);
     }
 }
