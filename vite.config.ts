@@ -9,9 +9,13 @@ export default defineConfig({
         react(),
         laravel(['resources/scripts/main.tsx']),
         macrosPlugin(),
-        visualizer({
-            filename: './public/stats.html',
-        }),
+        ...(process.env.ANALYZE === 'true'
+            ? [
+                  visualizer({
+                      filename: './public/stats.html',
+                  }),
+              ]
+            : []),
     ],
     build: {
         target: 'es2020',
