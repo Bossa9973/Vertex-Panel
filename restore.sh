@@ -613,12 +613,27 @@ FLUSH PRIVILEGES;"
         fi
 
         spinner_start "Building frontend assets (Vite)"
+        export NODE_OPTIONS="--max-old-space-size=1024"
         if npm run build --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "Frontend assets (Vite build) compiled"
         else
             spinner_stop
-            warn "Frontend build step completed"
+            warn "Vite npm run build reported warnings — trying direct fallback"
+        fi
+
+        if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+            spinner_start "Retrying Vite build directly..."
+            (cd "${INSTALL_DIR}" && npx vite build >> "$LOG_FILE" 2>&1) || true
+            spinner_stop
+        fi
+
+        if [[ -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+            success "Vite manifest verified -> public/build/manifest.json"
+        else
+            error_msg "Failed to build Vite assets! /var/www/vertex-panel/public/build/manifest.json is missing."
+            printf "   ${DIM}Check log for details: ${LOG_FILE}${RESET}\n"
+            return 1
         fi
     else
         success "Frontend assets (Vite build) ready"

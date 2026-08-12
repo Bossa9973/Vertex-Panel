@@ -21,7 +21,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 export COMPOSER_ALLOW_SUPERUSER=1
-export NODE_OPTIONS="--max-old-space-size=512"  # 512 MB is sufficient for Vite; 2048 would OOM on a 1 GB VPS
+export NODE_OPTIONS="--max-old-space-size=1024"  # 1 GB heap limit for Node.js build process (released post-build)
 
 # --- Constants ----------------------------------------------------------------
 PANEL_VERSION="1.1"
@@ -708,12 +708,28 @@ FLUSH PRIVILEGES;
         fi
 
         spinner_start "Compiling Frontend Assets (Vite)"
+        export NODE_OPTIONS="--max-old-space-size=1024"
         if npm run build --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "Frontend assets compiled successfully"
         else
             spinner_stop
-            warn "Vite build reported warnings"
+            warn "Vite npm run build reported warnings — trying direct fallback"
+        fi
+
+        # Verify manifest.json generation
+        if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+            spinner_start "Retrying Vite build directly..."
+            (cd "${INSTALL_DIR}" && npx vite build >> "$LOG_FILE" 2>&1) || true
+            spinner_stop
+        fi
+
+        if [[ -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+            success "Vite manifest verified -> public/build/manifest.json"
+        else
+            error_msg "Failed to build Vite assets! /var/www/vertex-panel/public/build/manifest.json is missing."
+            printf "   ${DIM}Check log for details: ${LOG_FILE}${RESET}\n"
+            return 1
         fi
 
         # Prune devDependencies after build — frees ~200 MB of node_modules at runtime
@@ -1134,14 +1150,34 @@ case "${1:-}" in
         rsync -a --delete --exclude='.env' --exclude='storage/' "${src_dir}/" "${INSTALL_DIR}/"
         chown -R www-data:www-data "${INSTALL_DIR}" 2>/dev/null || true
         php -d memory_limit=-1 $(which composer) install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
+        export NODE_OPTIONS="--max-old-space-size=1024"
         npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
         npm run build --prefix "${INSTALL_DIR}"
+        if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+            (cd "${INSTALL_DIR}" && npx vite build) || true
+        fi
         php "${INSTALL_DIR}/artisan" migrate --force --no-interaction
         php "${INSTALL_DIR}/artisan" optimize
         supervisorctl restart all 2>/dev/null || true
         php "${INSTALL_DIR}/artisan" up --no-interaction || true
         rm -rf "$tmp_zip" "$tmp_dir"
         printf "${GREEN}Vertex Panel updated successfully!${RESET}\n"
+        ;;
+    build)
+        check_root "$1"
+        printf "${CYAN}Building frontend assets (Vite)...${RESET}\n"
+        export NODE_OPTIONS="--max-old-space-size=1024"
+        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
+        npm run build --prefix "${INSTALL_DIR}"
+        if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+            (cd "${INSTALL_DIR}" && npx vite build) || true
+        fi
+        if [[ -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+            printf "${GREEN}Frontend assets built successfully -> public/build/manifest.json${RESET}\n"
+        else
+            printf "${RED}Build error: public/build/manifest.json missing.${RESET}\n"
+            exit 1
+        fi
         ;;
     logs)
         tail -f "${INSTALL_DIR}/storage/logs/laravel.log"
