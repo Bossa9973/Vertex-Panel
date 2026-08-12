@@ -652,7 +652,14 @@ tmp_table_size              = 16M
 max_heap_table_size         = 16M
 performance_schema          = OFF
 MYSQLEOF
-    run_quietly systemctl restart mariadb || run_quietly systemctl restart mysql
+    # Restart whichever database service is actually running
+    if systemctl is-active --quiet mariadb 2>/dev/null; then
+        systemctl restart mariadb > /dev/null 2>&1 || true
+    elif systemctl is-active --quiet mysql 2>/dev/null; then
+        systemctl restart mysql > /dev/null 2>&1 || true
+    else
+        ( systemctl restart mariadb > /dev/null 2>&1 || systemctl restart mysql > /dev/null 2>&1 || true )
+    fi
     spinner_stop
     success "MySQL/MariaDB low-RAM config applied (buffer pool: 64 MB, max_connections: 25)"
 
@@ -673,10 +680,14 @@ pm.min_spare_servers = 1
 pm.max_spare_servers = 3
 pm.max_requests = 500
 FPMEOF
-        # PHP memory limits and OPcache cap
-        local php_ini_dir
-        php_ini_dir=$(php --ini 2>/dev/null | grep -o '/etc/php[^:]*' | head -1 || echo "/etc/php")
-        cat > "${php_ini_dir}/conf.d/99-vertex-ram.ini" <<PHPEOF
+        # PHP memory limits and OPcache cap.
+        # Derive the FPM conf.d path from the already-resolved pool dir
+        # (e.g. /etc/php/8.2/fpm/pool.d -> /etc/php/8.2/fpm/conf.d).
+        local php_fpm_conf_d
+        php_fpm_conf_d="$(dirname "$fpm_pool_dir")/conf.d"
+        mkdir -p "$php_fpm_conf_d" 2>/dev/null || true
+        if [[ -d "$php_fpm_conf_d" ]]; then
+            cat > "${php_fpm_conf_d}/99-vertex-ram.ini" <<PHPEOF
 ; Vertex Panel — RAM limits
 memory_limit = 128M
 opcache.memory_consumption = 64
@@ -684,8 +695,24 @@ opcache.interned_strings_buffer = 8
 opcache.max_accelerated_files = 4000
 opcache.revalidate_freq = 60
 PHPEOF
+        fi
+        # Also write to any other conf.d dirs found (e.g. cli, opcache)
+        while IFS= read -r extra_confd; do
+            [[ "$extra_confd" == "$php_fpm_conf_d" ]] && continue
+            mkdir -p "$extra_confd" 2>/dev/null || true
+            [[ -d "$extra_confd" ]] && cat > "${extra_confd}/99-vertex-ram.ini" <<PHPEOF2
+; Vertex Panel — RAM limits
+memory_limit = 128M
+opcache.memory_consumption = 64
+opcache.interned_strings_buffer = 8
+opcache.max_accelerated_files = 4000
+opcache.revalidate_freq = 60
+PHPEOF2
+        done < <(find /etc/php* /usr/local/etc/php -type d -name 'conf.d' 2>/dev/null | sort -u || true)
         fpm_svc=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
-        [[ -n "$fpm_svc" ]] && run_quietly systemctl reload "$fpm_svc" || true
+        if [[ -n "$fpm_svc" ]]; then
+            systemctl reload "$fpm_svc" > /dev/null 2>&1 || true
+        fi
         spinner_stop
         success "PHP-FPM pool tuned (max 10 workers, memory_limit 128M, OPcache 64 MB)"
     else
@@ -695,17 +722,18 @@ PHPEOF
 
     # ── Redis low-RAM config ───────────────────────────────────────────────────
     spinner_start "Applying low-RAM Redis configuration"
-    local redis_conf
-    redis_conf=$(redis-cli CONFIG SET maxmemory 67108864 2>/dev/null && \
-                 redis-cli CONFIG SET maxmemory-policy allkeys-lru 2>/dev/null && echo "live" || echo "offline")
-    if [[ "$redis_conf" == "live" ]]; then
+    local redis_live=false
+    # Run in a subshell so redis-cli failures don't propagate under set -e
+    if ( redis-cli CONFIG SET maxmemory 67108864 > /dev/null 2>&1 && \
+         redis-cli CONFIG SET maxmemory-policy allkeys-lru > /dev/null 2>&1 ); then
+        redis_live=true
+    fi
+    if [[ "$redis_live" == "true" ]]; then
         spinner_stop
         success "Redis maxmemory set to 64 MB (allkeys-lru eviction) — live config applied"
     else
-        # Fallback: write a persistent config snippet that Redis will load on restart
-        local redis_conf_file
-        redis_conf_file=$(redis-cli CONFIG GET include 2>/dev/null | tail -1 || echo "")
-        mkdir -p /etc/redis
+        # Fallback: write a persistent config snippet
+        mkdir -p /etc/redis 2>/dev/null || true
         cat > /etc/redis/vertex-low-ram.conf <<REDISEOF
 # Vertex Panel — Low-RAM Redis Config
 maxmemory 64mb

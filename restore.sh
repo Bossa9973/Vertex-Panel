@@ -659,24 +659,14 @@ configure_supervisor() {
     step 7 8 "Configuring Queue Workers (Supervisor)"
 
     run_quietly mkdir -p /var/log/vertex-panel
-    run_quietly chown -R "${SERVICE_USER}:${SERVICE_USER}" /var/log/vertex-panel
+    run_quietly chown -R "${SERVICE_USER}:${SERVICE_USER}" /var/log/vertex-panel 2>/dev/null || true
 
     spinner_start "Writing Supervisor configuration"
+    # NOTE: Only vertex-horizon is registered here.
+    # Horizon manages its own worker pool (configured via config/horizon.php).
+    # Adding separate queue:work daemons alongside Horizon double-spawns workers
+    # and wastes RAM on a low-memory VPS.
     cat > "${SUPERVISOR_CONF}" <<SUPEOF
-[program:vertex-queue]
-process_name=%(program_name)s_%(process_num)02d
-command=php ${INSTALL_DIR}/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
-directory=${INSTALL_DIR}
-autostart=true
-autorestart=true
-stopasgroup=true
-killasgroup=true
-user=${SERVICE_USER}
-numprocs=2
-redirect_stderr=true
-stdout_logfile=/var/log/vertex-panel/queue.log
-stopwaitsecs=3600
-
 [program:vertex-horizon]
 process_name=%(program_name)s
 command=php ${INSTALL_DIR}/artisan horizon
@@ -688,6 +678,8 @@ killasgroup=true
 user=${SERVICE_USER}
 redirect_stderr=true
 stdout_logfile=/var/log/vertex-panel/horizon.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
 stopwaitsecs=3600
 SUPEOF
     spinner_stop
@@ -696,26 +688,18 @@ SUPEOF
     run_or_fail "Loading Supervisor configuration" \
         bash -c "supervisorctl reread && supervisorctl update"
 
-    spinner_start "Starting vertex-queue workers"
-    if supervisorctl start vertex-queue:* > /tmp/vertex_restore.log 2>&1; then
-        spinner_stop
-        success "Queue workers (vertex-queue) started"
-    else
-        spinner_stop
-        warn "vertex-queue status checked"
-    fi
-
     spinner_start "Starting vertex-horizon worker"
     if supervisorctl start vertex-horizon > /tmp/vertex_restore.log 2>&1; then
         spinner_stop
-        success "Horizon worker (vertex-horizon) started"
+        success "Horizon worker started (manages its own queue worker pool)"
     else
         spinner_stop
-        warn "vertex-horizon status checked"
+        warn "vertex-horizon start returned non-zero — check: supervisorctl status"
     fi
 
     printf "\n"
 }
+
 
 # --- 8. Install vertex CLI management tool ------------------------------------
 install_cli() {
