@@ -20,7 +20,7 @@
     "laravel/fortify": "^1.16",
     "laravel/framework": "^11.0",
     "laravel/helpers": "^1.6",
-    "laravel/horizon": "^5.12",
+    "laravel/horizon": "^5.28",
     "laravel/sanctum": "^4.0",
     "laravel/tinker": "^2.8",
     "lcobucci/jwt": "^5.0",
