@@ -355,6 +355,45 @@ obtain_backup() {
     printf "\n"
 }
 
+# --- 2b. Select Restore Mode --------------------------------------------------
+RESTORE_MODE="2"
+select_restore_mode() {
+    local mode_arg="${1:-}"
+
+    if [[ "$mode_arg" == "1" || "$mode_arg" == "configs" ]]; then
+        RESTORE_MODE="1"
+    elif [[ "$mode_arg" == "2" || "$mode_arg" == "full" ]]; then
+        RESTORE_MODE="2"
+    else
+        printf "   ${BOLD}${WHITE}Select Restore Option:${RESET}\n"
+        printf "     ${CYAN}1${RESET}) ${BOLD}Configs Only${RESET}  — Restore database dump, .env, and uploads into existing codebase\n"
+        printf "     ${CYAN}2${RESET}) ${BOLD}GitHub Codebase + Configs${RESET} — Fetch codebase from GitHub main, then restore database dump, .env & uploads\n"
+        printf "\n"
+        printf "   ${CYAN}?${RESET}  ${WHITE}Select Option [1 or 2, default: 2]${RESET}: "
+
+        local choice=""
+        if [[ -t 0 ]]; then
+            read -r choice
+        else
+            read -r choice < /dev/tty 2>/dev/null || read -r choice || choice="2"
+        fi
+        choice="${choice:-2}"
+
+        if [[ "$choice" == "1" ]]; then
+            RESTORE_MODE="1"
+        else
+            RESTORE_MODE="2"
+        fi
+    fi
+
+    if [[ "$RESTORE_MODE" == "1" ]]; then
+        success "Restore Option 1 selected (Restoring configs and data only)"
+    else
+        success "Restore Option 2 selected (Fetching files from GitHub + restoring configs & data)"
+    fi
+    printf "\n"
+}
+
 # --- 3. Install system dependencies -------------------------------------------
 install_dependencies() {
     step 3 8 "Installing System Dependencies"
@@ -475,11 +514,19 @@ install_dependencies() {
 download_panel() {
     step 4 8 "Downloading Vertex Panel & Restoring Files"
 
-    local archive_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip"
-    local tmp_zip="/tmp/vertex-panel.zip"
-    local tmp_dir="/tmp/vertex-panel-src"
+    if [[ "${RESTORE_MODE:-2}" == "1" ]]; then
+        info "Option 1 selected — preserving existing codebase and restoring configs/data"
+        if [[ ! -f "${INSTALL_DIR}/artisan" ]]; then
+            warn "No existing panel codebase found at ${INSTALL_DIR}. Falling back to fetching codebase from GitHub..."
+            RESTORE_MODE="2"
+        fi
+    fi
 
-    if [[ ! -f "${INSTALL_DIR}/artisan" ]]; then
+    if [[ "${RESTORE_MODE:-2}" == "2" ]]; then
+        local archive_url="https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.zip"
+        local tmp_zip="/tmp/vertex-panel.zip"
+        local tmp_dir="/tmp/vertex-panel-src"
+
         spinner_start "Downloading panel codebase from github.com/${GITHUB_REPO}"
         if curl -fsSL "$archive_url" -o "$tmp_zip" 2>>"$LOG_FILE"; then
             spinner_stop
@@ -500,16 +547,16 @@ download_panel() {
         run_or_fail "Creating installation directory (${INSTALL_DIR})" mkdir -p "$INSTALL_DIR"
 
         spinner_start "Deploying panel files to ${INSTALL_DIR}"
-        rsync -a --delete "${extracted_dir}/" "${INSTALL_DIR}/" >> "$LOG_FILE" 2>&1
+        rsync -a --delete --exclude='.env' --exclude='storage/' "${extracted_dir}/" "${INSTALL_DIR}/" >> "$LOG_FILE" 2>&1
         spinner_stop
         success "Panel codebase deployed to ${INSTALL_DIR}"
         rm -rf "$tmp_zip" "$tmp_dir"
     else
-        success "Vertex Panel codebase exists at ${INSTALL_DIR}"
+        success "Using existing panel codebase at ${INSTALL_DIR}"
     fi
 
     spinner_start "Overlaying restored .env environment config"
-    cp "${TMP_RESTORE_DIR}/.env" "${INSTALL_DIR}/.env"
+    cp -f "${TMP_RESTORE_DIR}/.env" "${INSTALL_DIR}/.env"
     spinner_stop
     success "Environment configuration restored"
 
@@ -1010,6 +1057,7 @@ trap 'spinner_stop; printf "\n   ${RED}Restoration interrupted. See /tmp/vertex_
 print_banner
 preflight_checks
 obtain_backup "${1:-}" "${2:-}"
+select_restore_mode "${3:-}"
 install_dependencies
 download_panel
 configure_panel

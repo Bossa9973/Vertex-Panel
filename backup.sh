@@ -336,16 +336,17 @@ printf "     ${GREEN}вњ“${RESET}  .env        (APP_KEY В· OAuth secrets В
 printf "     ${GREEN}вњ“${RESET}  storage/app (user uploads & avatars)\n\n"
 
 if [[ -n "$UPLOAD_URL" ]]; then
-    printf "   ${GREEN}${BOLD}Cloud Upload Success вЂ” ${PROVIDER_NAME}${RESET}\n"
+    printf "   ${GREEN}${BOLD}Cloud Upload Success — ${PROVIDER_NAME}${RESET}\n"
     printf "   ${BOLD}Download URL:${RESET}\n"
     printf "     ${CYAN}${BOLD}%s${RESET}\n\n" "$UPLOAD_URL"
     printf "   ${BOLD}One-liner restore on a fresh VPS:${RESET}\n"
-    printf "     ${CYAN}${BOLD}curl -sSL https://raw.githubusercontent.com/Bossa9973/Vertex-Panel/main/restore.sh | bash -s -- %s %s${RESET}\n\n" \
+    printf "     ${CYAN}${BOLD}curl -sSL https://raw.githubusercontent.com/Bossa9973/Vertex-Panel/main/restore.sh | bash -s -- %s %s [1|2]${RESET}\n" \
         "$UPLOAD_URL" "$ZIP_PASSWORD"
+    printf "     ${DIM}Options: 1 = Configs/Data Only, 2 = GitHub Codebase + Configs (default)${RESET}\n\n"
 else
     warn "Cloud upload unavailable. Transfer the file manually:"
     printf "     ${CYAN}scp %s root@<new-vps>:/tmp/${RESET}\n" "$ARCHIVE_PATH"
-    printf "     ${CYAN}./restore.sh /tmp/%s %s${RESET}\n\n" "$ARCHIVE_NAME" "$ZIP_PASSWORD"
+    printf "     ${CYAN}./restore.sh /tmp/%s %s [1|2]${RESET}\n\n" "$ARCHIVE_NAME" "$ZIP_PASSWORD"
 fi
 
 printf "   ${DIM}------------------------------------------------------------${RESET}\n\n"
