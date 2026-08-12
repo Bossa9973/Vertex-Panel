@@ -12,18 +12,20 @@ class AdminUserBalanceController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $perPage = min((int) $request->query('per_page', 50), 200);
+
         $users = User::withCount('servers')
             ->orderBy('id', 'desc')
-            ->get()
-            ->map(function (User $user) {
+            ->paginate($perPage)
+            ->through(function (User $user) {
                 return [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'credits' => (float) $user->credits,
-                    'root_admin' => (bool) $user->root_admin,
-                    'servers_count' => $user->servers_count,
-                    'created_at' => $user->created_at->toIso8601String(),
+                    'id'           => $user->id,
+                    'name'         => $user->name,
+                    'email'        => $user->email,
+                    'credits'      => (float) $user->credits,
+                    'root_admin'   => (bool) $user->root_admin,
+                    'servers_count'=> $user->servers_count,
+                    'created_at'   => $user->created_at->toIso8601String(),
                 ];
             });
 

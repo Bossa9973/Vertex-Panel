@@ -30,7 +30,7 @@ class AdminResellerController extends Controller
             });
         }
 
-        $users = $query->orderBy('id', 'desc')->paginate(20);
+        $users = $query->orderBy('id', 'desc')->with('coinBalances')->paginate(20);
 
         // Append reseller coin balance summary
         $users->getCollection()->transform(function ($user) {
@@ -38,7 +38,7 @@ class AdminResellerController extends Controller
             $u['id'] = $user->id;
             $u['is_reseller'] = (bool) $user->is_reseller;
             $u['reseller_notes'] = $user->reseller_notes;
-            $u['coin_balances'] = ResellerCoinBalance::where('user_id', $user->id)->get();
+            $u['coin_balances'] = $user->coinBalances; // already eager-loaded above
             return $u;
         });
 

@@ -108,7 +108,7 @@ class EarnBoltsController extends ApiController
     public function connectDiscord(Request $request): JsonResponse
     {
         $request->validate([
-            'discord_id' => 'required|string|min:3',
+            'discord_id' => 'required|string|digits_between:17,19',
         ]);
 
         $user = $request->user();

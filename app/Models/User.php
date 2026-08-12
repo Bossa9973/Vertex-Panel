@@ -17,6 +17,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Sanctum\NewAccessToken;
+use Convoy\Models\ResellerCoinBalance;
 
 /**
  * @mixin Eloquent
@@ -178,6 +179,11 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
     public function creditTransactions(): HasMany
     {
         return $this->hasMany(CreditTransaction::class);
+    }
+
+    public function coinBalances(): HasMany
+    {
+        return $this->hasMany(ResellerCoinBalance::class);
     }
 
     public function getRouteKeyName(): string

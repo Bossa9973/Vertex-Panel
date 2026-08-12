@@ -48,7 +48,7 @@ class ServerController extends ApiController
     public function getState(Server $server)
     {
         try {
-            $state = \Illuminate\Support\Facades\Cache::remember("server.{$server->id}.state", 3, function () use ($server) {
+            $state = \Illuminate\Support\Facades\Cache::remember("server.{$server->id}.state", 15, function () use ($server) {
                 return $this->serverRepository->setServer($server)->getState();
             });
         } catch (\Throwable $e) {
