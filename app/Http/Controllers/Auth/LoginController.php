@@ -5,9 +5,11 @@ namespace Convoy\Http\Controllers\Auth;
 use Convoy\Models\User;
 use Convoy\Models\SSOToken;
 use Illuminate\Http\Request;
+use Convoy\Http\Requests\Auth\LoginRequest;
 use Convoy\Services\Api\JWTService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
 use Convoy\Http\Controllers\Controller;
 use Illuminate\Contracts\View\Factory as ViewFactory;
 use Convoy\Exceptions\Service\Api\InvalidJWTException;
@@ -44,15 +46,15 @@ class LoginController extends Controller
         return redirect()->route('index');
     }
 
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        $credentials = $request->validate([
-            'email'    => 'required|email',
-            'password' => 'required|string',
-        ]);
+        $request->ensureIsNotRateLimited();
+
+        $credentials = $request->only('email', 'password');
 
         if (Auth::attempt($credentials, $request->boolean('rememberMe'))) {
             $request->session()->regenerate();
+            RateLimiter::clear($request->throttleKey());
             /** @var User $user */
             $user = Auth::user();
 
@@ -70,6 +72,8 @@ class LoginController extends Controller
                 'user'    => $user,
             ]);
         }
+
+        RateLimiter::hit($request->throttleKey());
 
         try {
             \Convoy\Facades\Activity::event('auth:login-failed')

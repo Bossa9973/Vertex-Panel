@@ -12,12 +12,10 @@ class VerifyCsrfToken extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-        'register',
-        'auth/register',
-        'login',
-        'auth/login',
+        // Social OAuth callbacks use state-based CSRF protection handled in the controller
         'social',
         'auth/social',
+        // Webhook endpoints use provider-specific HMAC signature verification instead
         'api/bot/*',
         'api/client/webhooks/*',
     ];

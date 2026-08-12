@@ -24,7 +24,7 @@ class JWTService
 
     private ?User $user = null;
 
-    private ?\DateTimeImmutable $expiresAt;
+    private ?\DateTimeImmutable $expiresAt = null;
 
     private ?string $subject = null;
 
@@ -81,11 +81,9 @@ class JWTService
             ->identifiedBy($identifier)
             ->withHeader('jti', $identifier)
             ->issuedAt(CarbonImmutable::now())
-            ->canOnlyBeUsedAfter(CarbonImmutable::now()->subMinutes(5));
-
-        if ($this->expiresAt) {
-            $builder = $builder->expiresAt($this->expiresAt);
-        }
+            ->canOnlyBeUsedAfter(CarbonImmutable::now()->subMinutes(5))
+            // Always set an expiry — default 15 minutes if caller did not specify
+            ->expiresAt($this->expiresAt ?? CarbonImmutable::now()->addMinutes(15));
 
         if (!empty($this->subject)) {
             $builder = $builder->relatedTo($this->subject)->withHeader('sub', $this->subject);
@@ -100,9 +98,17 @@ class JWTService
                 ->withClaim('user_uuid', $this->user->uuid);
         }
 
-        return $builder
+        $token = $builder
             ->withClaim('unique_id', Str::random())
             ->getToken($config->signer(), $config->signingKey());
+
+        // Reset state so this service can be safely re-used via the DI container
+        $this->claims    = [];
+        $this->user      = null;
+        $this->expiresAt = null;
+        $this->subject   = null;
+
+        return $token;
     }
 
     public function decode(string $key, string $token): UnencryptedToken

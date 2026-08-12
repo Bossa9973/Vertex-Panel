@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 class RegisterController extends Controller
@@ -17,6 +18,16 @@ class RegisterController extends Controller
      */
     public function register(Request $request): JsonResponse
     {
+        // Rate-limit: 3 registrations per hour per IP to prevent account farming
+        $throttleKey = 'register|' . $request->ip();
+        if (RateLimiter::tooManyAttempts($throttleKey, 3)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+            return response()->json([
+                'message' => "Too many registration attempts. Please try again in {$seconds} seconds.",
+            ], 429);
+        }
+        RateLimiter::hit($throttleKey, 3600); // 1-hour decay
+
         $request->validate([
             'name' => 'required|string|max:191',
             'email' => 'required|string|email|max:191|unique:users,email',

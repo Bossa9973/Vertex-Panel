@@ -88,6 +88,9 @@ class SocialLoginController extends Controller
                     : redirect('/auth/login')->with('error', 'Google Client ID is not configured in .env file.');
             }
 
+            $oauthState = \Illuminate\Support\Str::random(40);
+            session(['oauth_csrf_state' => $oauthState]);
+
             $query = http_build_query([
                 'client_id'     => $clientId,
                 'redirect_uri'  => $redirectUri,
@@ -95,6 +98,7 @@ class SocialLoginController extends Controller
                 'scope'         => 'openid email profile',
                 'access_type'   => 'online',
                 'prompt'        => 'select_account',
+                'state'         => $oauthState,
             ]);
 
             return redirect("https://accounts.google.com/o/oauth2/v2/auth?{$query}");
@@ -110,12 +114,16 @@ class SocialLoginController extends Controller
                     : redirect('/auth/login?error=' . urlencode('Discord Client ID is not configured in .env file.'));
             }
 
+            $oauthState = \Illuminate\Support\Str::random(40);
+            session(['oauth_csrf_state' => $oauthState]);
+
             $query = http_build_query([
                 'client_id'     => $clientId,
                 'redirect_uri'  => $redirectUri,
                 'response_type' => 'code',
                 'scope'         => 'identify email',
                 'prompt'        => 'consent',
+                'state'         => $oauthState,
             ]);
 
             return redirect("https://discord.com/api/oauth2/authorize?{$query}");
@@ -129,6 +137,19 @@ class SocialLoginController extends Controller
      */
     public function callback(Request $request, string $provider)
     {
+        // Validate OAuth CSRF state to prevent account-hijacking attacks
+        $returnedState = (string) $request->query('state', '');
+        $expectedState = (string) session('oauth_csrf_state', '');
+        session()->forget('oauth_csrf_state');
+
+        if (empty($expectedState) || !hash_equals($expectedState, $returnedState)) {
+            $mode = session('social_auth_mode', 'login');
+            $errMsg = 'Invalid OAuth state. Your request may have been tampered with. Please try again.';
+            return $mode === 'link'
+                ? redirect('/account?error=' . urlencode($errMsg))
+                : redirect("/auth/login?error=" . urlencode($errMsg));
+        }
+
         $code = $request->query('code');
         $mode = session('social_auth_mode', 'login');
 
