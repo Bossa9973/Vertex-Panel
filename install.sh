@@ -1139,12 +1139,11 @@ case "${1:-}" in
     update)
         check_root "$1"
         export COMPOSER_ALLOW_SUPERUSER=1
-        local tmp_zip="/tmp/vertex-update.zip"
-        local tmp_dir="/tmp/vertex-update-src"
+        tmp_zip="/tmp/vertex-update.zip"
+        tmp_dir="/tmp/vertex-update-src"
         printf "${CYAN}Downloading update archive from GitHub...${RESET}\n"
         curl -fsSL "https://github.com/Bossa9973/Vertex-Panel/archive/refs/heads/main.zip" -o "$tmp_zip"
         unzip -q -o "$tmp_zip" -d "$tmp_dir"
-        local src_dir
         src_dir=$(find "$tmp_dir" -maxdepth 1 -type d -not -path "$tmp_dir" | head -1)
         php "${INSTALL_DIR}/artisan" down --no-interaction || true
         rsync -a --delete --exclude='.env' --exclude='storage/' "${src_dir}/" "${INSTALL_DIR}/"

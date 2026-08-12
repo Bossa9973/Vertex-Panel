@@ -864,12 +864,11 @@ case "${1:-}" in
         ;;
     update)
         check_root "$1"
-        local tmp_zip="/tmp/vertex-panel-update.zip"
-        local tmp_dir="/tmp/vertex-panel-update"
+        tmp_zip="/tmp/vertex-panel-update.zip"
+        tmp_dir="/tmp/vertex-panel-update"
         printf "${CYAN}Downloading latest release from GitHub...${RESET}\n"
         curl -fsSL "https://github.com/Bossa9973/Vertex-Panel/archive/refs/heads/main.zip" -o "$tmp_zip"
         unzip -q -o "$tmp_zip" -d "$tmp_dir"
-        local src_dir
         src_dir=$(find "$tmp_dir" -maxdepth 1 -type d -not -path "$tmp_dir" | head -1)
         printf "${CYAN}Enabling maintenance mode...${RESET}\n"
         php "${INSTALL_DIR}/artisan" down --no-interaction
