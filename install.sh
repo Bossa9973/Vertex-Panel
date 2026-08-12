@@ -68,14 +68,66 @@ cleanup_on_error() {
 
 trap cleanup_on_error ERR INT TERM
 
-# --- Spinner ------------------------------------------------------------------
+# --- Live Mini-Logging & Spinner -----------------------------------------------
+LOG_FILE="${LOG_FILE:-/tmp/vertex_install.log}"
+export LOG_FILE
+
+# Initialize log header
+{
+    printf "============================================================\n"
+    printf " Vertex Panel Installation Log — Started %s\n" "$(date '+%Y-%m-%d %H:%M:%S')"
+    printf "============================================================\n"
+} >> "$LOG_FILE" 2>/dev/null || true
+
 spinner_start() {
     local msg="${1:-Working...}"
+    local start_time
+    start_time=$(date +%s)
+
+    # Append timestamped step header to logfile
+    {
+        printf "\n------------------------------------------------------------\n"
+        printf "[%s] >>> %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$msg"
+        printf "------------------------------------------------------------\n"
+    } >> "$LOG_FILE" 2>/dev/null || true
+
     (
         local frames=('-' '\\' '|' '/')
         local i=0
+        local last_line=""
+        local max_len=55
+        local elapsed=0
+
         while true; do
-            printf "\r  \033[0;36m${frames[$i]}\033[0m  \033[0;37m%s\033[0m   " "$msg"
+            elapsed=$(( $(date +%s) - start_time ))
+
+            # Fetch the latest non-empty line from the log file to show real-time activity
+            if [[ -f "$LOG_FILE" ]]; then
+                last_line=$(tail -n 15 "$LOG_FILE" 2>/dev/null \
+                    | grep -v '^[[:space:]]*$' \
+                    | grep -v '^---' \
+                    | grep -v '^===' \
+                    | grep -v '^\[' \
+                    | tail -n 1 \
+                    | tr -d '\r\n\t' \
+                    | sed -e 's/[[:cntrl:]]//g' -e 's/\x1b\[[0-9;]*[mGKB]//g' || echo "")
+
+                if [[ ${#last_line} -gt $max_len ]]; then
+                    last_line="${last_line:0:$((max_len - 3))}..."
+                fi
+            fi
+
+            local time_str=""
+            if [[ $elapsed -ge 3 ]]; then
+                time_str=" \033[0;33m[${elapsed}s]\033[0m"
+            fi
+
+            if [[ -n "$last_line" ]]; then
+                printf "\r\033[2K  \033[0;36m%s\033[0m  \033[0;37m%s\033[0m%b  \033[2m(%s)\033[0m" "${frames[$i]}" "$msg" "$time_str" "$last_line"
+            else
+                printf "\r\033[2K  \033[0;36m%s\033[0m  \033[0;37m%s\033[0m%b" "${frames[$i]}" "$msg" "$time_str"
+            fi
+
             i=$(( (i + 1) % 4 ))
             sleep 0.12
         done
@@ -105,6 +157,7 @@ print_banner() {
     printf "     ##    ####  ##  ##     ##    #####  ## ##\n"
     printf "${RESET}\n"
     printf "   ${DIM}Panel Installer  ${BOLD}v${PANEL_VERSION}${RESET}${DIM}  |  Pristine Automated Deployment${RESET}\n"
+    printf "   ${DIM}Live detailed log :  tail -f %s${RESET}\n" "$LOG_FILE"
     printf "\n"
     printf "   ${DIM}------------------------------------------------------------${RESET}\n"
     printf "\n"
@@ -193,7 +246,7 @@ run_or_fail() {
     local msg="$1"
     shift
     spinner_start "$msg"
-    if "$@" > "$LOG_FILE" 2>&1; then
+    if "$@" >> "$LOG_FILE" 2>&1; then
         spinner_stop
         success "$msg"
     else
@@ -369,9 +422,9 @@ install_dependencies() {
         fi
 
         spinner_start "Installing PHP & required extensions"
-        if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl php-sqlite3 php-gd > "$LOG_FILE" 2>&1 || \
-           apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp php8.2-redis php8.2-intl php8.2-sqlite3 php8.2-gd > "$LOG_FILE" 2>&1 || \
-           apt-get install -y php8.3-cli php8.3-fpm php8.3-mysql php8.3-xml php8.3-curl php8.3-mbstring php8.3-zip php8.3-bcmath php8.3-gmp php8.3-redis php8.3-intl php8.3-sqlite3 php8.3-gd > "$LOG_FILE" 2>&1; then
+        if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl php-sqlite3 php-gd >> "$LOG_FILE" 2>&1 || \
+           apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp php8.2-redis php8.2-intl php8.2-sqlite3 php8.2-gd >> "$LOG_FILE" 2>&1 || \
+           apt-get install -y php8.3-cli php8.3-fpm php8.3-mysql php8.3-xml php8.3-curl php8.3-mbstring php8.3-zip php8.3-bcmath php8.3-gmp php8.3-redis php8.3-intl php8.3-sqlite3 php8.3-gd >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "PHP & extensions installed"
         else
@@ -383,8 +436,8 @@ install_dependencies() {
         # Database (MySQL / MariaDB)
         if ! command -v mysql &>/dev/null; then
             spinner_start "Installing Database Server (MySQL / MariaDB)"
-            if apt-get install -y mariadb-server > "$LOG_FILE" 2>&1 || \
-               apt-get install -y mysql-server > "$LOG_FILE" 2>&1; then
+            if apt-get install -y mariadb-server >> "$LOG_FILE" 2>&1 || \
+               apt-get install -y mysql-server >> "$LOG_FILE" 2>&1; then
                 spinner_stop
                 success "Database server installed"
             else
@@ -443,7 +496,7 @@ install_dependencies() {
     # Node.js Installation (Node 20 LTS)
     if ! command -v node &>/dev/null || [[ $(node -v 2>/dev/null | cut -d. -f1 | tr -d 'v') -lt 18 ]]; then
         spinner_start "Installing Node.js 20 LTS"
-        if curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > "$LOG_FILE" 2>&1 && $PKG_MANAGER install -y nodejs > "$LOG_FILE" 2>&1; then
+        if curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >> "$LOG_FILE" 2>&1 && $PKG_MANAGER install -y nodejs >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "Node.js 20 LTS installed"
         else
@@ -466,7 +519,7 @@ download_panel() {
     local tmp_dir="/tmp/vertex-panel-src"
 
     spinner_start "Downloading release archive from GitHub"
-    if curl -fsSL "$archive_url" -o "$tmp_zip" 2>"$LOG_FILE"; then
+    if curl -fsSL "$archive_url" -o "$tmp_zip" 2>>"$LOG_FILE"; then
         spinner_stop
         local size
         size=$(du -sh "$tmp_zip" 2>/dev/null | cut -f1 || echo "archive")
@@ -485,7 +538,7 @@ download_panel() {
     run_or_fail "Creating installation directory (${INSTALL_DIR})" mkdir -p "$INSTALL_DIR"
 
     spinner_start "Copying files to ${INSTALL_DIR}"
-    if rsync -a --delete "${extracted_dir}/" "${INSTALL_DIR}/" > "$LOG_FILE" 2>&1; then
+    if rsync -a --delete "${extracted_dir}/" "${INSTALL_DIR}/" >> "$LOG_FILE" 2>&1; then
         spinner_stop
         success "Panel files deployed to ${INSTALL_DIR}"
     else
@@ -602,7 +655,7 @@ FLUSH PRIVILEGES;
     success "File permissions configured"
 
     spinner_start "Installing Frontend Node.js dependencies"
-    if npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund > "$LOG_FILE" 2>&1; then
+    if npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund >> "$LOG_FILE" 2>&1; then
         spinner_stop
         success "Node.js dependencies installed"
     else
@@ -611,7 +664,7 @@ FLUSH PRIVILEGES;
     fi
 
     spinner_start "Compiling Frontend Assets (Vite)"
-    if npm run build --prefix "${INSTALL_DIR}" > "$LOG_FILE" 2>&1; then
+    if npm run build --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1; then
         spinner_stop
         success "Frontend assets compiled successfully"
     else
@@ -621,7 +674,7 @@ FLUSH PRIVILEGES;
 
     # Prune devDependencies after build — frees ~200 MB of node_modules at runtime
     spinner_start "Pruning dev Node.js dependencies post-build"
-    npm prune --production --prefix "${INSTALL_DIR}" > "$LOG_FILE" 2>&1 || true
+    npm prune --production --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1 || true
     spinner_stop
     success "Dev dependencies pruned (runtime node_modules reduced)"
 

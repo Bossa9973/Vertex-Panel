@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # =============================================================================
 #
 #  ##  ##  ####  #####  ####### ####  ##  ##
@@ -41,15 +41,65 @@ BOLD='\033[1m'
 DIM='\033[2m'
 RESET='\033[0m'
 
-SPINNER_PID=""
+# --- Live Mini-Logging & Spinner -----------------------------------------------
+LOG_FILE="${LOG_FILE:-/tmp/vertex_backup.log}"
+export LOG_FILE
+
+# Initialize log header
+{
+    printf "============================================================\n"
+    printf " Vertex Panel Backup Log — Started %s\n" "$(date '+%Y-%m-%d %H:%M:%S')"
+    printf "============================================================\n"
+} >> "$LOG_FILE" 2>/dev/null || true
 
 spinner_start() {
     local msg="${1:-Working...}"
+    local start_time
+    start_time=$(date +%s)
+
+    # Append timestamped step header to logfile
+    {
+        printf "\n------------------------------------------------------------\n"
+        printf "[%s] >>> %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$msg"
+        printf "------------------------------------------------------------\n"
+    } >> "$LOG_FILE" 2>/dev/null || true
+
     (
         local frames=('-' '\\' '|' '/')
         local i=0
+        local last_line=""
+        local max_len=55
+        local elapsed=0
+
         while true; do
-            printf "\r  \033[0;36m${frames[$i]}\033[0m  \033[0;37m%s\033[0m   " "$msg"
+            elapsed=$(( $(date +%s) - start_time ))
+
+            if [[ -f "$LOG_FILE" ]]; then
+                last_line=$(tail -n 15 "$LOG_FILE" 2>/dev/null \
+                    | grep -v '^[[:space:]]*$' \
+                    | grep -v '^---' \
+                    | grep -v '^===' \
+                    | grep -v '^\[' \
+                    | tail -n 1 \
+                    | tr -d '\r\n\t' \
+                    | sed -e 's/[[:cntrl:]]//g' -e 's/\x1b\[[0-9;]*[mGKB]//g' || echo "")
+
+                if [[ ${#last_line} -gt $max_len ]]; then
+                    last_line="${last_line:0:$((max_len - 3))}..."
+                fi
+            fi
+
+            local time_str=""
+            if [[ $elapsed -ge 3 ]]; then
+                time_str=" \033[0;33m[${elapsed}s]\033[0m"
+            fi
+
+            if [[ -n "$last_line" ]]; then
+                printf "\r\033[2K  \033[0;36m%s\033[0m  \033[0;37m%s\033[0m%b  \033[2m(%s)\033[0m" "${frames[$i]}" "$msg" "$time_str" "$last_line"
+            else
+                printf "\r\033[2K  \033[0;36m%s\033[0m  \033[0;37m%s\033[0m%b" "${frames[$i]}" "$msg" "$time_str"
+            fi
+
             i=$(( (i + 1) % 4 ))
             sleep 0.12
         done
@@ -83,6 +133,7 @@ print_banner() {
     printf "     ##    ####  ##  ##     ##    #####  ## ##\n"
     printf "${RESET}\n"
     printf "   ${DIM}Essential Data Backup  v2.0${RESET}\n"
+    printf "   ${DIM}Live detailed log :  tail -f %s${RESET}\n" "$LOG_FILE"
     printf "   ${DIM}------------------------------------------------------------${RESET}\n"
     printf "\n"
 }

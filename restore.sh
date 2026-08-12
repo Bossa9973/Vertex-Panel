@@ -37,17 +37,65 @@ BOLD='\033[1m'
 DIM='\033[2m'
 RESET='\033[0m'
 
-SPINNER_PID=""
-ERRORS=()
+# --- Live Mini-Logging & Spinner -----------------------------------------------
+LOG_FILE="${LOG_FILE:-/tmp/vertex_restore.log}"
+export LOG_FILE
 
-# --- Spinner ------------------------------------------------------------------
+# Initialize log header
+{
+    printf "============================================================\n"
+    printf " Vertex Panel Restore Log — Started %s\n" "$(date '+%Y-%m-%d %H:%M:%S')"
+    printf "============================================================\n"
+} >> "$LOG_FILE" 2>/dev/null || true
+
 spinner_start() {
     local msg="${1:-Working...}"
+    local start_time
+    start_time=$(date +%s)
+
+    # Append timestamped step header to logfile
+    {
+        printf "\n------------------------------------------------------------\n"
+        printf "[%s] >>> %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$msg"
+        printf "------------------------------------------------------------\n"
+    } >> "$LOG_FILE" 2>/dev/null || true
+
     (
         local frames=('-' '\\' '|' '/')
         local i=0
+        local last_line=""
+        local max_len=55
+        local elapsed=0
+
         while true; do
-            printf "\r  \033[0;36m${frames[$i]}\033[0m  \033[0;37m%s\033[0m   " "$msg"
+            elapsed=$(( $(date +%s) - start_time ))
+
+            if [[ -f "$LOG_FILE" ]]; then
+                last_line=$(tail -n 15 "$LOG_FILE" 2>/dev/null \
+                    | grep -v '^[[:space:]]*$' \
+                    | grep -v '^---' \
+                    | grep -v '^===' \
+                    | grep -v '^\[' \
+                    | tail -n 1 \
+                    | tr -d '\r\n\t' \
+                    | sed -e 's/[[:cntrl:]]//g' -e 's/\x1b\[[0-9;]*[mGKB]//g' || echo "")
+
+                if [[ ${#last_line} -gt $max_len ]]; then
+                    last_line="${last_line:0:$((max_len - 3))}..."
+                fi
+            fi
+
+            local time_str=""
+            if [[ $elapsed -ge 3 ]]; then
+                time_str=" \033[0;33m[${elapsed}s]\033[0m"
+            fi
+
+            if [[ -n "$last_line" ]]; then
+                printf "\r\033[2K  \033[0;36m%s\033[0m  \033[0;37m%s\033[0m%b  \033[2m(%s)\033[0m" "${frames[$i]}" "$msg" "$time_str" "$last_line"
+            else
+                printf "\r\033[2K  \033[0;36m%s\033[0m  \033[0;37m%s\033[0m%b" "${frames[$i]}" "$msg" "$time_str"
+            fi
+
             i=$(( (i + 1) % 4 ))
             sleep 0.12
         done
@@ -77,6 +125,7 @@ print_banner() {
     printf "     ##    ####  ##  ##     ##    #####  ## ##\n"
     printf "${RESET}\n"
     printf "   ${DIM}Panel Restore Installer  ${BOLD}v${PANEL_VERSION}${RESET}${DIM}  |  Powered by Laravel & Proxmox${RESET}\n"
+    printf "   ${DIM}Live detailed log :  tail -f %s${RESET}\n" "$LOG_FILE"
     printf "\n"
     printf "   ${DIM}------------------------------------------------------------${RESET}\n"
     printf "\n"
@@ -99,13 +148,13 @@ run_or_fail() {
     local msg="$1"
     shift
     spinner_start "$msg"
-    if "$@" > /tmp/vertex_restore.log 2>&1; then
+    if "$@" >> "$LOG_FILE" 2>&1; then
         spinner_stop
         success "$msg"
     else
         spinner_stop
         error_msg "Failed: $msg"
-        printf "   ${DIM}Details: /tmp/vertex_restore.log${RESET}\n"
+        printf "   ${DIM}Details: ${LOG_FILE}${RESET}\n"
         return 1
     fi
 }
@@ -190,8 +239,8 @@ obtain_backup() {
     # Ensure unzip utility is present for extraction
     if ! command -v unzip &>/dev/null; then
         spinner_start "Installing extraction utilities (unzip, tar)..."
-        apt-get update -y >/tmp/vertex_restore.log 2>&1 || true
-        apt-get install -y unzip tar >/tmp/vertex_restore.log 2>&1 || true
+        apt-get update -y >> "$LOG_FILE" 2>&1 || true
+        apt-get install -y unzip tar >> "$LOG_FILE" 2>&1 || true
         spinner_stop
         success "Extraction utilities ready"
     else
@@ -205,7 +254,7 @@ obtain_backup() {
 
     if [[ "$BACKUP_INPUT" =~ ^https?:// ]]; then
         spinner_start "Downloading backup archive from cloud..."
-        if curl -fsSL "$BACKUP_INPUT" -o "$LOCAL_ARCHIVE" 2>/tmp/vertex_restore.log || wget -q "$BACKUP_INPUT" -O "$LOCAL_ARCHIVE" 2>/tmp/vertex_restore.log; then
+        if curl -fsSL "$BACKUP_INPUT" -o "$LOCAL_ARCHIVE" 2>>"$LOG_FILE" || wget -q "$BACKUP_INPUT" -O "$LOCAL_ARCHIVE" 2>>"$LOG_FILE"; then
             spinner_stop
             local pkg_size
             pkg_size=$(du -h "$LOCAL_ARCHIVE" | cut -f1)
@@ -321,10 +370,10 @@ install_dependencies() {
     # PHP installation
     if ! command -v php &>/dev/null; then
         spinner_start "Installing PHP & extensions"
-        if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl > /tmp/vertex_restore.log 2>&1; then
+        if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "PHP & extensions installed"
-        elif apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp php8.2-redis php8.2-intl > /tmp/vertex_restore.log 2>&1; then
+        elif apt-get install -y php8.2-cli php8.2-fpm php8.2-mysql php8.2-xml php8.2-curl php8.2-mbstring php8.2-zip php8.2-bcmath php8.2-gmp php8.2-redis php8.2-intl >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "PHP 8.2 & extensions installed"
         else
@@ -337,12 +386,12 @@ install_dependencies() {
                 run_quietly apt-get update -y
             fi
 
-            if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl > /tmp/vertex_restore.log 2>&1; then
+            if apt-get install -y php-cli php-fpm php-mysql php-xml php-curl php-mbstring php-zip php-bcmath php-gmp php-redis php-intl >> "$LOG_FILE" 2>&1; then
                 spinner_stop
                 success "PHP & extensions installed"
             else
                 spinner_stop
-                error_msg "Failed to install PHP. Check /tmp/vertex_restore.log"
+                error_msg "Failed to install PHP. Check ${LOG_FILE}"
                 return 1
             fi
         fi
@@ -432,7 +481,7 @@ download_panel() {
 
     if [[ ! -f "${INSTALL_DIR}/artisan" ]]; then
         spinner_start "Downloading panel codebase from github.com/${GITHUB_REPO}"
-        if curl -fsSL "$archive_url" -o "$tmp_zip" 2>/tmp/vertex_restore.log; then
+        if curl -fsSL "$archive_url" -o "$tmp_zip" 2>>"$LOG_FILE"; then
             spinner_stop
             local size
             size=$(du -sh "$tmp_zip" | cut -f1)
@@ -451,7 +500,7 @@ download_panel() {
         run_or_fail "Creating installation directory (${INSTALL_DIR})" mkdir -p "$INSTALL_DIR"
 
         spinner_start "Deploying panel files to ${INSTALL_DIR}"
-        rsync -a --delete "${extracted_dir}/" "${INSTALL_DIR}/" > /tmp/vertex_restore.log 2>&1
+        rsync -a --delete "${extracted_dir}/" "${INSTALL_DIR}/" >> "$LOG_FILE" 2>&1
         spinner_stop
         success "Panel codebase deployed to ${INSTALL_DIR}"
         rm -rf "$tmp_zip" "$tmp_dir"
@@ -521,15 +570,15 @@ FLUSH PRIVILEGES;"
     success "MySQL database '${DB_DATABASE}' initialized"
 
     spinner_start "Importing SQL database dump (users, accounts, nodes, linked VPSes)"
-    if MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USERNAME" -h 127.0.0.1 "$DB_DATABASE" < "${TMP_RESTORE_DIR}/database.sql" > /tmp/vertex_restore.log 2>&1; then
+    if MYSQL_PWD="$DB_PASSWORD" mysql -u "$DB_USERNAME" -h 127.0.0.1 "$DB_DATABASE" < "${TMP_RESTORE_DIR}/database.sql" >> "$LOG_FILE" 2>&1; then
         spinner_stop
         success "Database dump restored (accounts, nodes & linked VPSes active)"
-    elif mysql -u root "$DB_DATABASE" < "${TMP_RESTORE_DIR}/database.sql" > /tmp/vertex_restore.log 2>&1; then
+    elif mysql -u root "$DB_DATABASE" < "${TMP_RESTORE_DIR}/database.sql" >> "$LOG_FILE" 2>&1; then
         spinner_stop
         success "Database dump restored via root"
     else
         spinner_stop
-        error_msg "Failed to import database.sql. Check /tmp/vertex_restore.log"
+        error_msg "Failed to import database.sql. Check ${LOG_FILE}"
         return 1
     fi
 
@@ -554,8 +603,8 @@ FLUSH PRIVILEGES;"
 
     if [[ ! -d "${INSTALL_DIR}/public/build" ]]; then
         spinner_start "Installing Node.js dependencies"
-        if npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund > /tmp/vertex_restore.log 2>&1 || \
-           npm install --prefix "${INSTALL_DIR}" --silent > /tmp/vertex_restore.log 2>&1; then
+        if npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund >> "$LOG_FILE" 2>&1 || \
+           npm install --prefix "${INSTALL_DIR}" --silent >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "Node.js dependencies installed"
         else
@@ -564,7 +613,7 @@ FLUSH PRIVILEGES;"
         fi
 
         spinner_start "Building frontend assets (Vite)"
-        if npm run build --prefix "${INSTALL_DIR}" > /tmp/vertex_restore.log 2>&1; then
+        if npm run build --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "Frontend assets (Vite build) compiled"
         else
