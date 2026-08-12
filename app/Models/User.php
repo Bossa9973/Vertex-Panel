@@ -133,7 +133,7 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         }
 
         // CEO / no-role admins = full access
-        if ($this->email === config('app.super_admin_email', 'ceo@vertexnodes.top') || is_null($this->admin_role_id)) {
+        if ($this->email === config('app.super_admin_email') || is_null($this->admin_role_id)) {
             return true;
         }
 

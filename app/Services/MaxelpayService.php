@@ -38,7 +38,7 @@ class MaxelpayService
      */
     public function createSession(array $data): array
     {
-        $response = Http::timeout(15)->withoutVerifying()->withHeaders([
+        $response = Http::timeout(15)->withHeaders([
             'X-API-KEY' => $this->apiKey,
             'Content-Type' => 'application/json',
         ])->post("{$this->baseUrl}/payments/sessions", $data);
@@ -89,8 +89,8 @@ class MaxelpayService
     public function verifyWebhookSignature(string $rawPayload, string $signature): bool
     {
         if (empty($this->secretKey)) {
-            Log::warning('Maxelpay secret key not configured, skipping signature verification');
-            return true; // Allow in dev if not configured
+            Log::critical('Maxelpay secret key is not configured — rejecting all incoming webhooks. Set MAXELPAY_SECRET_KEY in .env.');
+            return false;
         }
 
         $expected = hash_hmac('sha256', $rawPayload, $this->secretKey);

@@ -140,7 +140,7 @@ class Node extends Model
      */
     public function getDiskAllocatedAttribute(): int
     {
-        return $this->servers->sum('disk');
+        return (int) $this->servers()->sum('disk');
     }
 
     /**
@@ -148,7 +148,7 @@ class Node extends Model
      */
     public function getMemoryAllocatedAttribute(): int
     {
-        return $this->servers->sum('memory');
+        return (int) $this->servers()->sum('memory');
     }
 
     /**

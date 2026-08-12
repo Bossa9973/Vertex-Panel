@@ -56,7 +56,7 @@ class NowPaymentsService
             $payload['case'] = 'success';
         }
 
-        $response = Http::timeout(15)->withoutVerifying()
+        $response = Http::timeout(15)
             ->withHeaders([
                 'x-api-key'    => $this->apiKey,
                 'Content-Type' => 'application/json',
@@ -92,8 +92,8 @@ class NowPaymentsService
     public function verifyIpnSignature(string $rawPayload, string $signature): bool
     {
         if (empty($this->ipnSecret)) {
-            Log::warning('NOWPayments IPN secret not configured, skipping signature verification');
-            return true; // Allow in dev if not configured
+            Log::critical('NOWPayments IPN secret is not configured — rejecting all incoming webhooks. Set NOWPAYMENTS_IPN_SECRET in .env.');
+            return false;
         }
 
         $data = json_decode($rawPayload, true);

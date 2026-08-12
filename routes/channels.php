@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\Broadcast;
 */
 
 Broadcast::channel('server.{id}', function ($user, $id) {
-    return (int) $user->id === (int) Server::find($id)->user_id || (bool) $user->root_admin;
+    $server = Server::find($id);
+    return $server && ((int) $user->id === (int) $server->user_id || (bool) $user->root_admin);
 });
 
 Broadcast::channel('user.{id}', function ($user, $id) {

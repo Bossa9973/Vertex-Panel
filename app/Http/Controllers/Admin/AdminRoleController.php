@@ -14,7 +14,7 @@ class AdminRoleController extends Controller
     /** The CEO email that always has super-admin rights. */
     private function superAdminEmail(): string
     {
-        return Config::get('app.super_admin_email', 'ceo@vertexnodes.top');
+        return Config::get('app.super_admin_email');
     }
 
     /** Assert the request comes from the CEO. */
