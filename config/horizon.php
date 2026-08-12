@@ -172,7 +172,7 @@ return [
             'maxProcesses' => 1,
             'maxTime' => 0,
             'maxJobs' => 0,
-            'memory' => 128,
+            'memory' => 64,   // 64 MB per worker — sufficient for this panel's jobs
             'tries' => 1,
             'timeout' => 3600,
             'nice' => 0,
@@ -182,7 +182,9 @@ return [
     'environments' => [
         'production' => [
             'supervisor-1' => [
-                'maxProcesses' => 60,
+                // 4 max workers keeps queue responsive while staying within 1 GB RAM budget.
+                // Horizon auto-scales between 1–4 based on queue depth.
+                'maxProcesses' => 4,
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
@@ -190,7 +192,7 @@ return [
 
         'local' => [
             'supervisor-1' => [
-                'maxProcesses' => 3,
+                'maxProcesses' => 2,
             ],
         ],
     ],

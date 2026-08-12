@@ -215,7 +215,23 @@ async def reset_all_stats(interaction: discord.Interaction):
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    if not TOKEN:
-        print("ERROR: DISCORD_TOKEN is not set in bot/.env")
+    placeholder_tokens = ("", "your_bot_token", "your_bot_token_here", "your_discord_bot_token_here", "<your_bot_token>")
+    if not TOKEN or TOKEN.strip().lower() in placeholder_tokens:
+        print("\n========================================================")
+        print("❌ ERROR: DISCORD_TOKEN is not configured in bot/.env!")
+        print("Please edit /var/www/vertex-panel/bot/.env and set your DISCORD_TOKEN.")
+        print("Obtain a bot token from: https://discord.com/developers/applications")
+        print("========================================================\n")
     else:
-        bot.run(TOKEN)
+        try:
+            bot.run(TOKEN)
+        except discord.errors.LoginFailure:
+            print("\n========================================================")
+            print("❌ LOGIN FAILED: Improper or invalid DISCORD_TOKEN!")
+            print("The token configured in /var/www/vertex-panel/bot/.env was rejected by Discord (401 Unauthorized).")
+            print("To fix this issue:")
+            print("  1. Go to https://discord.com/developers/applications")
+            print("  2. Select your App -> Bot tab -> Reset/Copy Token")
+            print("  3. Edit token: nano /var/www/vertex-panel/bot/.env")
+            print("  4. Restart bot: systemctl restart vertex-bot")
+            print("========================================================\n")

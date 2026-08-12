@@ -38,7 +38,7 @@ class MaxelpayService
      */
     public function createSession(array $data): array
     {
-        $response = Http::withoutVerifying()->withHeaders([
+        $response = Http::timeout(15)->withoutVerifying()->withHeaders([
             'X-API-KEY' => $this->apiKey,
             'Content-Type' => 'application/json',
         ])->post("{$this->baseUrl}/payments/sessions", $data);
@@ -69,7 +69,7 @@ class MaxelpayService
      */
     public function getSessionStatus(string $sessionId): array
     {
-        $response = Http::withHeaders([
+        $response = Http::timeout(15)->withHeaders([
             'X-API-KEY' => $this->apiKey,
             'Content-Type' => 'application/json',
         ])->get("{$this->baseUrl}/payments/sessions/{$sessionId}/status");

@@ -66,14 +66,37 @@ if [ ! -f ".env" ]; then
         echo "-> Creating .env from template..."
         cp .env.example .env
     fi
-    echo ""
-    echo "  ⚠️  IMPORTANT: Edit ${BOT_DIR}/.env and fill in:"
-    echo "     DISCORD_TOKEN  = your bot token"
-    echo "     PANEL_URL      = https://your-panel-domain.com  (must be publicly accessible!)"
-    echo "     BOT_API_SECRET = must match BOT_API_SECRET in panel's .env"
-    echo ""
-    echo "  Then run: systemctl restart vertex-bot"
-    echo ""
+fi
+
+# Auto-sync BOT_API_SECRET from main panel .env if present
+if [ -f "/var/www/vertex-panel/.env" ]; then
+    PANEL_SECRET=$(grep '^BOT_API_SECRET=' /var/www/vertex-panel/.env | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
+    if [ -n "$PANEL_SECRET" ]; then
+        if grep -q '^BOT_API_SECRET=' .env; then
+            sed -i "s|^BOT_API_SECRET=.*|BOT_API_SECRET=${PANEL_SECRET}|" .env
+        else
+            echo "BOT_API_SECRET=${PANEL_SECRET}" >> .env
+        fi
+        echo "-> Auto-synced BOT_API_SECRET from panel .env"
+    fi
+fi
+
+# Prompt for DISCORD_TOKEN if interactive and token is missing
+CURRENT_TOKEN=$(grep '^DISCORD_TOKEN=' .env | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
+if [[ -z "$CURRENT_TOKEN" || "$CURRENT_TOKEN" == "your_bot_token"* ]]; then
+    if [ -t 0 ]; then
+        echo ""
+        read -r -p "   ? Enter your Discord Bot Token: " INPUT_TOKEN
+        if [ -n "$INPUT_TOKEN" ]; then
+            sed -i "s|^DISCORD_TOKEN=.*|DISCORD_TOKEN=${INPUT_TOKEN}|" .env
+            echo "-> Saved DISCORD_TOKEN to .env"
+        fi
+    else
+        echo ""
+        echo "  ⚠️ IMPORTANT: Edit ${BOT_DIR}/.env and set DISCORD_TOKEN="
+        echo "     Get your token from: https://discord.com/developers/applications"
+        echo ""
+    fi
 fi
 
 # ─── Systemd service ──────────────────────────────────────────────────────────

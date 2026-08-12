@@ -1,27 +1,65 @@
-![Version 4 release announcement banner](https://github.com/ConvoyPanel/panel/assets/37554696/4629321b-7214-4eb1-8cc5-85c89229b5bf)
+# Vertex Panel
 
+Vertex Panel is a modern and performant server & VPS management panel for hosting businesses. Built with Laravel and React.
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/convoypanel/panel/tests.yml?branch=develop)
-![Discord](https://img.shields.io/discord/746612878261616700?label=Discord&logo=Discord&logoColor=white)
-![GitHub Releases](https://img.shields.io/github/downloads/convoypanel/panel/latest/total)
+## 🚀 One-Line Installation
 
-# Convoy
+To install Vertex Panel on a fresh Debian/Ubuntu VPS:
 
-Convoy is a modern and performant KVM server management panel for hosting businesses. It's built with PHP and React and proven technology like Proxmox, making it easier to drop Convoy in an existing system.
+```bash
+curl -sSL https://raw.githubusercontent.com/Bossa9973/Vertex-Panel/main/install.sh | bash
+```
 
-Stop paying hundreds of dollars for unreliable and slow software. Subscribe to a license to use Convoy today for $6/node/mo
+---
 
-![Screenshot of Convoy](https://imgur.com/GsORIRQ.png)
+## 💾 1-Command Automated Backup & Cloud Upload
 
-## Documentation
+Back up your entire database (users, linked VPSes, servers, nodes, settings), user data, `.env`, and server configurations with a single command. The backup archive will automatically upload to free cloud hosting and output a download link for instant migration:
 
--   [Panel Documentation](https://docs.convoypanel.com)
--   [Discord Community](https://discord.convoypanel.com)
+```bash
+vertex backup
+# or
+./backup.sh
+```
 
-## Acknowledgements
+---
 
-Please [visit this page](https://convoypanel.com/docs/project/about.html#acknowledgements) on our website to view acknowledgements.
+## 🔄 1-Command Zero-Configuration Restore on New VPS
+
+To migrate or restore your panel to a new VPS with **ZERO manual setups, env edits, node configuration, or user fixes**, simply run:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Bossa9973/Vertex-Panel/main/restore.sh | bash -s -- <BACKUP_DOWNLOAD_URL_OR_FILE>
+```
+
+Example:
+```bash
+curl -sSL https://raw.githubusercontent.com/Bossa9973/Vertex-Panel/main/restore.sh | bash -s -- https://litterbox.catbox.moe/resources/internals/api.php...
+```
+
+The restore script will:
+- Install all required dependencies (PHP 8.2+, MySQL/MariaDB, Redis, Nginx, Supervisor, Composer, Node.js).
+- Download and extract your complete backup package.
+- Auto-create and import the MySQL database dump (including all users, nodes, linked VPSes).
+- Restore user storage, avatars, uploaded files, and `.env` credentials.
+- Auto-configure Nginx virtual hosts, Supervisor queue workers, and file permissions.
+- Build frontend assets and optimize application caches.
+- Launch all services ready for immediate login!
+
+---
+
+## ⚙️ Management CLI
+
+```bash
+vertex status           # Check status of web server and queue workers
+vertex backup           # Take full backup & upload to free cloud hosting
+vertex restore <URL>    # Restore panel from backup URL or local file
+vertex start|stop|restart # Control services
+vertex logs             # Tail application logs
+vertex update           # Pull latest updates from GitHub
+```
 
 ## License
 
-Convoy is licensed under our own proprietary license.
+Vertex Panel is licensed under MIT / Proprietary License.
+

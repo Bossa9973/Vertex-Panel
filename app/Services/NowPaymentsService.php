@@ -56,7 +56,7 @@ class NowPaymentsService
             $payload['case'] = 'success';
         }
 
-        $response = Http::withoutVerifying()
+        $response = Http::timeout(15)->withoutVerifying()
             ->withHeaders([
                 'x-api-key'    => $this->apiKey,
                 'Content-Type' => 'application/json',

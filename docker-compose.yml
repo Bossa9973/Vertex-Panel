@@ -65,7 +65,13 @@ services:
   redis:
     image: redis:7.0-alpine
     restart: unless-stopped
-    command: redis-server --save 60 1 --loglevel notice --requirepass '${REDIS_PASSWORD}'
+    command: >
+      redis-server
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --loglevel notice
+      --requirepass '${REDIS_PASSWORD}'
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     healthcheck:
