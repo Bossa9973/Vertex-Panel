@@ -23,7 +23,7 @@ export default defineConfig({
         cssCodeSplit: true,
         sourcemap: false,
         reportCompressedSize: false,
-        chunkSizeWarningLimit: 1000,
+        chunkSizeWarningLimit: 1600,
         rollupOptions: {
             output: {
                 manualChunks(id) {

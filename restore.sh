@@ -613,7 +613,7 @@ FLUSH PRIVILEGES;"
         fi
 
         spinner_start "Building frontend assets (Vite)"
-        export NODE_OPTIONS="--max-old-space-size=1024"
+        export NODE_OPTIONS="--max-old-space-size=8192"
         if npm run build --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "Frontend assets (Vite build) compiled"

@@ -203,6 +203,12 @@ perform_update() {
         fi
     fi
 
+    # Set global & process Node memory limit to 8192 MB
+    export NODE_OPTIONS="--max-old-space-size=8192"
+    if ! grep -q "NODE_OPTIONS" /etc/environment 2>/dev/null; then
+        echo 'export NODE_OPTIONS="--max-old-space-size=8192"' >> /etc/environment 2>/dev/null || true
+    fi
+
     # Clean up downloaded zip
     run_quietly rm -rf "$tmp_zip" "$tmp_dir"
 
@@ -212,18 +218,18 @@ perform_update() {
 
     # Node dependencies and build
     run_or_fail "Installing Node.js dependencies" \
-        npm install --prefix "${INSTALL_DIR}" --silent
+        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
 
     run_or_fail "Building frontend assets (Vite)" \
         npm run build --prefix "${INSTALL_DIR}"
 
+    # Optimize and clear caches post-build
+    run_or_fail "Clearing application cache" \
+        php artisan optimize:clear
+
     # Database migrations
     run_or_fail "Running database migrations" \
         php artisan migrate --force --no-interaction
-
-    # Optimize and clear caches
-    run_or_fail "Clearing and rebuilding application cache" \
-        php artisan optimize:clear
 
     run_or_fail "Optimizing route and config cache" \
         php artisan optimize
@@ -232,9 +238,8 @@ perform_update() {
 
     # File permissions
     spinner_start "Updating file permissions"
-    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}" > /dev/null 2>&1
-    chmod -R 755 "${INSTALL_DIR}/storage" > /dev/null 2>&1
-    chmod -R 755 "${INSTALL_DIR}/bootstrap/cache" > /dev/null 2>&1
+    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}" > /dev/null 2>&1 || true
+    chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" > /dev/null 2>&1 || true
     spinner_stop
     success "File permissions updated"
 

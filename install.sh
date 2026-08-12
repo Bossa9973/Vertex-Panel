@@ -21,7 +21,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 export COMPOSER_ALLOW_SUPERUSER=1
-export NODE_OPTIONS="--max-old-space-size=1024"  # 1 GB heap limit for Node.js build process (released post-build)
+export NODE_OPTIONS="--max-old-space-size=8192"  # 8 GB heap limit for Node.js build process
 
 # --- Constants ----------------------------------------------------------------
 PANEL_VERSION="1.1"
@@ -343,6 +343,10 @@ preflight_checks() {
     else
         error_msg "No internet access or GitHub is unreachable."
         exit 1
+    fi
+
+    if ! grep -q "NODE_OPTIONS" /etc/environment 2>/dev/null; then
+        echo 'export NODE_OPTIONS="--max-old-space-size=8192"' >> /etc/environment 2>/dev/null || true
     fi
 
     printf "\n"
@@ -690,7 +694,7 @@ FLUSH PRIVILEGES;
     if id "$SERVICE_USER" &>/dev/null; then
         chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}" > /dev/null 2>&1 || true
     fi
-    chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" > /dev/null 2>&1 || true
+    chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" > /dev/null 2>&1 || true
     spinner_stop
     success "File permissions configured"
 
@@ -708,7 +712,7 @@ FLUSH PRIVILEGES;
         fi
 
         spinner_start "Compiling Frontend Assets (Vite)"
-        export NODE_OPTIONS="--max-old-space-size=1024"
+        export NODE_OPTIONS="--max-old-space-size=8192"
         if npm run build --prefix "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1; then
             spinner_stop
             success "Frontend assets compiled successfully"
@@ -738,6 +742,9 @@ FLUSH PRIVILEGES;
         spinner_stop
         success "Dev dependencies pruned (runtime node_modules reduced)"
     fi
+
+    run_or_fail "Clearing Application Cache" \
+        php artisan optimize:clear
 
     run_or_fail "Optimizing Application Caching" \
         php artisan optimize
@@ -1148,15 +1155,19 @@ case "${1:-}" in
         php "${INSTALL_DIR}/artisan" down --no-interaction || true
         rsync -a --delete --exclude='.env' --exclude='storage/' "${src_dir}/" "${INSTALL_DIR}/"
         chown -R www-data:www-data "${INSTALL_DIR}" 2>/dev/null || true
+        chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" 2>/dev/null || true
         php -d memory_limit=-1 $(which composer) install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
-        export NODE_OPTIONS="--max-old-space-size=1024"
+        export NODE_OPTIONS="--max-old-space-size=8192"
         npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
         npm run build --prefix "${INSTALL_DIR}"
         if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
             (cd "${INSTALL_DIR}" && npx vite build) || true
         fi
+        php "${INSTALL_DIR}/artisan" optimize:clear
         php "${INSTALL_DIR}/artisan" migrate --force --no-interaction
         php "${INSTALL_DIR}/artisan" optimize
+        chown -R www-data:www-data "${INSTALL_DIR}" 2>/dev/null || true
+        chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" 2>/dev/null || true
         supervisorctl restart all 2>/dev/null || true
         php "${INSTALL_DIR}/artisan" up --no-interaction || true
         rm -rf "$tmp_zip" "$tmp_dir"
@@ -1165,12 +1176,15 @@ case "${1:-}" in
     build)
         check_root "$1"
         printf "${CYAN}Building frontend assets (Vite)...${RESET}\n"
-        export NODE_OPTIONS="--max-old-space-size=1024"
+        export NODE_OPTIONS="--max-old-space-size=8192"
         npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
         npm run build --prefix "${INSTALL_DIR}"
         if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
             (cd "${INSTALL_DIR}" && npx vite build) || true
         fi
+        php "${INSTALL_DIR}/artisan" optimize:clear
+        chown -R www-data:www-data "${INSTALL_DIR}" 2>/dev/null || true
+        chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" 2>/dev/null || true
         if [[ -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
             printf "${GREEN}Frontend assets built successfully -> public/build/manifest.json${RESET}\n"
         else
