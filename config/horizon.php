@@ -167,12 +167,13 @@ return [
     'defaults' => [
         'supervisor-1' => [
             'connection' => 'redis',
-            'queue' => ['default'],
+            'queue' => ['default', 'high', 'low', 'notifications'],
             'balance' => 'auto',
-            'maxProcesses' => 1,
+            'minProcesses' => 1,
+            'maxProcesses' => 5,
             'maxTime' => 0,
             'maxJobs' => 0,
-            'memory' => 64,   // 64 MB per worker — sufficient for this panel's jobs
+            'memory' => 128,
             'tries' => 1,
             'timeout' => 3600,
             'nice' => 0,
