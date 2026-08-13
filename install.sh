@@ -1158,10 +1158,12 @@ case "${1:-}" in
         chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" 2>/dev/null || true
         php -d memory_limit=-1 $(which composer) install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
         export NODE_OPTIONS="--max-old-space-size=8192"
-        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
-        npm run build --prefix "${INSTALL_DIR}"
-        if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
-            (cd "${INSTALL_DIR}" && npx vite build) || true
+        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline || npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
+        if ! npm run build --prefix "${INSTALL_DIR}"; then
+            printf "${YELLOW}Vite build failed due to corrupted node_modules. Reinstalling clean dependencies...${RESET}\n"
+            rm -rf "${INSTALL_DIR}/node_modules"
+            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
+            npm run build --prefix "${INSTALL_DIR}"
         fi
         php "${INSTALL_DIR}/artisan" optimize:clear
         php "${INSTALL_DIR}/artisan" migrate --force --no-interaction

@@ -252,8 +252,19 @@ perform_update() {
                 npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
         fi
 
-        run_or_fail "Building frontend assets (Vite)" \
-            npm run build --prefix "${INSTALL_DIR}"
+        spinner_start "Building frontend assets (Vite)"
+        if npm run build --prefix "${INSTALL_DIR}" > /tmp/vertex_update.log 2>&1; then
+            spinner_stop
+            success "Building frontend assets (Vite)"
+        else
+            spinner_stop
+            warn "Vite build encountered stale/corrupted node_modules. Performing automatic repair..."
+            rm -rf "${INSTALL_DIR}/node_modules"
+            run_or_fail "Reinstalling clean Node.js dependencies" \
+                npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
+            run_or_fail "Building frontend assets (Vite)" \
+                npm run build --prefix "${INSTALL_DIR}"
+        fi
     else
         info "No frontend changes detected — using precompiled Vite assets"
     fi
