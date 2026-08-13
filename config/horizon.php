@@ -169,7 +169,6 @@ return [
             'connection' => 'redis',
             'queue' => ['default', 'high', 'low', 'notifications'],
             'balance' => 'auto',
-            'minProcesses' => 1,
             'maxProcesses' => 5,
             'maxTime' => 0,
             'maxJobs' => 0,
