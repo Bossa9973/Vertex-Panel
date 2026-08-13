@@ -415,6 +415,15 @@ const ServerTerminalBlock = () => {
                                 Close
                             </Button>
                             <Button
+                                className='bg-blue-600 hover:bg-blue-500 text-white'
+                                onClick={() => {
+                                    setModalOpened(false)
+                                    launch('novnc', true)
+                                }}
+                            >
+                                <ArrowTopRightOnSquareIcon className='w-4 h-4 mr-1.5' /> Open Web Console (noVNC)
+                            </Button>
+                            <Button
                                 className='bg-amber-600 hover:bg-amber-500 text-white'
                                 loading={rebootLoading}
                                 onClick={handleAutoEnableReboot}

@@ -84,21 +84,13 @@ class TmateSessionService
 
         Cache::put($dedupKey, true, now()->addSeconds(2));
 
-        // 2. Pre-check Proxmox QEMU Guest Agent connectivity
-        $this->guestAgentRepository->setServer($server);
-        if (!$this->guestAgentRepository->ping()) {
-            Cache::forget($dedupKey);
-
-            // Automatically attach cloud-init snippet to VM if absent so a reboot auto-installs qemu-guest-agent
-            $this->ensureCloudInitSnippetAttached($server);
-
-            $notice = "QEMU Guest Agent is not active inside this VM operating system yet. Provided Proxmox Web Console access automatically. You can open Web Console (noVNC) below, or click 'Auto-Enable & Reboot VM' to auto-install guest agent on boot.";
-
-            return $this->getFallbackConsoleResult($server, $notice);
-        }
-
-        // 3. Proxmox QEMU Guest Agent — execute tmate installer & session spawner
+        // 2. Proxmox QEMU Guest Agent — attempt tmate execution directly
         $sshCmd = $this->attemptProxmoxTmateExec($server, $errorNotice);
+
+        // 3. Fallback: attempt direct SSH
+        if (!$sshCmd) {
+            $sshCmd = $this->attemptSshTmateExec($server);
+        }
 
         Cache::forget($dedupKey);
 
@@ -108,8 +100,10 @@ class TmateSessionService
             return $this->formatResult($sshCmd, $server);
         }
 
-        // 4. Fallback to Web Console if execution timed out or failed
-        $notice = $errorNotice ?: "QEMU Guest Agent timed out while launching tmate. Provided Proxmox Web Console fallback credentials.";
+        // 4. If agent was absent, auto-attach snippet so reboot installs it
+        $this->ensureCloudInitSnippetAttached($server);
+
+        $notice = $errorNotice ?: "QEMU Guest Agent is not active inside this VM operating system yet. You can open Web Console (noVNC) directly below, or click 'Auto-Enable & Reboot VM'.";
         return $this->getFallbackConsoleResult($server, $notice);
     }
 
@@ -288,5 +282,82 @@ class TmateSessionService
         } catch (\Throwable $e) {
             Log::debug("Could not auto-attach snippet for legacy VM {$server->vmid}: {$e->getMessage()}");
         }
+    }
+
+    /**
+     * Attempts direct SSH connection into the VM to auto-install qemu-guest-agent + tmate
+     * and retrieve the live tmate SSH command when Proxmox QEMU Agent is not yet active.
+     */
+    private function attemptSshTmateExec(Server $server): ?string
+    {
+        try {
+            // 1. Get primary IP address of the server
+            $server->loadMissing('addresses');
+            $primaryAddress = $server->addresses->where('is_primary', true)->first()
+                ?? $server->addresses->first();
+
+            $ip = $primaryAddress?->address;
+            if (empty($ip)) {
+                return null;
+            }
+
+            // 2. Retrieve root password from Proxmox cloud-init config
+            $config = collect($this->configRepository->setServer($server)->getConfig());
+            $password = $config->where('key', '=', 'cipassword')->first()['value'] ?? null;
+
+            if (empty($password)) {
+                return null;
+            }
+
+            // 3. Connect via phpseclib3 SSH2 with a 4s connection timeout
+            $ssh = new \phpseclib3\Net\SSH2($ip, 22, 4);
+            $ssh->setTimeout(20);
+
+            if (!$ssh->login('root', $password)) {
+                return null;
+            }
+
+            // 4. Execute self-healing setup and tmate launcher
+            $cmd = 'export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; '
+                . 'chmod 1777 /tmp 2>/dev/null || true; '
+                . 'if ! command -v qemu-ga >/dev/null 2>&1; then '
+                . '  DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true; '
+                . '  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qemu-guest-agent >/dev/null 2>&1 || true; '
+                . 'fi; '
+                . 'systemctl daemon-reload >/dev/null 2>&1 || true; '
+                . 'systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; '
+                . 'systemctl start qemu-guest-agent >/dev/null 2>&1 || true; '
+                . 'if ! command -v tmate >/dev/null 2>&1; then '
+                . '  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate >/dev/null 2>&1 || true; '
+                . 'fi; '
+                . 'pkill -9 -f tmate >/dev/null 2>&1 || true; '
+                . 'rm -f /tmp/tmate.sock /tmp/tmate.log; '
+                . 'tmate -S /tmp/tmate.sock new-session -d 2>/dev/null || true; '
+                . 'tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true; '
+                . 'tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}" 2>/dev/null || true';
+
+            $output = trim((string) $ssh->exec($cmd));
+
+            if (!empty($output)) {
+                $lines = explode("\n", $output);
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if (Str::startsWith($line, 'ssh ') || Str::contains($line, '@tmate.io')) {
+                        Log::info("Tmate session successfully spawned via direct SSH fallback for VM {$server->vmid}");
+
+                        // Also ensure agent: 1 is enabled in Proxmox hardware config
+                        try {
+                            $this->configRepository->setServer($server)->update(['agent' => 1]);
+                        } catch (\Throwable) {}
+
+                        return $line;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::debug("attemptSshTmateExec fallback failed for VM {$server->vmid}: {$e->getMessage()}");
+        }
+
+        return null;
     }
 }
