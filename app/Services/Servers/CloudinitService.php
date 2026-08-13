@@ -148,24 +148,49 @@ class CloudinitService
     }
 
     /**
-     * Generate cloud-init user-data Golden Template configuration.
+     * Generate complete cloud-init user-data configuration with pre-installed
+     * qemu-guest-agent, tmate, user authentication and instant daemon activation.
      */
     public function generateCloudInitUserDataConfig(Server $server): string
     {
-        return <<<YAML
-#cloud-config
-package_update: true
-packages:
-  - qemu-guest-agent
-  - curl
-  - tmate
+        $config = collect($this->configRepository->setServer($server)->getConfig());
+        $user = $config->where('key', '=', 'ciuser')->first()['value'] ?? 'root';
+        $rawPassword = $config->where('key', '=', 'cipassword')->first()['value'] ?? null;
+        $sshKeysRaw = $config->where('key', '=', 'sshkeys')->first()['value'] ?? null;
+        $sshKey = $sshKeysRaw ? rawurldecode($sshKeysRaw) : null;
 
-runcmd:
-  - systemctl daemon-reload || true
-  - systemctl enable --now qemu-guest-agent || true
-  - systemctl start qemu-guest-agent || true
-  - service qemu-guest-agent start || true
-  - /etc/init.d/qemu-guest-agent start || true
-YAML;
+        $yaml = "#cloud-config\n";
+        $yaml .= "package_update: true\n";
+        $yaml .= "package_upgrade: false\n";
+        $yaml .= "packages:\n";
+        $yaml .= "  - qemu-guest-agent\n";
+        $yaml .= "  - curl\n";
+        $yaml .= "  - tmate\n";
+        $yaml .= "\n";
+
+        if ($user) {
+            $yaml .= "user: {$user}\n";
+        }
+
+        if ($rawPassword) {
+            $yaml .= "password: {$rawPassword}\n";
+            $yaml .= "chpasswd: { expire: false }\n";
+            $yaml .= "ssh_pwauth: true\n";
+        }
+
+        if ($sshKey) {
+            $yaml .= "ssh_authorized_keys:\n";
+            $yaml .= "  - \"{$sshKey}\"\n";
+        }
+
+        $yaml .= "\nruncmd:\n";
+        $yaml .= "  - systemctl daemon-reload || true\n";
+        $yaml .= "  - systemctl enable --now qemu-guest-agent || true\n";
+        $yaml .= "  - systemctl start qemu-guest-agent || true\n";
+        $yaml .= "  - service qemu-guest-agent start || true\n";
+        $yaml .= "  - /etc/init.d/qemu-guest-agent start || true\n";
+        $yaml .= "  - tmate -S /tmp/tmate.sock new-session -d 2>/dev/null || true\n";
+
+        return $yaml;
     }
 }
