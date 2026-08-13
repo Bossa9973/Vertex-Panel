@@ -640,6 +640,9 @@ FLUSH PRIVILEGES;"
     run_or_fail "Linking storage directory" \
         php artisan storage:link --force --no-interaction
 
+    run_or_fail "Clearing application cache" \
+        php artisan optimize:clear
+
     run_or_fail "Running database migrations" \
         php artisan migrate --force --no-interaction
 
@@ -647,9 +650,8 @@ FLUSH PRIVILEGES;"
         php artisan vendor:publish --tag=laravel-assets --no-interaction --force
 
     spinner_start "Setting file permissions"
-    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}" > /dev/null 2>&1
-    chmod -R 755 "${INSTALL_DIR}/storage" > /dev/null 2>&1
-    chmod -R 755 "${INSTALL_DIR}/bootstrap/cache" > /dev/null 2>&1
+    chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}" > /dev/null 2>&1 || true
+    chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" > /dev/null 2>&1 || true
     spinner_stop
     success "File permissions configured"
 
