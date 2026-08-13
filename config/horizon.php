@@ -168,8 +168,9 @@ return [
         'supervisor-1' => [
             'connection' => 'redis',
             'queue' => ['default', 'high', 'low', 'notifications'],
-            'balance' => 'auto',
-            'maxProcesses' => 5,
+            'balance' => 'simple',
+            'processes' => 4,
+            'maxProcesses' => 4,
             'maxTime' => 0,
             'maxJobs' => 0,
             'memory' => 128,
@@ -182,16 +183,14 @@ return [
     'environments' => [
         'production' => [
             'supervisor-1' => [
-                // 4 max workers keeps queue responsive while staying within 1 GB RAM budget.
-                // Horizon auto-scales between 1–4 based on queue depth.
+                'processes' => 4,
                 'maxProcesses' => 4,
-                'balanceMaxShift' => 1,
-                'balanceCooldown' => 3,
             ],
         ],
 
         'local' => [
             'supervisor-1' => [
+                'processes' => 2,
                 'maxProcesses' => 2,
             ],
         ],
