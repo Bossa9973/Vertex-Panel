@@ -236,11 +236,11 @@ obtain_backup() {
 
     info "Backup source: ${BOLD}${BACKUP_INPUT}${RESET}"
 
-    # Ensure unzip utility is present for extraction
-    if ! command -v unzip &>/dev/null; then
-        spinner_start "Installing extraction utilities (unzip, tar)..."
+    # Ensure unzip, tar, and file utilities are present for extraction
+    if ! command -v unzip &>/dev/null || ! command -v file &>/dev/null; then
+        spinner_start "Installing extraction utilities (unzip, tar, file)..."
         apt-get update -y >> "$LOG_FILE" 2>&1 || true
-        apt-get install -y unzip tar >> "$LOG_FILE" 2>&1 || true
+        apt-get install -y unzip tar file >> "$LOG_FILE" 2>&1 || true
         spinner_stop
         success "Extraction utilities ready"
     else
@@ -248,7 +248,7 @@ obtain_backup() {
     fi
 
     TMP_RESTORE_DIR="/tmp/vertex_restore_pkg"
-    LOCAL_ARCHIVE="/tmp/vertex_backup_pkg"
+    LOCAL_ARCHIVE="/tmp/vertex_backup_pkg.zip"
     rm -rf "$TMP_RESTORE_DIR" "$LOCAL_ARCHIVE"
     mkdir -p "$TMP_RESTORE_DIR"
 
@@ -280,7 +280,12 @@ obtain_backup() {
     # Extract Archive (ZIP or TAR) with password support
     EXTRACTED=false
 
-    if unzip -t "$LOCAL_ARCHIVE" >/dev/null 2>&1 || file "$LOCAL_ARCHIVE" 2>/dev/null | grep -qi "zip" || [[ "$LOCAL_ARCHIVE" == *.zip ]]; then
+    IS_ZIP=false
+    if [[ "$(head -c 2 "$LOCAL_ARCHIVE" 2>/dev/null)" == "PK" ]] || [[ "$BACKUP_INPUT" == *.zip ]] || unzip -t "$LOCAL_ARCHIVE" >/dev/null 2>&1 || file "$LOCAL_ARCHIVE" 2>/dev/null | grep -qi "zip"; then
+        IS_ZIP=true
+    fi
+
+    if [[ "$IS_ZIP" == "true" ]]; then
         info "ZIP package format detected"
         if [[ -n "$BACKUP_PASS" ]]; then
             spinner_start "Attempting decryption with provided password..."
