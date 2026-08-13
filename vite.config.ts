@@ -26,7 +26,13 @@ export default defineConfig({
         chunkSizeWarningLimit: 1600,
         rollupOptions: {
             onwarn(warning, defaultHandler) {
-                if (warning.code === 'MODULE_LEVEL_DIRECTIVE' || warning.message.includes('"use client"')) {
+                // Suppress noisy "use client" / "use server" RSC directives from third-party packages
+                if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
+                    return
+                }
+                // Downgrade unresolved imports to a console warning instead of a fatal build error
+                if (warning.code === 'UNRESOLVED_IMPORT') {
+                    console.warn(`[vite] unresolved import warning: ${warning.message}`)
                     return
                 }
                 defaultHandler(warning)

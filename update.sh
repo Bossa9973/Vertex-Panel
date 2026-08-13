@@ -218,9 +218,14 @@ perform_update() {
     run_or_fail "Updating PHP dependencies (Composer)" \
         composer install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
 
-    # Node dependencies and build (prefer offline cache to avoid downloading 300MB node_modules again)
-    run_or_fail "Installing Node.js dependencies" \
-        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
+    # Node dependencies — fast path if node_modules already exists, full install only on first run
+    if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
+        run_or_fail "Installing Node.js dependencies (offline cache)" \
+            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
+    else
+        run_or_fail "Installing Node.js dependencies (full download)" \
+            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
+    fi
 
     run_or_fail "Building frontend assets (Vite)" \
         npm run build --prefix "${INSTALL_DIR}"
