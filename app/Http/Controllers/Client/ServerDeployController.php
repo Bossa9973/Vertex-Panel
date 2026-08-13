@@ -290,6 +290,8 @@ class ServerDeployController extends Controller
 
             $server = $result['server'];
             $user   = $result['user'];
+
+            try {
                 \Convoy\Facades\Activity::event('server:create')
                     ->actor($user)
                     ->subject($server)
