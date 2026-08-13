@@ -9,6 +9,8 @@ import { getCredits } from '@/api/credits'
 import Spinner from '@/components/elements/Spinner'
 import ThemeProvider from '@/components/ThemeProvider'
 
+import { SWRConfig } from 'swr'
+
 interface ExtendedWindow extends Window {
     ConvoyUser?: {
         name: string
@@ -74,15 +76,29 @@ const App = () => {
     }
 
     return (
-        <StoreProvider store={store}>
-            <ThemeProvider>
-                <NavigationProgress />
-                <UserBalanceFetcher />
-                <Spinner.Suspense>
-                    <RouterProvider router={router} />
-                </Spinner.Suspense>
-            </ThemeProvider>
-        </StoreProvider>
+        <SWRConfig
+            value={{
+                revalidateOnFocus: true,
+                shouldRetryOnError: (err) => {
+                    // Do NOT retry background SWR requests on session expiry (401) or forbidden (403)
+                    if (err?.response?.status === 401 || err?.response?.status === 403) {
+                        return false
+                    }
+                    return true
+                },
+                errorRetryCount: 3,
+            }}
+        >
+            <StoreProvider store={store}>
+                <ThemeProvider>
+                    <NavigationProgress />
+                    <UserBalanceFetcher />
+                    <Spinner.Suspense>
+                        <RouterProvider router={router} />
+                    </Spinner.Suspense>
+                </ThemeProvider>
+            </StoreProvider>
+        </SWRConfig>
     )
 }
 

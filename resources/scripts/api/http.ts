@@ -54,6 +54,15 @@ http.interceptors.response.use(
     error => {
         completeNavigationProgress()
 
+        // If session expired or invalid (401 Unauthorized), cleanly redirect to login
+        if (error.response?.status === 401) {
+            const path = window.location.pathname
+            if (!path.startsWith('/auth/')) {
+                window.location.href = '/auth/login?expired=1'
+                return new Promise(() => {}) // Halt further error propagation during redirect
+            }
+        }
+
         throw error
     }
 )
