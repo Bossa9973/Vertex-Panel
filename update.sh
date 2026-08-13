@@ -211,35 +211,109 @@ perform_update() {
         echo 'export NODE_OPTIONS="--max-old-space-size=8192"' >> /etc/environment 2>/dev/null || true
     fi
 
-    # Clean up downloaded zip
-    run_quietly rm -rf "$tmp_zip" "$tmp_dir"
-
-    # Composer dependencies
-    run_or_fail "Updating PHP dependencies (Composer)" \
-        composer install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
-
-    # Node dependencies — fast path if node_modules already exists, full install only on first run
-    if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
-        run_or_fail "Installing Node.js dependencies (offline cache)" \
-            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
-    else
-        run_or_fail "Installing Node.js dependencies (full download)" \
-            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
+    # Detect whether frontend files changed (resources/, package.json, vite.config.ts, tailwind.config.js)
+    FRONTEND_CHANGED=false
+    for f in \
+        "${src_dir}/package.json" \
+        "${src_dir}/vite.config.ts" \
+        "${src_dir}/tailwind.config.js" \
+        "${src_dir}/postcss.config.js"; do
+        if [[ -f "$f" ]]; then
+            local_f="${INSTALL_DIR}/$(basename "$f")"
+            if [[ ! -f "$local_f" ]] || ! diff -q "$f" "$local_f" > /dev/null 2>&1; then
+                FRONTEND_CHANGED=true
+                break
+            fi
+        fi
+    done
+    if [[ "$FRONTEND_CHANGED" == false ]]; then
+        # Deep-check: any file in resources/ changed?
+        if diff -rq --exclude='*.map' "${src_dir}/resources/" "${INSTALL_DIR}/resources/" > /dev/null 2>&1; then
+            info "No frontend changes detected — skipping npm install & build"
+        else
+            FRONTEND_CHANGED=true
+        fi
     fi
 
-    run_or_fail "Building frontend assets (Vite)" \
-        npm run build --prefix "${INSTALL_DIR}"
+    # Detect whether composer.json / lock changed
+    COMPOSER_CHANGED=false
+    for f in "${src_dir}/composer.json" "${src_dir}/composer.lock"; do
+        if [[ -f "$f" ]]; then
+            local_f="${INSTALL_DIR}/$(basename "$f")"
+            if [[ ! -f "$local_f" ]] || ! diff -q "$f" "$local_f" > /dev/null 2>&1; then
+                COMPOSER_CHANGED=true
+                break
+            fi
+        fi
+    done
 
-    # Optimize and clear caches post-build
-    run_or_fail "Clearing application cache" \
-        php artisan optimize:clear
+    # Clean up downloaded zip (after diff checks are done)
+    run_quietly rm -rf "$tmp_zip" "$tmp_dir"
+
+    # --- Parallel phase: Composer + npm install run simultaneously ---------------
+    local composer_log="/tmp/vertex_composer.log"
+    local npm_log="/tmp/vertex_npm.log"
+    local composer_pid="" npm_pid=""
+
+    if [[ "$COMPOSER_CHANGED" == true ]]; then
+        spinner_start "Updating PHP + Node.js dependencies in parallel"
+        composer install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}" \
+            > "$composer_log" 2>&1 &
+        composer_pid=$!
+    else
+        info "composer.json unchanged — skipping Composer install"
+    fi
+
+    if [[ "$FRONTEND_CHANGED" == true ]]; then
+        if [[ -z "${composer_pid:-}" ]]; then
+            spinner_start "Updating Node.js dependencies"
+        fi
+        if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
+            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline \
+                > "$npm_log" 2>&1 &
+        else
+            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund \
+                > "$npm_log" 2>&1 &
+        fi
+        npm_pid=$!
+    fi
+
+    # Wait for both and check exit codes
+    if [[ -n "${composer_pid:-}" ]]; then
+        if ! wait "$composer_pid"; then
+            spinner_stop
+            error_msg "Composer install failed. See $composer_log"
+            cat "$composer_log" >> /tmp/vertex_update.log
+            return 1
+        fi
+    fi
+    if [[ -n "${npm_pid:-}" ]]; then
+        if ! wait "$npm_pid"; then
+            spinner_stop
+            error_msg "npm install failed. See $npm_log"
+            cat "$npm_log" >> /tmp/vertex_update.log
+            return 1
+        fi
+    fi
+
+    if [[ -n "${composer_pid:-}" || -n "${npm_pid:-}" ]]; then
+        spinner_stop
+        success "Dependencies installed"
+    fi
+
+    # Build frontend only if something changed
+    if [[ "$FRONTEND_CHANGED" == true ]]; then
+        run_or_fail "Building frontend assets (Vite)" \
+            npm run build --prefix "${INSTALL_DIR}"
+    fi
+
+    # Laravel cache — clear stale, then re-cache
+    run_or_fail "Clearing & re-caching application" \
+        bash -c "cd '${INSTALL_DIR}' && php artisan optimize:clear && php artisan optimize"
 
     # Database migrations
     run_or_fail "Running database migrations" \
         php artisan migrate --force --no-interaction
-
-    run_or_fail "Optimizing route and config cache" \
-        php artisan optimize
 
     run_quietly php artisan view:clear 2>/dev/null || true
 
