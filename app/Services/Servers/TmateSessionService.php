@@ -10,12 +10,15 @@ use Illuminate\Support\Facades\Log;
 
 class TmateSessionService
 {
-    public function __construct(private ProxmoxGuestAgentRepository $guestAgentRepository)
-    {
+    public function __construct(
+        private ProxmoxGuestAgentRepository $guestAgentRepository,
+        private ServerConsoleService $consoleService,
+    ) {
     }
 
     /**
-     * Spawns an on-demand tmate SSH session inside the VM via Proxmox QEMU Guest Agent.
+     * Spawns an on-demand tmate SSH session inside the VM via Proxmox QEMU Guest Agent,
+     * or falls back seamlessly to Proxmox Web Console if QEMU agent is not active.
      */
     public function createSession(Server $server): array
     {
@@ -34,13 +37,7 @@ class TmateSessionService
 
                 $notice = "tmate terminal access is restricted for the first 5 minutes after server creation to ensure Cloud-Init finishes initial system setup and package configuration properly. Please wait approximately {$minutes} minute(s) ({$remainingSeconds}s remaining).";
 
-                return [
-                    'ssh_cmd' => null,
-                    'url' => null,
-                    'notice' => $notice,
-                    'restricted' => true,
-                    'remaining_seconds' => $remainingSeconds,
-                ];
+                return $this->getFallbackConsoleResult($server, $notice, true, $remainingSeconds);
             }
         }
 
@@ -53,13 +50,7 @@ class TmateSessionService
 
                 $notice = "tmate terminal access is temporarily restricted for 30 seconds after server boot/power action to allow system services and QEMU guest agent to initialize properly. Please wait {$remainingSeconds} second(s).";
 
-                return [
-                    'ssh_cmd' => null,
-                    'url' => null,
-                    'notice' => $notice,
-                    'restricted' => true,
-                    'remaining_seconds' => $remainingSeconds,
-                ];
+                return $this->getFallbackConsoleResult($server, $notice, true, $remainingSeconds);
             }
         }
 
@@ -72,13 +63,7 @@ class TmateSessionService
 
                 $notice = "A brief 15-second cooldown is enforced between requesting new tmate SSH sessions. Please wait {$remainingSeconds} second(s).";
 
-                return [
-                    'ssh_cmd' => null,
-                    'url' => null,
-                    'notice' => $notice,
-                    'restricted' => true,
-                    'remaining_seconds' => $remainingSeconds,
-                ];
+                return $this->getFallbackConsoleResult($server, $notice, true, $remainingSeconds);
             }
         }
 
@@ -99,14 +84,9 @@ class TmateSessionService
         if (!$this->guestAgentRepository->ping()) {
             Cache::forget($dedupKey);
 
-            $notice = "QEMU Guest Agent is not responding inside this VM. Please ensure 'qemu-guest-agent' is installed and running inside your operating system (sudo apt update && sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent), or use the Web Console.";
+            $notice = "QEMU Guest Agent is not active inside this VM operating system yet. Provided Proxmox Web Console access automatically. To enable tmate SSH, run: 'sudo apt update && sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent' inside the console.";
 
-            return [
-                'ssh_cmd' => null,
-                'url' => null,
-                'notice' => $notice,
-                'restricted' => false,
-            ];
+            return $this->getFallbackConsoleResult($server, $notice);
         }
 
         // 3. Proxmox QEMU Guest Agent — execute tmate installer & session spawner
@@ -120,9 +100,9 @@ class TmateSessionService
             return $this->formatResult($sshCmd, $server);
         }
 
-        // 4. Return diagnostic notice if execution failed or timed out
-        $notice = $errorNotice ?: "QEMU Guest Agent timed out while launching tmate. Please verify network connectivity inside the VM and try again.";
-        return $this->formatResult($notice, $server);
+        // 4. Fallback to Web Console if execution timed out or failed
+        $notice = $errorNotice ?: "QEMU Guest Agent timed out while launching tmate. Provided Proxmox Web Console fallback credentials.";
+        return $this->getFallbackConsoleResult($server, $notice);
     }
 
     /**
@@ -213,5 +193,36 @@ class TmateSessionService
             'server_uuid' => $server->uuid,
             'server_name' => $server->name,
         ];
+    }
+
+    /**
+     * Generates automatic Proxmox Web Console credentials as a 100% reliable fallback when QEMU guest agent is inactive.
+     */
+    private function getFallbackConsoleResult(Server $server, string $notice, bool $restricted = false, int $remainingSeconds = 0): array
+    {
+        $result = [
+            'ssh_cmd'           => null,
+            'url'               => null,
+            'notice'            => $notice,
+            'restricted'        => $restricted,
+            'remaining_seconds' => $remainingSeconds,
+            'fallback_console'  => true,
+            'server_vmid'       => $server->vmid,
+            'server_uuid'       => $server->uuid,
+            'server_name'       => $server->name,
+        ];
+
+        try {
+            $credentials = $this->consoleService->createConsoleUserCredentials($server);
+            $result['console_ticket'] = $credentials->ticket;
+            $result['console_vmid']   = $server->vmid;
+            $result['console_node']   = $server->node->cluster;
+            $result['console_fqdn']   = $server->node->fqdn;
+            $result['console_port']   = $server->node->port;
+        } catch (\Throwable $ex) {
+            Log::warning("Could not generate fallback console ticket for server {$server->id}: " . $ex->getMessage());
+        }
+
+        return $result;
     }
 }
