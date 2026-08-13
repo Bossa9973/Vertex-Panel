@@ -3,7 +3,9 @@
 namespace Convoy\Repositories\Proxmox\Server;
 
 use Convoy\Models\Server;
+use Illuminate\Support\Str;
 use Webmozart\Assert\Assert;
+use Illuminate\Support\Facades\Log;
 use Convoy\Repositories\Proxmox\ProxmoxRepository;
 use Convoy\Exceptions\Repository\Proxmox\ProxmoxConnectionException;
 
@@ -14,22 +16,33 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
      */
     public function ping(): bool
     {
-        try {
-            Assert::isInstanceOf($this->server, Server::class);
+        Assert::isInstanceOf($this->server, Server::class);
 
-            $response = $this->getHttpClient()
-                ->withUrlParameters([
-                    'node'   => $this->node->cluster,
-                    'server' => $this->server->vmid,
-                ])
-                ->post('/api2/json/nodes/{node}/qemu/{server}/agent/ping')
-                ->json();
+        // Retry up to 3 times with 1.5 s between attempts.
+        // The QEMU guest agent can be transiently unresponsive
+        // (e.g. during heavy VM load or a brief service restart)
+        // and a single ping failure should not trigger a fallback.
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
+                $this->getHttpClient()
+                    ->withUrlParameters([
+                        'node'   => $this->node->cluster,
+                        'server' => $this->server->vmid,
+                    ])
+                    ->post('/api2/json/nodes/{node}/qemu/{server}/agent/ping')
+                    ->json();
 
-            return true;
-        } catch (\Throwable) {
-            return false;
+                return true;
+            } catch (\Throwable) {
+                if ($attempt < 3) {
+                    usleep(1500000); // 1.5 s before next attempt
+                }
+            }
         }
+
+        return false;
     }
+
 
     /**
      * Get Guest Agent status.

@@ -113,18 +113,30 @@ class TmateSessionService
         try {
             $this->guestAgentRepository->setServer($server);
 
-            // Multi-distro auto-installer, systemd agent enabler & robust tmate session spawner
+            // Re-verify agent is still alive immediately before exec.
+            // ping() already retries 3× internally, so this is a cheap guard
+            // against the agent dropping between the initial check and exec.
+            if (!$this->guestAgentRepository->ping()) {
+                $errorNotice = 'QEMU Guest Agent stopped responding before tmate could be launched. The Proxmox Web Console has been provided as fallback.';
+                return null;
+            }
+
+            // Reliable tmate launcher:
+            //  1. Ensure qemu-guest-agent is enabled (self-healing)
+            //  2. Kill any stale tmate process / socket
+            //  3. Auto-install tmate if missing (multi-distro)
+            //  4. Start a detached tmate session
+            //  5. Use `tmate wait tmate-ready` — blocks until tmate.io connection
+            //     is established (the correct approach, avoids the polling-before-ready race)
+            //  6. Write the SSH connection string to /tmp/tmate.log
             $execCmd = "export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; "
                 . "systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; "
                 . "pkill -9 tmate >/dev/null 2>&1 || true; "
-                . "rm -f /tmp/tmate.sock /tmp/tmate.log; "
+                . "rm -f /tmp/tmate.sock /tmp/tmate.log /tmp/tmate_err.log; "
                 . "if ! command -v tmate >/dev/null 2>&1; then "
                 . "  if command -v apt-get >/dev/null 2>&1; then "
-                . "    for attempt in 1 2 3; do "
-                . "      (DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) >/dev/null 2>&1 || true; "
-                . "      if command -v tmate >/dev/null 2>&1; then break; fi; "
-                . "      sleep 1; "
-                . "    done; "
+                . "    DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true; "
+                . "    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate >/dev/null 2>&1 || true; "
                 . "  elif command -v apk >/dev/null 2>&1; then "
                 . "    apk add --no-cache tmate >/dev/null 2>&1 || true; "
                 . "  elif command -v dnf >/dev/null 2>&1; then "
@@ -135,25 +147,24 @@ class TmateSessionService
                 . "    pacman -Sy --noconfirm tmate >/dev/null 2>&1 || true; "
                 . "  fi; "
                 . "fi; "
-                . "tmate -S /tmp/tmate.sock new-session -d >/dev/null 2>&1 || true; "
-                . "for i in $(seq 1 40); do "
-                . "  tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' > /tmp/tmate.log 2>/dev/null || true; "
-                . "  if grep -q '@' /tmp/tmate.log 2>/dev/null; then break; fi; "
-                . "  sleep 0.3; "
-                . "done";
+                . "tmate -S /tmp/tmate.sock new-session -d 2>/tmp/tmate_err.log || true; "
+                . "tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true; "
+                . "tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' > /tmp/tmate.log 2>/dev/null || true";
 
-            // Execute command via Proxmox QEMU Guest Agent API
+            // Execute command via Proxmox QEMU Guest Agent API (fire-and-forget)
             $this->guestAgentRepository->exec($execCmd);
 
-            // Poll /tmp/tmate.log via Proxmox Guest Agent file-read API (up to 13.5 seconds)
-            for ($attempt = 1; $attempt <= 45; $attempt++) {
-                usleep(300000); // 300ms
+            // Poll /tmp/tmate.log for up to 30 seconds (60 × 500 ms).
+            // Since `tmate wait tmate-ready` runs inside the VM first, the SSH string
+            // should appear shortly after the file is written.
+            for ($attempt = 1; $attempt <= 60; $attempt++) {
+                usleep(500000); // 500 ms
 
                 try {
                     $fileData = $this->guestAgentRepository->fileRead('/tmp/tmate.log');
                     $content = is_array($fileData) ? ($fileData['content'] ?? '') : (string) $fileData;
 
-                    // Decode base64 content if returned base64-encoded by Proxmox API
+                    // Proxmox file-read returns base64-encoded content
                     if ($content && base64_encode(base64_decode($content, true)) === $content) {
                         $decoded = base64_decode($content);
                         if (mb_check_encoding($decoded, 'UTF-8')) {
@@ -164,18 +175,35 @@ class TmateSessionService
                     $sshCmd = trim((string) $content);
 
                     if (!empty($sshCmd) && (Str::startsWith($sshCmd, 'ssh ') || Str::contains($sshCmd, '@tmate.io'))) {
+                        Log::info("Tmate session established for VM {$server->vmid} on poll attempt {$attempt}");
                         return $sshCmd;
                     }
-                } catch (\Throwable $readEx) {
-                    // File created asynchronously by tmate in VM
+                } catch (\Throwable) {
+                    // /tmp/tmate.log not written yet — keep waiting
                 }
+            }
+
+            // After 30 s without a result, check tmate's own error log for diagnosis
+            try {
+                $errData = $this->guestAgentRepository->fileRead('/tmp/tmate_err.log');
+                $errContent = is_array($errData) ? ($errData['content'] ?? '') : (string) $errData;
+                if ($errContent && base64_encode(base64_decode($errContent, true)) === $errContent) {
+                    $errContent = base64_decode($errContent);
+                }
+                $errContent = trim((string) $errContent);
+                if (!empty($errContent)) {
+                    Log::warning("Tmate launch failed for VM {$server->vmid}. tmate stderr: {$errContent}");
+                    $errorNotice = 'tmate could not connect to tmate.io. Error: ' . Str::limit($errContent, 120);
+                }
+            } catch (\Throwable) {
+                // tmate_err.log may not exist if tmate wasn't installed
             }
         } catch (\Throwable $e) {
             $msg = $e->getMessage();
             Log::error("Proxmox Tmate Guest Agent Exec error for VM {$server->vmid}: {$msg}");
 
-            if (Str::contains($msg, ['not running', 'Agent', 'agent', '500', 'connection', 'Communication'])) {
-                $errorNotice = "The VM QEMU Guest Agent is initializing. Please ensure 'qemu-guest-agent' service is running inside the VM.";
+            if (Str::containsAny($msg, ['not running', 'Agent', 'agent', '500', 'connection', 'Communication'])) {
+                $errorNotice = "QEMU Guest Agent is not responding. Please ensure 'qemu-guest-agent' is installed and running inside the VM.";
             } else {
                 $errorNotice = "Guest Agent execution error: {$msg}";
             }
@@ -183,6 +211,7 @@ class TmateSessionService
 
         return null;
     }
+
 
     private function formatResult(string $sshCmd, Server $server): array
     {
