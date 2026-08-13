@@ -12,9 +12,7 @@ const useNodeSWR = () => {
     const { nodeId } = useParams()
     const id = parseInt(nodeId!)
 
-    return useSWR<Node>(getKey(id), () => getNode(id), {
-        revalidateOnMount: false,
-    }) as Optimistic<SWRResponse<Node, any>>
+    return useSWR<Node>(getKey(id), () => getNode(id)) as Optimistic<SWRResponse<Node, any>>
 }
 
 export default useNodeSWR

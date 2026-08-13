@@ -25,10 +25,7 @@ const useAddressesSWR = ({ page, query, ...params }: QueryParams) => {
                 page,
                 query,
                 ...params,
-            }),
-        {
-            revalidateOnMount: false,
-        }
+            })
     ) as Optimistic<SWRResponse<AddressResponse, any>>
 }
 

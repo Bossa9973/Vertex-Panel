@@ -12,9 +12,7 @@ const useCotermSWR = () => {
     const { cotermId } = useParams()
     const id = parseInt(cotermId!)
 
-    return useSWR<Coterm>(getKey(id), () => getCoterm(id), {
-        revalidateOnMount: false,
-    }) as Optimistic<SWRResponse<Coterm, any>>
+    return useSWR<Coterm>(getKey(id), () => getCoterm(id)) as Optimistic<SWRResponse<Coterm, any>>
 }
 
 export default useCotermSWR

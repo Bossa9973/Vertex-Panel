@@ -30,7 +30,10 @@ const AdminUserBalanceContainer = () => {
     const fetchUsers = () => {
         setLoading(true)
         http.get('/api/admin/users-balances')
-            .then(res => setUsers(res.data.users || []))
+            .then(res => {
+                const rawUsers = res.data.users?.data || (Array.isArray(res.data.users) ? res.data.users : [])
+                setUsers(rawUsers)
+            })
             .catch(err => console.error(err))
             .finally(() => setLoading(false))
     }
