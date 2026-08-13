@@ -25,6 +25,12 @@ export default defineConfig({
         reportCompressedSize: false,
         chunkSizeWarningLimit: 1600,
         rollupOptions: {
+            onwarn(warning, defaultHandler) {
+                if (warning.code === 'MODULE_LEVEL_DIRECTIVE' || warning.message.includes('"use client"')) {
+                    return
+                }
+                defaultHandler(warning)
+            },
             output: {
                 manualChunks(id) {
                     if (id.includes('node_modules')) {
