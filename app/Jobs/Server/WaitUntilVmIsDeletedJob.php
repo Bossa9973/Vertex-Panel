@@ -35,6 +35,10 @@ class WaitUntilVmIsDeletedJob implements ShouldQueue
     {
         $server = Server::findOrFail($this->serverId);
 
+        if ($this->attempts() >= 100) {
+            throw new \RuntimeException("VM deletion timed out on Proxmox hypervisor (VMID: {$server->vmid}).");
+        }
+
         $isDeleted = $service->isVmDeleted($server);
 
         if (!$isDeleted) {

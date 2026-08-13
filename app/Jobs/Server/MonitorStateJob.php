@@ -42,6 +42,10 @@ class MonitorStateJob implements ShouldQueue
     {
         $server = Server::findOrFail($this->serverId);
 
+        if ($this->attempts() >= 40) {
+            throw new \RuntimeException("VM state transition timed out for Server ID {$server->id} (VMID: {$server->vmid}) waiting for state: {$this->targetState->value}.");
+        }
+
         $stateData = $repository->setServer($server)->getState();
 
         if ($stateData->state === $this->targetState) {

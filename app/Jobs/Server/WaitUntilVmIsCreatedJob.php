@@ -35,6 +35,10 @@ class WaitUntilVmIsCreatedJob implements ShouldQueue
     {
         $server = Server::findOrFail($this->serverId);
 
+        if ($this->attempts() >= 100) {
+            throw new \RuntimeException("VM creation timed out on Proxmox hypervisor (VMID: {$server->vmid}). Proxmox did not complete disk cloning within 5 minutes.");
+        }
+
         $isCreated = $service->isVmCreated($server);
 
         if (!$isCreated) {

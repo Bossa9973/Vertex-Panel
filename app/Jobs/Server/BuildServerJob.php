@@ -28,9 +28,10 @@ class BuildServerJob implements ShouldQueue
 
     public function middleware(): array
     {
-        return [new SkipIfBatchCancelled(), new WithoutOverlapping(
-            "server.build#{$this->serverId}",
-        )];
+        return [
+            new SkipIfBatchCancelled(),
+            (new WithoutOverlapping("server.build#{$this->serverId}"))->expireAfter(120)->dontRelease(),
+        ];
     }
 
     public function handle(ServerBuildService $service): void
