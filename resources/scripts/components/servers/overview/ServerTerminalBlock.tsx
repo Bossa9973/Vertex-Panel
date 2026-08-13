@@ -224,135 +224,84 @@ const ServerTerminalBlock = () => {
                     {t('terminal.description')}
                 </p>
 
-                {terminalMode === 'sshx' ? (
-                    <div className='grid lg:grid-cols-1 mt-6 space-y-4'>
-                        <div className='flex flex-col justify-between py-2'>
-                            <div>
-                                <div className='flex items-center gap-2'>
-                                    <h6 className='h6'>tmate Terminal</h6>
-                                    <span className='px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center gap-1'>
-                                        <SparklesIcon className='w-3 h-3 text-indigo-400' /> Live Session
+                <div className='grid lg:grid-cols-1 mt-6 space-y-4'>
+                    <div className='flex flex-col justify-between py-2'>
+                        <div>
+                            <div className='flex items-center gap-2'>
+                                <h6 className='h6'>tmate Terminal</h6>
+                                <span className='px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center gap-1'>
+                                    <SparklesIcon className='w-3 h-3 text-indigo-400' /> Live Session
+                                </span>
+                            </div>
+                            <p className='description-small mt-1 leading-relaxed'>
+                                On-demand SSH terminal session powered by <a href="https://tmate.io" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">tmate.io</a>.
+                            </p>
+                        </div>
+
+                        {isLocked && (
+                            <div className='mt-3 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs text-amber-300 space-y-1 animate-pulse'>
+                                <div className='font-bold flex items-center gap-1.5'>
+                                    <LockClosedIcon className='w-4 h-4 text-amber-400' />
+                                    <span>Boot / Power Action Lock</span>
+                                    <span className='ml-auto font-mono text-amber-200 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30'>
+                                        {formatTime(totalLock)} remaining
                                     </span>
                                 </div>
-                                <p className='description-small mt-1 leading-relaxed'>
-                                    On-demand SSH terminal session powered by <a href="https://tmate.io" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">tmate.io</a>.
+                                <p className='text-[11px] text-amber-300/80 leading-snug'>
+                                    tmate terminal sessions are locked for 30 seconds after server boot or power actions to ensure QEMU guest agent and system services initialize cleanly.
                                 </p>
                             </div>
+                        )}
 
-                            {isLocked && (
-                                <div className='mt-3 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs text-amber-300 space-y-1 animate-pulse'>
-                                    <div className='font-bold flex items-center gap-1.5'>
-                                        <LockClosedIcon className='w-4 h-4 text-amber-400' />
-                                        <span>Boot / Power Action Lock</span>
-                                        <span className='ml-auto font-mono text-amber-200 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30'>
-                                            {formatTime(totalLock)} remaining
-                                        </span>
-                                    </div>
-                                    <p className='text-[11px] text-amber-300/80 leading-snug'>
-                                        tmate terminal sessions are locked for 30 seconds after server boot or power actions to ensure QEMU guest agent and system services initialize cleanly.
-                                    </p>
+                        {sshCmd && (
+                            <div className='mt-4 p-3.5 bg-neutral-950/90 border border-indigo-500/30 rounded-xl space-y-3'>
+                                <div className='text-xs font-bold text-indigo-300 flex items-center justify-between'>
+                                    <span className='flex items-center gap-1.5'>
+                                        <CommandLineIcon className='w-4 h-4 text-blue-400' /> Active SSH Command:
+                                    </span>
+                                    {copiedSsh && <span className='text-emerald-400 flex items-center gap-1 text-xs'><CheckIcon className='w-3 h-3' /> Copied!</span>}
                                 </div>
-                            )}
-
-                            {sshCmd && (
-                                <div className='mt-4 p-3.5 bg-neutral-950/90 border border-indigo-500/30 rounded-xl space-y-3'>
-                                    <div className='text-xs font-bold text-indigo-300 flex items-center justify-between'>
-                                        <span className='flex items-center gap-1.5'>
-                                            <CommandLineIcon className='w-4 h-4 text-blue-400' /> Active SSH Command:
-                                        </span>
-                                        {copiedSsh && <span className='text-emerald-400 flex items-center gap-1 text-xs'><CheckIcon className='w-3 h-3' /> Copied!</span>}
-                                    </div>
-                                    <div className='flex items-center gap-2'>
-                                        <input
-                                            type='text'
-                                            readOnly
-                                            value={sshCmd}
-                                            className='w-full text-xs font-mono bg-neutral-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-blue-300 select-all focus:outline-none'
-                                        />
-                                        <Button
-                                            size='xs'
-                                            className='bg-blue-600 hover:bg-blue-500 text-white shrink-0'
-                                            onClick={() => copySshToClipboard(sshCmd)}
-                                        >
-                                            <ClipboardDocumentIcon className='w-3.5 h-3.5 mr-1' /> Copy SSH
-                                        </Button>
-                                    </div>
+                                <div className='flex items-center gap-2'>
+                                    <input
+                                        type='text'
+                                        readOnly
+                                        value={sshCmd}
+                                        className='w-full text-xs font-mono bg-neutral-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-blue-300 select-all focus:outline-none'
+                                    />
+                                    <Button
+                                        size='xs'
+                                        className='bg-blue-600 hover:bg-blue-500 text-white shrink-0'
+                                        onClick={() => copySshToClipboard(sshCmd)}
+                                    >
+                                        <ClipboardDocumentIcon className='w-3.5 h-3.5 mr-1' /> Copy SSH
+                                    </Button>
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            <Button.Group className='mt-5'>
-                                <Button
-                                    className='grow'
-                                    variant='outline'
-                                    loading={tmateLoading}
-                                    disabled={tmateLoading || isLocked}
-                                    onClick={handleFetchTmateSession}
-                                >
-                                    {isLocked
-                                        ? `tmate Restricted (${formatTime(totalLock)})`
-                                        : (sshCmd ? 'View tmate SSH Command' : 'Fetch tmate SSH Session')}
-                                </Button>
-                                <Button
-                                    variant='outline'
-                                    disabled={tmateLoading || isLocked}
-                                    onClick={handleFetchTmateSession}
-                                    title={isLocked ? `Locked during boot / power action (${formatTime(totalLock)})` : 'Fetch tmate session'}
-                                >
-                                    <CommandLineIcon className='w-4 h-4' />
-                                </Button>
-                            </Button.Group>
-                        </div>
+                        <Button.Group className='mt-5'>
+                            <Button
+                                className='grow'
+                                variant='outline'
+                                loading={tmateLoading}
+                                disabled={tmateLoading || isLocked}
+                                onClick={handleFetchTmateSession}
+                            >
+                                {isLocked
+                                    ? `tmate Restricted (${formatTime(totalLock)})`
+                                    : (sshCmd ? 'View tmate SSH Command' : 'Fetch tmate SSH Session')}
+                            </Button>
+                            <Button
+                                variant='outline'
+                                disabled={tmateLoading || isLocked}
+                                onClick={handleFetchTmateSession}
+                                title={isLocked ? `Locked during boot / power action (${formatTime(totalLock)})` : 'Fetch tmate session'}
+                            >
+                                <CommandLineIcon className='w-4 h-4' />
+                            </Button>
+                        </Button.Group>
                     </div>
-                ) : (
-                    <div className='grid lg:grid-cols-2 mt-6'>
-                        <div className='flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-accent-200 lg:pr-5 pb-5 lg:py-5'>
-                            <div>
-                                <h6 className='h6'>noVNC</h6>
-                                <p className='description-small mt-1'>
-                                    {t('terminal.novnc_description')}
-                                </p>
-                            </div>
-                            <Button.Group className='mt-6'>
-                                <Button
-                                    className='grow'
-                                    variant='outline'
-                                    onClick={() => launch('novnc')}
-                                >
-                                    {tStrings('launch')}
-                                </Button>
-                                <Button
-                                    variant='outline'
-                                    onClick={() => launch('novnc', true)}
-                                >
-                                    <ArrowTopRightOnSquareIcon className='w-4 h-4' />
-                                </Button>
-                            </Button.Group>
-                        </div>
-                        <div className='flex flex-col justify-between lg:pl-5 pt-5 lg:py-5'>
-                            <div>
-                                <h6 className='h6'>xTerm.js</h6>
-                                <p className='description-small mt-1'>
-                                    {t('terminal.xtermjs_description')}
-                                </p>
-                            </div>
-                            <Button.Group className='mt-6'>
-                                <Button
-                                    variant='outline'
-                                    className='grow'
-                                    onClick={() => launch('xtermjs')}
-                                >
-                                    {tStrings('launch')}
-                                </Button>
-                                <Button
-                                    variant='outline'
-                                    onClick={() => launch('xtermjs', true)}
-                                >
-                                    <ArrowTopRightOnSquareIcon className='w-4 h-4' />
-                                </Button>
-                            </Button.Group>
-                        </div>
-                    </div>
-                )}
+                </div>
             </Card>
 
             {/* tmate SSH Session Details Modal */}
@@ -463,21 +412,11 @@ const ServerTerminalBlock = () => {
                                 Close
                             </Button>
                             <Button
-                                variant='outline'
-                                className='border-amber-500/40 text-amber-300 hover:bg-amber-500/10'
+                                className='bg-amber-600 hover:bg-amber-500 text-white'
                                 loading={rebootLoading}
                                 onClick={handleAutoEnableReboot}
                             >
                                 <ArrowPathIcon className='w-4 h-4 mr-1.5' /> Auto-Enable & Reboot VM
-                            </Button>
-                            <Button
-                                className='bg-blue-600 hover:bg-blue-500 text-white'
-                                onClick={() => {
-                                    setModalOpened(false)
-                                    launch('novnc', true)
-                                }}
-                            >
-                                <ArrowTopRightOnSquareIcon className='w-4 h-4 mr-1.5' /> Open Web Console (noVNC)
                             </Button>
                         </div>
                     </div>

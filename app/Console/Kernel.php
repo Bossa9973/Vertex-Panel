@@ -11,6 +11,7 @@ use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use Convoy\Console\Commands\Maintenance\PruneUsersCommand;
 use Convoy\Console\Commands\Server\UpdateRateLimitsCommand;
 use Convoy\Console\Commands\Maintenance\PruneOrphanedBackupsCommand;
+use Convoy\Console\Commands\Server\KeepQemuAgentAndTmateAliveCommand;
 
 class Kernel extends ConsoleKernel
 {
@@ -35,6 +36,7 @@ class Kernel extends ConsoleKernel
         $schedule->command(PruneUsersCommand::class)->daily();
         $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
         $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
+        $schedule->command(KeepQemuAgentAndTmateAliveCommand::class)->everyFiveMinutes();
     }
 
     /**
