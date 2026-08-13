@@ -281,6 +281,7 @@ perform_update() {
 
     # File permissions
     spinner_start "Updating file permissions"
+    mkdir -p "${INSTALL_DIR}/public/build" 2>/dev/null || true
     chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}" > /dev/null 2>&1 || true
     chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" > /dev/null 2>&1 || true
     spinner_stop
