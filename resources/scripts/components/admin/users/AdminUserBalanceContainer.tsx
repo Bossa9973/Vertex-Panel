@@ -66,9 +66,9 @@ const AdminUserBalanceContainer = () => {
         }
     }
 
-    const filteredUsers = users.filter(
-        u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
-    )
+    const filteredUsers = Array.isArray(users)
+        ? users.filter(u => (u.name || '').toLowerCase().includes(search.toLowerCase()) || (u.email || '').toLowerCase().includes(search.toLowerCase()))
+        : []
 
     return (
         <PageContentBlock title='Admin > User BOLT Balances'>

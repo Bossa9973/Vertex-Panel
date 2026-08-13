@@ -20,6 +20,7 @@ class Server extends Model
         'disk' => MebibytesToAndFromBytes::class,
         'bandwidth_usage' => MebibytesToAndFromBytes::class,
         'bandwidth_limit' => MebibytesToAndFromBytes::class,
+        'expires_at' => 'datetime',
     ];
 
     protected $guarded = [

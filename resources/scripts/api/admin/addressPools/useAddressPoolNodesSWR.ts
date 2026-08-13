@@ -11,7 +11,7 @@ const useAddressPoolNodesSWR = (
     { page, query, ...params }: QueryParams
 ) => {
     return useSWR<NodeResponse>(
-        ['admin.address-pools.nodes', poolId, page, query],
+        poolId && poolId > 0 ? ['admin.address-pools.nodes', poolId, page, query] : null,
         () =>
             getAttachedNodes(poolId, {
                 page,

@@ -291,90 +291,113 @@ class ServerDeployController extends Controller
 
     public function renew(Request $request, int $id): JsonResponse
     {
-        /** @var User $user */
-        $user = $request->user();
+        try {
+            /** @var User $user */
+            $user = $request->user();
 
-        /** @var Server $server */
-        $server = Server::where('user_id', $user->id)->findOrFail($id);
+            /** @var Server $server */
+            $server = Server::where('user_id', $user->id)->findOrFail($id);
 
-        // Calculate actual VPS plan cost for renewal
-        $renewCost = 10.00;
-        if (!empty($server->description) && preg_match('/Plan:\s*([^|]+)/i', $server->description, $matches)) {
-            $planName = trim($matches[1]);
-            $plan = VpsPlan::where('name', $planName)->first();
-            if ($plan) {
-                $renewCost = (float) $plan->price;
-            }
-        } else {
-            $ramMb = $server->memory > 100000 ? (int) round($server->memory / (1024 * 1024)) : (int) $server->memory;
-            if ($ramMb > 0) {
-                $plan = VpsPlan::where('ram', '>=', $ramMb)->orderBy('price', 'asc')->first();
+            // Calculate actual VPS plan cost for renewal
+            $renewCost = 10.00;
+            if (!empty($server->description) && preg_match('/Plan:\s*([^|]+)/i', $server->description, $matches)) {
+                $planName = trim($matches[1]);
+                $plan = VpsPlan::where('name', $planName)->first();
                 if ($plan) {
                     $renewCost = (float) $plan->price;
                 }
+            } else {
+                $ramMb = $server->memory > 100000 ? (int) round($server->memory / (1024 * 1024)) : (int) $server->memory;
+                if ($ramMb > 0) {
+                    $plan = VpsPlan::where('ram', '>=', $ramMb)->orderBy('price', 'asc')->first();
+                    if ($plan) {
+                        $renewCost = (float) $plan->price;
+                    }
+                }
             }
-        }
 
-        if ((float) $user->credits < $renewCost) {
+            if ((float) $user->credits < $renewCost) {
+                return response()->json([
+                    'message' => 'Insufficient BOLTs to renew server. Required: ' . number_format($renewCost, 2) . ' BOLTs',
+                ], 400);
+            }
+
+            $freshUser = DB::transaction(function () use ($user, $server, $renewCost) {
+                // Re-read credits with a row lock to prevent race conditions
+                $freshUser = \Convoy\Models\User::lockForUpdate()->findOrFail($user->id);
+
+                if ((float) $freshUser->credits < $renewCost) {
+                    return null;
+                }
+
+                $freshUser->credits = (float) $freshUser->credits - $renewCost;
+                $freshUser->save();
+
+                $freshUser->creditTransactions()->create([
+                    'amount'       => -$renewCost,
+                    'type'         => 'deduction',
+                    'description'  => "Renewed VPS Instance: {$server->name} (+30 Days)",
+                    'reference_id' => 'RENEW-' . Str::upper(Str::random(8)),
+                ]);
+
+                $currentExpires = $server->expires_at ? Carbon::parse($server->expires_at) : Carbon::now();
+                if ($currentExpires->isPast()) {
+                    $currentExpires = Carbon::now();
+                }
+
+                $server->expires_at = $currentExpires->addDays(30);
+                $server->save();
+
+                return $freshUser;
+            });
+
+            if (!$freshUser) {
+                return response()->json([
+                    'message' => 'Insufficient BOLTs to renew server. Required: ' . number_format($renewCost, 2) . ' BOLTs',
+                ], 400);
+            }
+
+            try {
+                \Convoy\Facades\Activity::event('server:renew')
+                    ->actor($user)
+                    ->subject($server)
+                    ->description("Renewed VPS server '{$server->name}' for {$renewCost} BOLTs (+30 days)")
+                    ->property(['server_name' => $server->name, 'cost' => $renewCost, 'expires_at' => (string) $server->expires_at])
+                    ->withRequestMetadata()
+                    ->log();
+
+                \Convoy\Facades\Activity::event('bolts:spend-renew')
+                    ->actor($user)
+                    ->subject($server)
+                    ->description("Spent {$renewCost} BOLTs renewing VPS server '{$server->name}'")
+                    ->property(['amount' => $renewCost, 'server_name' => $server->name])
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $e) {}
+
+            $expiresIso = $server->expires_at instanceof \Carbon\Carbon
+                ? $server->expires_at->toIso8601String()
+                : \Carbon\Carbon::parse($server->expires_at)->toIso8601String();
+
             return response()->json([
-                'message' => 'Insufficient BOLTs to renew server. Required: ' . number_format($renewCost, 2) . ' BOLTs',
-            ], 400);
+                'success'      => true,
+                'message'      => "Server '{$server->name}' renewed for an additional 30 days!",
+                'expires_at'   => $expiresIso,
+                'user_credits' => (float) $freshUser->credits,
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['message' => 'Server not found or access denied.'], 404);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Server renewal failed', [
+                'server_id' => $id,
+                'user_id'   => $request->user()->id ?? null,
+                'error'     => $e->getMessage(),
+                'trace'     => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to process server renewal: ' . $e->getMessage(),
+            ], 500);
         }
-
-        $result = DB::transaction(function () use ($user, $server, $renewCost) {
-            // Re-read credits with a row lock to prevent race conditions
-            $freshUser = \Convoy\Models\User::lockForUpdate()->findOrFail($user->id);
-
-            if ((float) $freshUser->credits < $renewCost) {
-                throw new \Illuminate\Validation\ValidationException(
-                    validator([], []),
-                    response()->json([
-                        'message' => 'Insufficient BOLTs to renew server. Required: ' . number_format($renewCost, 2) . ' BOLTs',
-                    ], 400)
-                );
-            }
-
-            $freshUser->credits = (float) $freshUser->credits - $renewCost;
-            $freshUser->save();
-
-            $freshUser->creditTransactions()->create([
-            'amount'       => -$renewCost,
-            'type'         => 'deduction',
-            'description'  => "Renewed VPS Instance: {$server->name} (+30 Days)",
-            'reference_id' => 'RENEW-' . Str::upper(Str::random(8)),
-        ]);
-
-        $currentExpires = $server->expires_at ? Carbon::parse($server->expires_at) : Carbon::now();
-        if ($currentExpires->isPast()) {
-            $currentExpires = Carbon::now();
-        }
-
-        $server->expires_at = $currentExpires->addDays(30);
-        $server->save();
-
-        try {
-            \Convoy\Facades\Activity::event('server:renew')
-                ->actor($user)
-                ->subject($server)
-                ->description("Renewed VPS server '{$server->name}' for {$renewCost} BOLTs (+30 days)")
-                ->property(['server_name' => $server->name, 'cost' => $renewCost, 'expires_at' => $server->expires_at])
-                ->withRequestMetadata()
-                ->log();
-
-            \Convoy\Facades\Activity::event('bolts:spend-renew')
-                ->actor($user)
-                ->subject($server)
-                ->description("Spent {$renewCost} BOLTs renewing VPS server '{$server->name}'")
-                ->property(['amount' => $renewCost, 'server_name' => $server->name])
-                ->withRequestMetadata()
-                ->log();
-        } catch (\Throwable $e) {}
-
-        return response()->json([
-            'success'      => true,
-            'message'      => "Server '{$server->name}' renewed for an additional 30 days!",
-            'expires_at'   => $server->expires_at->toIso8601String(),
-            'user_credits' => (float) $user->credits,
-        ]);
     }
 }
