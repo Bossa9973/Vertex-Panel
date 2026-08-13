@@ -167,6 +167,37 @@ perform_update() {
     local src_dir
     src_dir=$(find "$tmp_dir" -maxdepth 1 -type d -not -path "$tmp_dir" | head -1)
 
+    # Set global & process Node memory limit to 8192 MB
+    export NODE_OPTIONS="--max-old-space-size=8192"
+    if ! grep -q "NODE_OPTIONS" /etc/environment 2>/dev/null; then
+        echo 'export NODE_OPTIONS="--max-old-space-size=8192"' >> /etc/environment 2>/dev/null || true
+    fi
+
+    # Detect changes BEFORE rsync overwrites INSTALL_DIR
+    FRONTEND_CHANGED=false
+    if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+        FRONTEND_CHANGED=true
+    else
+        for f in \
+            "${src_dir}/package.json" \
+            "${src_dir}/vite.config.ts" \
+            "${src_dir}/tailwind.config.js" \
+            "${src_dir}/postcss.config.js"; do
+            if [[ -f "$f" ]]; then
+                local_f="${INSTALL_DIR}/$(basename "$f")"
+                if [[ ! -f "$local_f" ]] || ! diff -q "$f" "$local_f" > /dev/null 2>&1; then
+                    FRONTEND_CHANGED=true
+                    break
+                fi
+            fi
+        done
+        if [[ "$FRONTEND_CHANGED" == false ]]; then
+            if ! diff -rq --exclude='*.map' "${src_dir}/resources/" "${INSTALL_DIR}/resources/" > /dev/null 2>&1; then
+                FRONTEND_CHANGED=true
+            fi
+        fi
+    fi
+
     # Sync files safely (preserving .env, storage, node_modules, vendor, update.sh, and user files)
     spinner_start "Syncing panel files"
     if rsync -a --delete \
@@ -205,106 +236,26 @@ perform_update() {
         fi
     fi
 
-    # Set global & process Node memory limit to 8192 MB
-    export NODE_OPTIONS="--max-old-space-size=8192"
-    if ! grep -q "NODE_OPTIONS" /etc/environment 2>/dev/null; then
-        echo 'export NODE_OPTIONS="--max-old-space-size=8192"' >> /etc/environment 2>/dev/null || true
-    fi
-
-    # Detect whether frontend files changed (resources/, package.json, vite.config.ts, tailwind.config.js)
-    FRONTEND_CHANGED=false
-    for f in \
-        "${src_dir}/package.json" \
-        "${src_dir}/vite.config.ts" \
-        "${src_dir}/tailwind.config.js" \
-        "${src_dir}/postcss.config.js"; do
-        if [[ -f "$f" ]]; then
-            local_f="${INSTALL_DIR}/$(basename "$f")"
-            if [[ ! -f "$local_f" ]] || ! diff -q "$f" "$local_f" > /dev/null 2>&1; then
-                FRONTEND_CHANGED=true
-                break
-            fi
-        fi
-    done
-    if [[ "$FRONTEND_CHANGED" == false ]]; then
-        # Deep-check: any file in resources/ changed?
-        if diff -rq --exclude='*.map' "${src_dir}/resources/" "${INSTALL_DIR}/resources/" > /dev/null 2>&1; then
-            info "No frontend changes detected — skipping npm install & build"
-        else
-            FRONTEND_CHANGED=true
-        fi
-    fi
-
-    # Detect whether composer.json / lock changed
-    COMPOSER_CHANGED=false
-    for f in "${src_dir}/composer.json" "${src_dir}/composer.lock"; do
-        if [[ -f "$f" ]]; then
-            local_f="${INSTALL_DIR}/$(basename "$f")"
-            if [[ ! -f "$local_f" ]] || ! diff -q "$f" "$local_f" > /dev/null 2>&1; then
-                COMPOSER_CHANGED=true
-                break
-            fi
-        fi
-    done
-
-    # Clean up downloaded zip (after diff checks are done)
+    # Clean up downloaded zip
     run_quietly rm -rf "$tmp_zip" "$tmp_dir"
 
-    # --- Parallel phase: Composer + npm install run simultaneously ---------------
-    local composer_log="/tmp/vertex_composer.log"
-    local npm_log="/tmp/vertex_npm.log"
-    local composer_pid="" npm_pid=""
-
-    if [[ "$COMPOSER_CHANGED" == true ]]; then
-        spinner_start "Updating PHP + Node.js dependencies in parallel"
-        composer install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}" \
-            > "$composer_log" 2>&1 &
-        composer_pid=$!
-    else
-        info "composer.json unchanged — skipping Composer install"
-    fi
+    # Always update Composer autoloader (takes 1.5s) to guarantee new PHP classes are autoloaded
+    run_or_fail "Updating PHP dependencies & autoloader" \
+        composer install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
 
     if [[ "$FRONTEND_CHANGED" == true ]]; then
-        if [[ -z "${composer_pid:-}" ]]; then
-            spinner_start "Updating Node.js dependencies"
-        fi
         if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
-            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline \
-                > "$npm_log" 2>&1 &
+            run_or_fail "Installing Node.js dependencies (offline cache)" \
+                npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
         else
-            npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund \
-                > "$npm_log" 2>&1 &
+            run_or_fail "Installing Node.js dependencies (full download)" \
+                npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
         fi
-        npm_pid=$!
-    fi
 
-    # Wait for both and check exit codes
-    if [[ -n "${composer_pid:-}" ]]; then
-        if ! wait "$composer_pid"; then
-            spinner_stop
-            error_msg "Composer install failed. See $composer_log"
-            cat "$composer_log" >> /tmp/vertex_update.log
-            return 1
-        fi
-    fi
-    if [[ -n "${npm_pid:-}" ]]; then
-        if ! wait "$npm_pid"; then
-            spinner_stop
-            error_msg "npm install failed. See $npm_log"
-            cat "$npm_log" >> /tmp/vertex_update.log
-            return 1
-        fi
-    fi
-
-    if [[ -n "${composer_pid:-}" || -n "${npm_pid:-}" ]]; then
-        spinner_stop
-        success "Dependencies installed"
-    fi
-
-    # Build frontend only if something changed
-    if [[ "$FRONTEND_CHANGED" == true ]]; then
         run_or_fail "Building frontend assets (Vite)" \
             npm run build --prefix "${INSTALL_DIR}"
+    else
+        info "No frontend changes detected — using precompiled Vite assets"
     fi
 
     # Laravel cache — clear stale, then re-cache
