@@ -8,6 +8,7 @@ use Convoy\Enums\Server\State;
 use Convoy\Enums\Server\Status;
 use Convoy\Jobs\Server\BuildServerJob;
 use Convoy\Jobs\Server\DeleteServerJob;
+use Convoy\Jobs\Server\EnsureGuestAgentJob;
 use Convoy\Jobs\Server\MonitorStateJob;
 use Convoy\Jobs\Server\SendPowerCommandJob;
 use Convoy\Jobs\Server\SyncBuildJob;
@@ -80,6 +81,9 @@ class ServerBuildDispatchService
                 ...$jobs,
                 new SendPowerCommandJob($deployment->server->id, PowerAction::START),
                 new MonitorStateJob($deployment->server->id, State::RUNNING),
+                // Wait for QEMU agent to come up, then enable it permanently.
+                // Guarantees the agent is ready before the server is marked active.
+                new EnsureGuestAgentJob($deployment->server->id),
             ];
 
             if (! empty($deployment->account_password)) {
@@ -93,6 +97,10 @@ class ServerBuildDispatchService
             // Then power on if user wants to start on completion
             if ($deployment->start_on_completion) {
                 $jobs[] = new SendPowerCommandJob($deployment->server->id, PowerAction::START);
+                // Wait for VM to be running, then confirm QEMU agent is up.
+                // This eliminates the "QEMU agent not responding" error on first tmate access.
+                $jobs[] = new MonitorStateJob($deployment->server->id, State::RUNNING);
+                $jobs[] = new EnsureGuestAgentJob($deployment->server->id);
             }
         }
 
