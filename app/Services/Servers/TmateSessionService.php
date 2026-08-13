@@ -3,6 +3,8 @@
 namespace Convoy\Services\Servers;
 
 use Convoy\Models\Server;
+use Convoy\Repositories\Proxmox\ProxmoxNodeRepository;
+use Convoy\Repositories\Proxmox\Server\ProxmoxConfigRepository;
 use Convoy\Repositories\Proxmox\Server\ProxmoxGuestAgentRepository;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Cache;
@@ -13,6 +15,9 @@ class TmateSessionService
     public function __construct(
         private ProxmoxGuestAgentRepository $guestAgentRepository,
         private ServerConsoleService $consoleService,
+        private ProxmoxNodeRepository $nodeRepository,
+        private CloudinitService $cloudinitService,
+        private ProxmoxConfigRepository $configRepository,
     ) {
     }
 
@@ -84,7 +89,10 @@ class TmateSessionService
         if (!$this->guestAgentRepository->ping()) {
             Cache::forget($dedupKey);
 
-            $notice = "QEMU Guest Agent is not active inside this VM operating system yet. Provided Proxmox Web Console access automatically. To enable tmate SSH, run: 'sudo apt update && sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent' inside the console.";
+            // Automatically attach cloud-init snippet to VM if absent so a reboot auto-installs qemu-guest-agent
+            $this->ensureCloudInitSnippetAttached($server);
+
+            $notice = "QEMU Guest Agent is not active inside this VM operating system yet. Provided Proxmox Web Console access automatically. You can open Web Console (noVNC) below, or click 'Auto-Enable & Reboot VM' to auto-install guest agent on boot.";
 
             return $this->getFallbackConsoleResult($server, $notice);
         }
@@ -253,5 +261,28 @@ class TmateSessionService
         }
 
         return $result;
+    }
+
+    /**
+     * Ensures cloud-init user-data snippet is uploaded and attached to cicustom for legacy VMs
+     * so that a reboot will automatically install qemu-guest-agent + tmate on boot.
+     */
+    private function ensureCloudInitSnippetAttached(Server $server): void
+    {
+        try {
+            $filename = "vertex-cloudinit-{$server->vmid}.yaml";
+            $yaml = $this->cloudinitService->generateCloudInitUserDataConfig($server);
+
+            $this->nodeRepository->setNode($server->node);
+            $this->nodeRepository->uploadSnippet($filename, $yaml);
+
+            $this->configRepository->setServer($server)->update([
+                'cicustom' => "user=local:snippets/{$filename}",
+            ]);
+
+            Log::info("Auto-attached cloud-init snippet for legacy VM {$server->vmid} on tmate request.");
+        } catch (\Throwable $e) {
+            Log::debug("Could not auto-attach snippet for legacy VM {$server->vmid}: {$e->getMessage()}");
+        }
     }
 }

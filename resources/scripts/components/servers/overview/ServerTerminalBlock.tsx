@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { ServerContext } from '@/state/server'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid'
-import { CheckIcon, ClipboardDocumentIcon, SparklesIcon, CommandLineIcon, LockClosedIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, ClipboardDocumentIcon, SparklesIcon, CommandLineIcon, LockClosedIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { Button, Modal } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 import http from '@/api/http'
+import updateState from '@/api/server/updateState'
 import Card from '@/components/elements/Card'
 
 const ServerTerminalBlock = () => {
@@ -24,6 +25,22 @@ const ServerTerminalBlock = () => {
     const [copiedSsh, setCopiedSsh] = useState<boolean>(false)
     const [secondsLeft, setSecondsLeft] = useState<number>(0)
     const [powerLockSeconds, setPowerLockSeconds] = useState<number>(0)
+    const [rebootLoading, setRebootLoading] = useState<boolean>(false)
+
+    const handleAutoEnableReboot = async () => {
+        setRebootLoading(true)
+        try {
+            await updateState(uuid, 'restart')
+            const lockUntil = Date.now() + 30000
+            localStorage.setItem(`power_lock_until_${uuid}`, String(lockUntil))
+            setPowerLockSeconds(30)
+            setModalOpened(false)
+        } catch (err) {
+            console.error('Failed to trigger reboot:', err)
+        } finally {
+            setRebootLoading(false)
+        }
+    }
 
     // Initial 5-minute boot lock
     useEffect(() => {
@@ -438,12 +455,20 @@ const ServerTerminalBlock = () => {
                             </div>
                         </div>
 
-                        <div className='flex justify-end gap-3 pt-2 border-t border-white/10'>
+                        <div className='flex flex-wrap justify-end gap-3 pt-2 border-t border-white/10'>
                             <Button
                                 variant='outline'
                                 onClick={() => setModalOpened(false)}
                             >
                                 Close
+                            </Button>
+                            <Button
+                                variant='outline'
+                                className='border-amber-500/40 text-amber-300 hover:bg-amber-500/10'
+                                loading={rebootLoading}
+                                onClick={handleAutoEnableReboot}
+                            >
+                                <ArrowPathIcon className='w-4 h-4 mr-1.5' /> Auto-Enable & Reboot VM
                             </Button>
                             <Button
                                 className='bg-blue-600 hover:bg-blue-500 text-white'
