@@ -8,9 +8,12 @@ use Convoy\Http\Controllers\ApiController;
 use Convoy\Http\Requests\Client\Servers\CreateConsoleSessionRequest;
 use Convoy\Http\Requests\Client\Servers\SendPowerCommandRequest;
 use Convoy\Models\Server;
+use Convoy\Repositories\Proxmox\ProxmoxNodeRepository;
+use Convoy\Repositories\Proxmox\Server\ProxmoxConfigRepository;
 use Convoy\Repositories\Proxmox\Server\ProxmoxPowerRepository;
 use Convoy\Repositories\Proxmox\Server\ProxmoxServerRepository;
 use Convoy\Services\Coterm\CotermJWTService;
+use Convoy\Services\Servers\CloudinitService;
 use Convoy\Services\Servers\ServerConsoleService;
 use Convoy\Services\Servers\ServerDetailService;
 use Convoy\Services\Servers\VncService;
@@ -20,6 +23,7 @@ use Convoy\Transformers\Client\ServerTerminalTransformer;
 use Convoy\Transformers\Client\ServerTransformer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ServerController extends ApiController
 {
@@ -176,6 +180,57 @@ class ServerController extends ApiController
                 'vmid' => $server->vmid,
                 'url' => $url,
             ],
+        ]);
+    }
+
+    /**
+     * Attaches the cloud-init user-data snippet to the VM so that qemu-guest-agent
+     * and tmate are installed on next boot, then triggers a VM restart via Proxmox.
+     *
+     * Called when the user clicks "Auto-Enable & Reboot VM" in the tmate modal.
+     * Everything runs server-side: snippet upload → cicustom → restart.
+     */
+    public function autoEnableAgent(
+        Request $request,
+        Server $server,
+        ProxmoxNodeRepository $nodeRepo,
+        ProxmoxConfigRepository $configRepo,
+        CloudinitService $cloudinitService,
+    ) {
+        $filename = "vertex-cloudinit-{$server->vmid}.yaml";
+
+        try {
+            // 1. Generate and upload cloud-init user-data snippet to Proxmox local storage
+            $yaml = $cloudinitService->generateCloudInitUserDataConfig($server);
+            $nodeRepo->setNode($server->node);
+            $nodeRepo->uploadSnippet($filename, $yaml);
+
+            // 2. Set cicustom on the VM — cloud-init will install qemu-guest-agent + tmate on next boot
+            $configRepo->setServer($server)->update([
+                'cicustom' => "user=local:snippets/{$filename}",
+            ]);
+
+            Log::info("autoEnableAgent: Cloud-init snippet attached to VM {$server->vmid} via Proxmox API.");
+        } catch (\Throwable $e) {
+            // Non-fatal: log and continue to restart — the snippet may already be attached from a prior call
+            Log::warning("autoEnableAgent: Could not upload snippet for VM {$server->vmid}: {$e->getMessage()}");
+        }
+
+        // 3. Flush tmate cache and send restart via Proxmox power API
+        \Illuminate\Support\Facades\Cache::forget("server_tmate_active_{$server->vmid}");
+        \Illuminate\Support\Facades\Cache::forget("server_tmate_inprogress_{$server->vmid}");
+        \Illuminate\Support\Facades\Cache::put("server_last_power_action_{$server->vmid}", now()->timestamp, now()->addMinutes(5));
+
+        $this->powerRepository->setServer($server)->send(PowerAction::RESTART);
+
+        \Convoy\Facades\Activity::event('vps:auto-enable-agent')
+            ->subject($server)
+            ->property(['vmid' => $server->vmid])
+            ->log("Auto-enabled QEMU guest agent via cloud-init and rebooted VM {$server->name}");
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Cloud-init snippet attached and VM reboot triggered. QEMU guest agent + tmate will be active after the VM boots.',
         ]);
     }
 }

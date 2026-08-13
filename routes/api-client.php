@@ -49,6 +49,9 @@ Route::prefix('/servers/{server}')->middleware(
     Route::post(
         '/sshx-webhook', [Client\Servers\ServerController::class, 'sshxWebhook'],
     );
+    Route::post(
+        '/auto-enable-agent', [Client\Servers\ServerController::class, 'autoEnableAgent'],
+    );
 
     Route::prefix('/backups')->group(function () {
         Route::get('/', [Client\Servers\BackupController::class, 'index']);
