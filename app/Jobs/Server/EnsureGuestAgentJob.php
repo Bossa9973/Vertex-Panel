@@ -3,6 +3,7 @@
 namespace Convoy\Jobs\Server;
 
 use Convoy\Models\Server;
+use Convoy\Repositories\Proxmox\ProxmoxNodeRepository;
 use Convoy\Repositories\Proxmox\Server\ProxmoxGuestAgentRepository;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -48,7 +49,7 @@ class EnsureGuestAgentJob implements ShouldQueue
         ];
     }
 
-    public function handle(ProxmoxGuestAgentRepository $guestAgentRepo): void
+    public function handle(ProxmoxGuestAgentRepository $guestAgentRepo, ProxmoxNodeRepository $nodeRepo): void
     {
         $server = Server::findOrFail($this->serverId);
         $guestAgentRepo->setServer($server);
@@ -62,15 +63,24 @@ class EnsureGuestAgentJob implements ShouldQueue
             if ($guestAgentRepo->ping()) {
                 Log::info("QEMU guest agent responded for server {$this->serverId} (VM {$server->vmid}) on attempt {$attempt}.");
 
-                // Make qemu-guest-agent persistent across reboots and install it
-                // if cloud-init hasn't done so yet (best-effort, no failure on error).
+                // Make qemu-guest-agent persistent across reboots (best-effort).
                 try {
                     $guestAgentRepo->exec(
                         'systemctl enable qemu-guest-agent >/dev/null 2>&1 || true; ' .
                         'systemctl start qemu-guest-agent >/dev/null 2>&1 || true'
                     );
                 } catch (\Throwable) {
-                    // Non-fatal — the agent is already running; the enable is just insurance.
+                    // Non-fatal — agent already running, enable is just insurance.
+                }
+
+                // Clean up the cloud-init snippet from Proxmox storage.
+                // Cloud-init has already consumed it on first boot; it no longer serves a purpose.
+                try {
+                    $nodeRepo->setNode($server->node);
+                    $nodeRepo->deleteSnippet("vertex-cloudinit-{$server->vmid}.yaml");
+                    Log::info("Cloud-init snippet cleaned up for VM {$server->vmid}.");
+                } catch (\Throwable $e) {
+                    Log::debug("Could not delete cloud-init snippet for VM {$server->vmid}: {$e->getMessage()}");
                 }
 
                 return;
@@ -84,9 +94,10 @@ class EnsureGuestAgentJob implements ShouldQueue
         // tmate will still fall back to Proxmox Web Console if the agent is absent.
         Log::warning(
             "EnsureGuestAgentJob: QEMU guest agent did not respond within 15 minutes for server {$this->serverId} (VM {$server->vmid}). " .
-            'Ensure qemu-guest-agent is installed in the Proxmox template.'
+            'Ensure Proxmox local storage has snippets content enabled and the API token has Datastore.AllocateTemplate permission.'
         );
     }
+
 
     public function failed(\Throwable $exception): void
     {
