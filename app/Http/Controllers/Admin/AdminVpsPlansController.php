@@ -2,10 +2,10 @@
 
 namespace Convoy\Http\Controllers\Admin;
 
-use Convoy\Http\Controllers\Controller;
 use Convoy\Models\VpsPlan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class AdminVpsPlansController extends Controller
 {
@@ -48,6 +48,8 @@ class AdminVpsPlansController extends Controller
                 ->log();
         } catch (\Throwable $e) {}
 
+        Cache::forget('deploy_options');
+
         return response()->json([
             'success' => true,
             'plan' => $plan,
@@ -59,6 +61,8 @@ class AdminVpsPlansController extends Controller
         $plan = VpsPlan::findOrFail($id);
         $planName = $plan->name;
         $plan->delete();
+
+        Cache::forget('deploy_options');
 
         try {
             \Convoy\Facades\Activity::event('admin:plan-delete')
