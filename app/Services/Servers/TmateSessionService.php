@@ -115,14 +115,6 @@ class TmateSessionService
         try {
             $this->guestAgentRepository->setServer($server);
 
-            // Re-verify agent is still alive immediately before exec.
-            // ping() already retries 3× internally, so this is a cheap guard
-            // against the agent dropping between the initial check and exec.
-            if (!$this->guestAgentRepository->ping()) {
-                $errorNotice = 'QEMU Guest Agent stopped responding before tmate could be launched. The Proxmox Web Console has been provided as fallback.';
-                return null;
-            }
-
             // Super-refined tmate launcher & self-healing daemon script:
             //  1. Ensure /tmp permissions
             //  2. Reload systemd and guarantee qemu-guest-agent stays active
