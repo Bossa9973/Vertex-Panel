@@ -37,7 +37,12 @@ const LoginContainer = () => {
         if (authFlashes && authFlashes.length > 0) {
             setErrorMessage(authFlashes[0].message)
         }
-    }, [flashes])
+        const params = new URLSearchParams(location.search)
+        const errorParam = params.get('error')
+        if (errorParam) {
+            setErrorMessage(errorParam)
+        }
+    }, [flashes, location.search])
 
     const handleSignIn = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault()

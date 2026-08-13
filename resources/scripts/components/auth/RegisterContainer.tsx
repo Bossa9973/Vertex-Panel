@@ -23,7 +23,12 @@ const RegisterContainer = () => {
 
     useEffect(() => {
         document.title = 'Create Account | Vertex'
-    }, [])
+        const params = new URLSearchParams(location.search)
+        const errorParam = params.get('error')
+        if (errorParam) {
+            clearAndAddHttpError(new Error(errorParam))
+        }
+    }, [location.search])
 
     const schema = z.object({
         name: z.string().nonempty('Full name is required'),
