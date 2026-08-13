@@ -10,6 +10,28 @@ use Convoy\Exceptions\Repository\Proxmox\ProxmoxConnectionException;
 class ProxmoxGuestAgentRepository extends ProxmoxRepository
 {
     /**
+     * Ping Guest Agent to verify if it is active and responding.
+     */
+    public function ping(): bool
+    {
+        try {
+            Assert::isInstanceOf($this->server, Server::class);
+
+            $response = $this->getHttpClient()
+                ->withUrlParameters([
+                    'node'   => $this->node->cluster,
+                    'server' => $this->server->vmid,
+                ])
+                ->post('/api2/json/nodes/{node}/qemu/{server}/agent/ping')
+                ->json();
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
      * Get Guest Agent status.
      *
      * @return mixed

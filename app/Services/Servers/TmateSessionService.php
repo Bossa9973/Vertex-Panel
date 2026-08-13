@@ -19,6 +19,12 @@ class TmateSessionService
      */
     public function createSession(Server $server): array
     {
+        // 0. Check for an existing active tmate session in cache for instant reconnect
+        $cachedSsh = Cache::get("server_tmate_active_{$server->vmid}");
+        if ($cachedSsh && is_string($cachedSsh) && !empty($cachedSsh)) {
+            return $this->formatResult($cachedSsh, $server);
+        }
+
         // 0a. Restrict tmate session launch during first 5 minutes (300 seconds) after server creation
         if ($server->created_at) {
             $secondsSinceCreation = $server->created_at->diffInSeconds(now(), false);
@@ -57,14 +63,14 @@ class TmateSessionService
             }
         }
 
-        // 0c. Enforce 30-second cooldown between requesting new tmate SSH sessions
+        // 0c. Enforce 15-second cooldown between requesting new tmate SSH sessions
         $lastTmateReq = Cache::get("server_last_tmate_req_{$server->vmid}");
         if ($lastTmateReq) {
             $elapsedSinceReq = now()->timestamp - (int) $lastTmateReq;
-            if ($elapsedSinceReq >= 0 && $elapsedSinceReq < 30) {
-                $remainingSeconds = 30 - $elapsedSinceReq;
+            if ($elapsedSinceReq >= 0 && $elapsedSinceReq < 15) {
+                $remainingSeconds = 15 - $elapsedSinceReq;
 
-                $notice = "A 30-second cooldown is enforced between requesting new tmate SSH sessions. Please wait {$remainingSeconds} second(s).";
+                $notice = "A brief 15-second cooldown is enforced between requesting new tmate SSH sessions. Please wait {$remainingSeconds} second(s).";
 
                 return [
                     'ssh_cmd' => null,
@@ -79,34 +85,43 @@ class TmateSessionService
         // Record timestamp of this new tmate SSH session request
         Cache::put("server_last_tmate_req_{$server->vmid}", now()->timestamp, now()->addMinutes(5));
 
-        // Clear any legacy stale cache key from before this fix (harmless no-op if already gone)
-        Cache::forget("server_tmate_ssh_{$server->vmid}");
-
         $dedupKey = "server_tmate_inprogress_{$server->vmid}";
 
-        // 1. Short dedup guard — if a spawn is already in-flight (within the last 2 s from a concurrent
-        //    request), wait briefly then fall through rather than double-spawning inside the VM.
+        // 1. Short dedup guard — if a spawn is already in-flight from a concurrent request, wait briefly
         if (Cache::get($dedupKey)) {
-            usleep(2200000); // wait 2.2 s for the in-flight spawn to complete
+            usleep(2000000); // wait 2.0 s
         }
 
-        // Mark spawn as in-flight for 2 s so concurrent requests don't double-spawn
         Cache::put($dedupKey, true, now()->addSeconds(2));
 
-        // 2. Proxmox QEMU Guest Agent — kills any existing tmate process, clears old socket/log,
-        //    installs tmate if missing (works for both fresh and already-running VMs), then starts
-        //    a brand-new session and writes the SSH command to /tmp/tmate.log.
+        // 2. Pre-check Proxmox QEMU Guest Agent connectivity
+        $this->guestAgentRepository->setServer($server);
+        if (!$this->guestAgentRepository->ping()) {
+            Cache::forget($dedupKey);
+
+            $notice = "QEMU Guest Agent is not responding inside this VM. Please ensure 'qemu-guest-agent' is installed and running inside your operating system (sudo apt update && sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent), or use the Web Console.";
+
+            return [
+                'ssh_cmd' => null,
+                'url' => null,
+                'notice' => $notice,
+                'restricted' => false,
+            ];
+        }
+
+        // 3. Proxmox QEMU Guest Agent — execute tmate installer & session spawner
         $sshCmd = $this->attemptProxmoxTmateExec($server, $errorNotice);
 
-        // Clear dedup flag immediately after spawn completes
         Cache::forget($dedupKey);
 
         if ($sshCmd) {
+            // Cache active SSH session for 2 hours for instant reconnect
+            Cache::put("server_tmate_active_{$server->vmid}", $sshCmd, now()->addHours(2));
             return $this->formatResult($sshCmd, $server);
         }
 
-        // 3. Fallback: Return informative diagnostic notice if agent fails/times out
-        $notice = $errorNotice ?: "QEMU Guest Agent is not responding or tmate connection timed out. Please ensure qemu-guest-agent is installed and running inside the VM (sudo systemctl start qemu-guest-agent).";
+        // 4. Return diagnostic notice if execution failed or timed out
+        $notice = $errorNotice ?: "QEMU Guest Agent timed out while launching tmate. Please verify network connectivity inside the VM and try again.";
         return $this->formatResult($notice, $server);
     }
 
@@ -118,8 +133,9 @@ class TmateSessionService
         try {
             $this->guestAgentRepository->setServer($server);
 
-            // Multi-distro auto-installer & robust tmate session spawner
+            // Multi-distro auto-installer, systemd agent enabler & robust tmate session spawner
             $execCmd = "export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; "
+                . "systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; "
                 . "pkill -9 tmate >/dev/null 2>&1 || true; "
                 . "rm -f /tmp/tmate.sock /tmp/tmate.log; "
                 . "if ! command -v tmate >/dev/null 2>&1; then "
@@ -179,7 +195,7 @@ class TmateSessionService
             Log::error("Proxmox Tmate Guest Agent Exec error for VM {$server->vmid}: {$msg}");
 
             if (Str::contains($msg, ['not running', 'Agent', 'agent', '500', 'connection', 'Communication'])) {
-                $errorNotice = "The VM is completing its first-boot initialization (cloud-init & QEMU agent). Please wait 30–60 seconds after booting, then try fetching the tmate session again.";
+                $errorNotice = "The VM QEMU Guest Agent is initializing. Please ensure 'qemu-guest-agent' service is running inside the VM.";
             } else {
                 $errorNotice = "Guest Agent execution error: {$msg}";
             }
@@ -199,4 +215,3 @@ class TmateSessionService
         ];
     }
 }
-
