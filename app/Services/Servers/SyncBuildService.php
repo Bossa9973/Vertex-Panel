@@ -83,22 +83,27 @@ readonly class SyncBuildService
      */
     private function applyCloudInitSnippet(Server $server): void
     {
-        $filename = "vertex-cloudinit-{$server->vmid}.yaml";
-        $yaml = $this->cloudinitService->generateCloudInitUserDataConfig($server);
+        $userFile = "vertex-cloudinit-{$server->vmid}.yaml";
+        $metaFile = "vertex-meta-{$server->vmid}.yaml";
 
         try {
             $this->nodeRepository->setNode($server->node);
-            $this->nodeRepository->uploadSnippet($filename, $yaml);
 
-            // Point the VM's cloud-init user-data at the newly uploaded snippet.
-            // cicustom=user=local:snippets/<file> overrides Proxmox's generated user-data
-            // and agent=1 ensures Proxmox QEMU Guest Agent communication channel is enabled.
+            // 1. Upload user-data snippet
+            $userYaml = $this->cloudinitService->generateCloudInitUserDataConfig($server);
+            $this->nodeRepository->uploadSnippet($userFile, $userYaml);
+
+            // 2. Upload meta-data snippet with unique instance-id
+            $metaYaml = $this->cloudinitService->generateCloudInitMetaDataConfig($server);
+            $this->nodeRepository->uploadSnippet($metaFile, $metaYaml);
+
+            // Point the VM's cloud-init at the uploaded snippets and enable agent: 1
             $this->allocationRepository->setServer($server)->update([
                 'agent' => 1,
-                'cicustom' => "user=local:snippets/{$filename}",
+                'cicustom' => "meta=local:snippets/{$metaFile},user=local:snippets/{$userFile}",
             ]);
 
-            Log::info("Cloud-init snippet uploaded for VM {$server->vmid}: local:snippets/{$filename}");
+            Log::info("Cloud-init meta & user snippets uploaded for VM {$server->vmid}");
         } catch (\Throwable $e) {
             // Non-fatal: if snippet upload fails (e.g. storage doesn't support snippets,
             // or API token lacks permission), log a warning and continue.

@@ -193,4 +193,16 @@ class CloudinitService
 
         return $yaml;
     }
+
+    /**
+     * Generates cloud-init meta-data with a unique instance-id.
+     * Changing the instance-id forces cloud-init to re-run on existing/already-deployed VMs!
+     */
+    public function generateCloudInitMetaDataConfig(Server $server): string
+    {
+        $instanceId = "vertex-vm-{$server->vmid}-" . now()->timestamp;
+        $hostname = $server->hostname ?: "vm-{$server->vmid}";
+
+        return "instance-id: {$instanceId}\nlocal-hostname: {$hostname}\n";
+    }
 }

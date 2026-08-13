@@ -197,23 +197,28 @@ class ServerController extends ApiController
         ProxmoxConfigRepository $configRepo,
         CloudinitService $cloudinitService,
     ) {
-        $filename = "vertex-cloudinit-{$server->vmid}.yaml";
+        $userFile = "vertex-cloudinit-{$server->vmid}.yaml";
+        $metaFile = "vertex-meta-{$server->vmid}.yaml";
 
         try {
-            // 1. Generate and upload cloud-init user-data snippet to Proxmox local storage
-            $yaml = $cloudinitService->generateCloudInitUserDataConfig($server);
             $nodeRepo->setNode($server->node);
-            $nodeRepo->uploadSnippet($filename, $yaml);
 
-            // 2. Set cicustom on the VM AND enable agent=1 in Proxmox VM hardware config
+            // 1. Upload user-data snippet (packages & runcmd)
+            $userYaml = $cloudinitService->generateCloudInitUserDataConfig($server);
+            $nodeRepo->uploadSnippet($userFile, $userYaml);
+
+            // 2. Upload meta-data snippet with unique instance-id (forces cloud-init re-run on existing VMs)
+            $metaYaml = $cloudinitService->generateCloudInitMetaDataConfig($server);
+            $nodeRepo->uploadSnippet($metaFile, $metaYaml);
+
+            // 3. Set cicustom on the VM AND enable agent=1 in Proxmox VM hardware config
             $configRepo->setServer($server)->update([
                 'agent' => 1,
-                'cicustom' => "user=local:snippets/{$filename}",
+                'cicustom' => "meta=local:snippets/{$metaFile},user=local:snippets/{$userFile}",
             ]);
 
-            Log::info("autoEnableAgent: Cloud-init snippet attached to VM {$server->vmid} via Proxmox API.");
+            Log::info("autoEnableAgent: Cloud-init meta & user snippets attached to VM {$server->vmid} via Proxmox API.");
         } catch (\Throwable $e) {
-            // Non-fatal: log and continue to restart — the snippet may already be attached from a prior call
             Log::warning("autoEnableAgent: Could not upload snippet for VM {$server->vmid}: {$e->getMessage()}");
         }
 
