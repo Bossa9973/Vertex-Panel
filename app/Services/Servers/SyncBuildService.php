@@ -92,8 +92,9 @@ readonly class SyncBuildService
 
             // Point the VM's cloud-init user-data at the newly uploaded snippet.
             // cicustom=user=local:snippets/<file> overrides Proxmox's generated user-data
-            // with our custom YAML that installs the guest agent on first boot.
+            // and agent=1 ensures Proxmox QEMU Guest Agent communication channel is enabled.
             $this->allocationRepository->setServer($server)->update([
+                'agent' => 1,
                 'cicustom' => "user=local:snippets/{$filename}",
             ]);
 
