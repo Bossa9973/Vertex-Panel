@@ -286,8 +286,10 @@ perform_update() {
     spinner_stop
     success "File permissions updated"
 
-    # Restart background services
+    # Restart background services & worker daemons
     spinner_start "Restarting background services & workers"
+    run_quietly php artisan horizon:terminate 2>/dev/null || true
+    run_quietly php artisan queue:restart 2>/dev/null || true
     local fpm_svc
     fpm_svc=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
     if [[ -n "$fpm_svc" ]]; then
