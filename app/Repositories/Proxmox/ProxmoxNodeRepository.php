@@ -53,10 +53,6 @@ class ProxmoxNodeRepository
     /**
      * Uploads a cloud-init user-data YAML file to Proxmox storage as a snippet.
      *
-     * Proxmox cloud-init requires the file to live on a storage that has
-     * the "snippets" content type enabled. The default "local" storage always
-     * satisfies this requirement on standard Proxmox installations.
-     *
      * @param  string  $filename  Snippet filename, e.g. "vertex-cloudinit-204.yaml"
      * @param  string  $yaml      Full YAML content of the cloud-init user-data file
      * @param  string  $storage   Proxmox storage name (default: "local")
@@ -65,25 +61,41 @@ class ProxmoxNodeRepository
     {
         Assert::isInstanceOf($this->node, Node::class);
 
-        // The Proxmox upload API requires multipart/form-data — do NOT send as JSON.
-        Http::withOptions([
-            'verify'          => $this->node->verify_tls,
-            'base_uri'        => "https://{$this->node->fqdn}:{$this->node->port}/",
-            'timeout'         => 30,
-            'connect_timeout' => config('convoy.guzzle.connect_timeout'),
-        ])
-        ->withHeaders([
-            'Authorization' => "PVEAPIToken={$this->node->token_id}={$this->node->secret}",
-            'Accept'        => 'application/json',
-        ])
-        ->throw(function (Response $response, RequestException $exception) {
-            throw new ProxmoxConnectionException($response, $exception);
-        })
-        ->attach('file', $yaml, $filename)   // multipart file field
-        ->post("/api2/json/nodes/{$this->node->cluster}/storage/{$storage}/upload", [
-            'content'  => 'snippets',
-            'filename' => $filename,
-        ]);
+        // Try 'local' first, then fallback to node's configured iso_storage if different
+        $storages = array_unique([$storage, 'local', $this->node->iso_storage ?? 'local']);
+        $lastException = null;
+
+        foreach ($storages as $targetStorage) {
+            try {
+                // Proxmox storage upload requires multipart/form-data with field name 'filename'
+                Http::withOptions([
+                    'verify'          => $this->node->verify_tls,
+                    'base_uri'        => "https://{$this->node->fqdn}:{$this->node->port}/",
+                    'timeout'         => 30,
+                    'connect_timeout' => config('convoy.guzzle.connect_timeout'),
+                ])
+                ->withHeaders([
+                    'Authorization' => "PVEAPIToken={$this->node->token_id}={$this->node->secret}",
+                    'Accept'        => 'application/json',
+                ])
+                ->throw(function (Response $response, RequestException $exception) {
+                    throw new ProxmoxConnectionException($response, $exception);
+                })
+                ->attach('filename', $yaml, $filename)
+                ->post("/api2/json/nodes/{$this->node->cluster}/storage/{$targetStorage}/upload", [
+                    'content' => 'snippets',
+                ]);
+
+                return;
+            } catch (\Throwable $e) {
+                $lastException = $e;
+                \Illuminate\Support\Facades\Log::debug("uploadSnippet attempt failed on {$targetStorage}: {$e->getMessage()}");
+            }
+        }
+
+        if ($lastException) {
+            throw $lastException;
+        }
     }
 
     /**

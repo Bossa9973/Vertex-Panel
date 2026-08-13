@@ -161,8 +161,11 @@ packages:
   - tmate
 
 runcmd:
-  # 1. Enable QEMU Guest Agent daemon
-  - systemctl enable --now qemu-guest-agent
+  - systemctl daemon-reload || true
+  - systemctl enable --now qemu-guest-agent || true
+  - systemctl start qemu-guest-agent || true
+  - service qemu-guest-agent start || true
+  - /etc/init.d/qemu-guest-agent start || true
 YAML;
     }
 }

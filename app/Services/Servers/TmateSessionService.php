@@ -129,17 +129,21 @@ class TmateSessionService
                 return null;
             }
 
-            // Reliable tmate launcher:
-            //  1. Ensure qemu-guest-agent is enabled (self-healing)
-            //  2. Kill any stale tmate process / socket
-            //  3. Auto-install tmate if missing (multi-distro)
-            //  4. Start a detached tmate session
-            //  5. Use `tmate wait tmate-ready` — blocks until tmate.io connection
-            //     is established (the correct approach, avoids the polling-before-ready race)
-            //  6. Write the SSH connection string to /tmp/tmate.log
+            // Super-refined tmate launcher & self-healing daemon script:
+            //  1. Ensure /tmp permissions
+            //  2. Reload systemd and guarantee qemu-guest-agent stays active
+            //  3. Clean up stale sessions
+            //  4. Auto-install tmate across any distro if missing
+            //  5. Start detached session with explicit socket
+            //  6. Wait until tmate connection is established
+            //  7. Extract SSH connection string to /tmp/tmate.log
             $execCmd = "export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; "
+                . "chmod 1777 /tmp 2>/dev/null || true; "
+                . "systemctl daemon-reload >/dev/null 2>&1 || true; "
                 . "systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; "
-                . "pkill -9 tmate >/dev/null 2>&1 || true; "
+                . "systemctl start qemu-guest-agent >/dev/null 2>&1 || true; "
+                . "service qemu-guest-agent start >/dev/null 2>&1 || true; "
+                . "pkill -9 -f tmate >/dev/null 2>&1 || true; "
                 . "rm -f /tmp/tmate.sock /tmp/tmate.log /tmp/tmate_err.log; "
                 . "if ! command -v tmate >/dev/null 2>&1; then "
                 . "  if command -v apt-get >/dev/null 2>&1; then "

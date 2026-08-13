@@ -205,8 +205,9 @@ class ServerController extends ApiController
             $nodeRepo->setNode($server->node);
             $nodeRepo->uploadSnippet($filename, $yaml);
 
-            // 2. Set cicustom on the VM — cloud-init will install qemu-guest-agent + tmate on next boot
+            // 2. Set cicustom on the VM AND enable agent=1 in Proxmox VM hardware config
             $configRepo->setServer($server)->update([
+                'agent' => 1,
                 'cicustom' => "user=local:snippets/{$filename}",
             ]);
 
