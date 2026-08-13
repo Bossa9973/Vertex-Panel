@@ -18,6 +18,7 @@ const ServerTerminalBlock = () => {
 
     const [terminalMode, setTerminalMode] = useState<'both' | 'sshx'>('both')
     const [sshCmd, setSshCmd] = useState<string | null>(null)
+    const [noticeMsg, setNoticeMsg] = useState<string | null>(null)
     const [tmateLoading, setTmateLoading] = useState<boolean>(false)
     const [modalOpened, setModalOpened] = useState<boolean>(false)
     const [copiedSsh, setCopiedSsh] = useState<boolean>(false)
@@ -115,10 +116,15 @@ const ServerTerminalBlock = () => {
                 const cmd = data.ssh_cmd || data.url
                 if (cmd) {
                     setSshCmd(cmd)
+                    setNoticeMsg(null)
                     setModalOpened(true)
                     const lockUntil = Date.now() + 30000
                     localStorage.setItem(`power_lock_until_${uuid}`, String(lockUntil))
                     setPowerLockSeconds(30)
+                } else if (data.notice || data.fallback_console) {
+                    setSshCmd(null)
+                    setNoticeMsg(data.notice || 'QEMU Guest Agent is not active inside this VM operating system yet.')
+                    setModalOpened(true)
                 }
             }
         } catch (err: any) {
@@ -390,6 +396,64 @@ const ServerTerminalBlock = () => {
                                     <ClipboardDocumentIcon className='w-4 h-4 mr-1.5' /> Copy SSH
                                 </Button>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {!sshCmd && noticeMsg && (
+                    <div className='space-y-5 font-sans pt-2'>
+                        <div className='p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2'>
+                            <div className='flex items-center gap-2 text-amber-300 font-bold text-xs'>
+                                <LockClosedIcon className='w-4 h-4 text-amber-400' />
+                                <span>QEMU Guest Agent Required for tmate</span>
+                            </div>
+                            <p className='text-xs text-amber-200/90 leading-relaxed'>
+                                {noticeMsg}
+                            </p>
+                        </div>
+
+                        <div className='bg-neutral-950 p-4 rounded-xl border border-white/10 space-y-3'>
+                            <div className='flex items-center justify-between text-xs font-bold text-gray-200'>
+                                <span>1-Click Agent Enable Command:</span>
+                                {copiedSsh && (
+                                    <span className='text-emerald-400 flex items-center gap-1 text-xs'>
+                                        <CheckIcon className='w-3.5 h-3.5' /> Copied!
+                                    </span>
+                                )}
+                            </div>
+                            <div className='flex items-center gap-2'>
+                                <input
+                                    type='text'
+                                    readOnly
+                                    value='sudo apt update && sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent'
+                                    className='w-full text-xs font-mono bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-amber-300 select-all focus:outline-none'
+                                />
+                                <Button
+                                    size='sm'
+                                    className='bg-amber-600 hover:bg-amber-500 text-white shrink-0'
+                                    onClick={() => copySshToClipboard('sudo apt update && sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent')}
+                                >
+                                    <ClipboardDocumentIcon className='w-4 h-4 mr-1.5' /> Copy
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className='flex justify-end gap-3 pt-2 border-t border-white/10'>
+                            <Button
+                                variant='outline'
+                                onClick={() => setModalOpened(false)}
+                            >
+                                Close
+                            </Button>
+                            <Button
+                                className='bg-blue-600 hover:bg-blue-500 text-white'
+                                onClick={() => {
+                                    setModalOpened(false)
+                                    launch('novnc', true)
+                                }}
+                            >
+                                <ArrowTopRightOnSquareIcon className='w-4 h-4 mr-1.5' /> Open Web Console (noVNC)
+                            </Button>
                         </div>
                     </div>
                 )}
