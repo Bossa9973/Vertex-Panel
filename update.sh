@@ -167,12 +167,14 @@ perform_update() {
     local src_dir
     src_dir=$(find "$tmp_dir" -maxdepth 1 -type d -not -path "$tmp_dir" | head -1)
 
-    # Sync files safely (preserving .env, storage, update.sh, and user files)
+    # Sync files safely (preserving .env, storage, node_modules, vendor, update.sh, and user files)
     spinner_start "Syncing panel files"
     if rsync -a --delete \
         --exclude='.env' \
         --exclude='storage/' \
         --exclude='public/storage' \
+        --exclude='node_modules/' \
+        --exclude='vendor/' \
         --exclude='.git/' \
         --exclude='update.sh' \
         --exclude='install.sh' \
@@ -216,9 +218,9 @@ perform_update() {
     run_or_fail "Updating PHP dependencies (Composer)" \
         composer install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
 
-    # Node dependencies and build
+    # Node dependencies and build (prefer offline cache to avoid downloading 300MB node_modules again)
     run_or_fail "Installing Node.js dependencies" \
-        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
+        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
 
     run_or_fail "Building frontend assets (Vite)" \
         npm run build --prefix "${INSTALL_DIR}"

@@ -1153,12 +1153,12 @@ case "${1:-}" in
         unzip -q -o "$tmp_zip" -d "$tmp_dir"
         src_dir=$(find "$tmp_dir" -maxdepth 1 -type d -not -path "$tmp_dir" | head -1)
         php "${INSTALL_DIR}/artisan" down --no-interaction || true
-        rsync -a --delete --exclude='.env' --exclude='storage/' "${src_dir}/" "${INSTALL_DIR}/"
+        rsync -a --delete --exclude='.env' --exclude='storage/' --exclude='node_modules/' --exclude='vendor/' "${src_dir}/" "${INSTALL_DIR}/"
         chown -R www-data:www-data "${INSTALL_DIR}" 2>/dev/null || true
         chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" 2>/dev/null || true
         php -d memory_limit=-1 $(which composer) install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
         export NODE_OPTIONS="--max-old-space-size=8192"
-        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
+        npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
         npm run build --prefix "${INSTALL_DIR}"
         if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
             (cd "${INSTALL_DIR}" && npx vite build) || true
