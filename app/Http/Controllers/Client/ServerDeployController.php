@@ -385,8 +385,6 @@ class ServerDeployController extends Controller
                 'expires_at'   => $expiresIso,
                 'user_credits' => (float) $freshUser->credits,
             ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json(['message' => 'Server not found or access denied.'], 404);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Server renewal failed', [
                 'server_id' => $id,
@@ -396,8 +394,9 @@ class ServerDeployController extends Controller
             ]);
 
             return response()->json([
+                'success' => false,
                 'message' => 'Failed to process server renewal: ' . $e->getMessage(),
-            ], 500);
+            ], 400);
         }
     }
 }
