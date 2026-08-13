@@ -70,7 +70,7 @@ return [
     |
     */
 
-    'middleware' => ['web'],
+    'middleware' => ['web', 'auth', \Convoy\Http\Middleware\AdminAuthenticate::class],
 
     /*
     |--------------------------------------------------------------------------
