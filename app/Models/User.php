@@ -88,26 +88,37 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
 
     public function toReactObject(): array
     {
-        $data = Collection::make($this->toArray())->except(['id'])->toArray();
-        $data['credits'] = (float) ($this->credits ?? 0);
-        $data['discord_id'] = $this->discord_id;
-        $data['discord_username'] = $this->discord_username;
-        $data['google_id'] = $this->google_id;
-        $data['google_email'] = $this->google_email;
-        $data['primary_auth_provider'] = $this->primary_auth_provider ?? 'email';
-        $data['hide_ip_in_audit'] = (bool) $this->hide_ip_in_audit;
-        $data['is_reseller'] = (bool) $this->is_reseller;
-        $data['reseller_notes'] = $this->reseller_notes;
-        $data['reseller_plan_type'] = $this->reseller_plan_type;
+        try {
+            $data = Collection::make($this->toArray())->except(['id'])->toArray();
+        } catch (\Throwable $e) {
+            $data = [];
+        }
 
-        // Include admin role permissions so the frontend can hide nav items
+        $data['credits'] = (float) ($this->credits ?? 0);
+        $data['discord_id'] = $this->discord_id ?? null;
+        $data['discord_username'] = $this->discord_username ?? null;
+        $data['google_id'] = $this->google_id ?? null;
+        $data['google_email'] = $this->google_email ?? null;
+        $data['primary_auth_provider'] = $this->primary_auth_provider ?? 'email';
+        $data['hide_ip_in_audit'] = (bool) ($this->hide_ip_in_audit ?? false);
+        $data['is_reseller'] = (bool) ($this->is_reseller ?? false);
+        $data['reseller_notes'] = $this->reseller_notes ?? null;
+        $data['reseller_plan_type'] = $this->reseller_plan_type ?? null;
+
+        // Include admin role permissions safely
         if ($this->root_admin) {
-            $role = $this->adminRole;
-            $data['admin_role_id']   = $this->admin_role_id;
-            $data['admin_role_name'] = $role?->name;
-            $data['admin_role_color'] = $role?->color;
-            // null role = Super Admin / full access (all perms granted)
-            $data['admin_permissions'] = $role ? ($role->permissions ?? []) : null;
+            try {
+                $role = $this->adminRole;
+                $data['admin_role_id']   = $this->admin_role_id ?? null;
+                $data['admin_role_name'] = $role?->name;
+                $data['admin_role_color'] = $role?->color;
+                $data['admin_permissions'] = $role ? ($role->permissions ?? []) : null;
+            } catch (\Throwable $e) {
+                $data['admin_role_id']    = null;
+                $data['admin_role_name']  = null;
+                $data['admin_role_color'] = null;
+                $data['admin_permissions'] = null;
+            }
         } else {
             $data['admin_role_id']    = null;
             $data['admin_role_name']  = null;

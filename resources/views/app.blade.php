@@ -16,7 +16,7 @@
     <!-- Inject Data -->
     @if(!is_null(Auth::user()))
         <script>
-            window.ConvoyUser = {!! json_encode(Auth::user()->toReactObject()) !!};
+            window.ConvoyUser = {!! json_encode(optional(Auth::user())->toReactObject() ?? []) !!};
         </script>
     @endif
 
