@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { ServerContext } from '@/state/server'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid'
 import { CheckIcon, ClipboardDocumentIcon, SparklesIcon, CommandLineIcon, LockClosedIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
@@ -26,23 +26,75 @@ const ServerTerminalBlock = () => {
     const [secondsLeft, setSecondsLeft] = useState<number>(0)
     const [powerLockSeconds, setPowerLockSeconds] = useState<number>(0)
     const [rebootLoading, setRebootLoading] = useState<boolean>(false)
+    const [isRepairing, setIsRepairing] = useState<boolean>(false)
+    const [repairStatusText, setRepairStatusText] = useState<string>('')
+    const pollingRef = useRef<NodeJS.Timeout | null>(null)
+
+    // Cleanup polling on unmount
+    useEffect(() => {
+        return () => {
+            if (pollingRef.current) {
+                clearInterval(pollingRef.current)
+            }
+        }
+    }, [])
 
     const handleAutoEnableReboot = async () => {
         setRebootLoading(true)
+        setIsRepairing(true)
+        setRepairStatusText('Configuring QEMU Guest Agent & Cloud-Init...')
+
         try {
             const res = await http.post(`/api/client/servers/${uuid}/auto-enable-agent`)
             if (res.data?.data?.ssh_cmd || res.data?.data?.url) {
                 setSshCmd(res.data.data.ssh_cmd || res.data.data.url)
                 setNoticeMsg(null)
+                setIsRepairing(false)
+                setRebootLoading(false)
                 setModalOpened(true)
-            } else {
-                setModalOpened(false)
+                return
             }
+
+            // If power cycle was triggered, poll every 3 seconds for up to 60s
+            setRepairStatusText('VM power-cycled. Initializing services & connecting to tmate...')
+            let attempts = 0
+            const maxAttempts = 20
+
+            if (pollingRef.current) {
+                clearInterval(pollingRef.current)
+            }
+
+            pollingRef.current = setInterval(async () => {
+                attempts++
+                try {
+                    const pollRes = await http.post(`/api/client/servers/${uuid}/create-sshx-session`)
+                    const pollData = pollRes.data?.data
+                    const cmd = pollData?.ssh_cmd || pollData?.url
+                    if (cmd) {
+                        if (pollingRef.current) clearInterval(pollingRef.current)
+                        setSshCmd(cmd)
+                        setNoticeMsg(null)
+                        setIsRepairing(false)
+                        setRebootLoading(false)
+                        return
+                    }
+                } catch {
+                    // Still booting/initializing
+                }
+
+                if (attempts >= maxAttempts) {
+                    if (pollingRef.current) clearInterval(pollingRef.current)
+                    setIsRepairing(false)
+                    setRebootLoading(false)
+                    setNoticeMsg('VM was reconfigured and power-cycled. Initialization may take an additional moment. Please click "1-Click Repair & Start tmate" again or try connecting shortly.')
+                }
+            }, 3000)
+
         } catch (err: any) {
             console.error('Failed to auto-enable agent and reboot:', err)
-            setModalOpened(false)
-        } finally {
+            setIsRepairing(false)
             setRebootLoading(false)
+            setNoticeMsg('Unable to automatically reconfigure VM. Please ensure the server is powered on and try again.')
         }
     }
 
@@ -330,11 +382,27 @@ const ServerTerminalBlock = () => {
                     },
                 }}
             >
-                {sshCmd && (
+                {isRepairing && (
+                    <div className='py-8 flex flex-col items-center justify-center space-y-4 text-center font-sans'>
+                        <div className='relative flex items-center justify-center'>
+                            <div className='w-12 h-12 rounded-full border-2 border-blue-500/20 border-t-blue-500 animate-spin' />
+                            <ArrowPathIcon className='w-5 h-5 text-blue-400 absolute' />
+                        </div>
+                        <div className='space-y-1.5 max-w-sm'>
+                            <h4 className='text-sm font-semibold text-gray-100'>Repairing VM & Starting tmate</h4>
+                            <p className='text-xs text-gray-400 leading-relaxed'>
+                                {repairStatusText || 'Configuring QEMU Guest Agent and initializing tmate session. The SSH command will appear here automatically once ready.'}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {!isRepairing && sshCmd && (
                     <div className='space-y-5 font-sans pt-2'>
-                        <p className='text-xs text-gray-300 leading-relaxed'>
-                            Copy and paste the SSH command below into your terminal application to connect directly to this VPS instance.
-                        </p>
+                        <div className='p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-2 text-emerald-300 font-medium text-xs'>
+                            <CheckIcon className='w-4 h-4 text-emerald-400 shrink-0' />
+                            <span>tmate SSH session is active! Run the command below in any terminal to connect:</span>
+                        </div>
 
                         {/* SSH Command Box */}
                         <div className='bg-neutral-950 p-4 rounded-xl border border-white/10 space-y-2'>
@@ -344,7 +412,7 @@ const ServerTerminalBlock = () => {
                                 </span>
                                 {copiedSsh && (
                                     <span className='text-emerald-400 flex items-center gap-1 text-xs'>
-                                        <CheckIcon className='w-3.5 h-3.5' /> Copied!
+                                        <CheckIcon className='w-3.5 h-3.5' /> Copied to clipboard!
                                     </span>
                                 )}
                             </div>
@@ -364,10 +432,19 @@ const ServerTerminalBlock = () => {
                                 </Button>
                             </div>
                         </div>
+
+                        <div className='flex justify-end pt-2 border-t border-white/10'>
+                            <Button
+                                variant='outline'
+                                onClick={() => setModalOpened(false)}
+                            >
+                                Close
+                            </Button>
+                        </div>
                     </div>
                 )}
 
-                {!sshCmd && noticeMsg && (
+                {!isRepairing && !sshCmd && noticeMsg && (
                     <div className='space-y-5 font-sans pt-2'>
                         <div className='p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2'>
                             <div className='flex items-center gap-2 text-amber-300 font-bold text-xs'>
@@ -379,31 +456,9 @@ const ServerTerminalBlock = () => {
                             </p>
                         </div>
 
-                        <div className='bg-neutral-950 p-4 rounded-xl border border-white/10 space-y-3'>
-                            <div className='flex items-center justify-between text-xs font-bold text-gray-200'>
-                                <span>1-Click Agent Enable Command:</span>
-                                {copiedSsh && (
-                                    <span className='text-emerald-400 flex items-center gap-1 text-xs'>
-                                        <CheckIcon className='w-3.5 h-3.5' /> Copied!
-                                    </span>
-                                )}
-                            </div>
-                            <div className='flex items-center gap-2'>
-                                <input
-                                    type='text'
-                                    readOnly
-                                    value='sudo apt update && sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent'
-                                    className='w-full text-xs font-mono bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-amber-300 select-all focus:outline-none'
-                                />
-                                <Button
-                                    size='sm'
-                                    className='bg-amber-600 hover:bg-amber-500 text-white shrink-0'
-                                    onClick={() => copySshToClipboard('sudo apt update && sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent')}
-                                >
-                                    <ClipboardDocumentIcon className='w-4 h-4 mr-1.5' /> Copy
-                                </Button>
-                            </div>
-                        </div>
+                        <p className='text-xs text-gray-400 leading-relaxed'>
+                            Clicking <strong>1-Click Repair & Start tmate</strong> will automatically enable the QEMU guest agent in Proxmox VM hardware and trigger service initialization so tmate is active.
+                        </p>
 
                         <div className='flex flex-wrap justify-end gap-3 pt-2 border-t border-white/10'>
                             <Button
@@ -417,7 +472,7 @@ const ServerTerminalBlock = () => {
                                 loading={rebootLoading}
                                 onClick={handleAutoEnableReboot}
                             >
-                                <ArrowPathIcon className='w-4 h-4 mr-1.5' /> Auto-Enable & Reboot VM
+                                <ArrowPathIcon className='w-4 h-4 mr-1.5' /> 1-Click Repair & Start tmate
                             </Button>
                         </div>
                     </div>

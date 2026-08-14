@@ -224,12 +224,31 @@ class ServerController extends ApiController
 
             return response()->json([
                 'success' => true,
+                'rebooting' => false,
                 'message' => 'QEMU guest agent is active. Tmate SSH session spawned successfully.',
                 'data' => $session,
             ]);
         }
 
-        // 3. If guest agent is not yet responding, upload snippet and reboot
+        // 3. Fallback: check if direct SSH is reachable to start agent + tmate live without reboot
+        $liveSshCmd = $tmateService->attemptSshTmateExec($server);
+        if ($liveSshCmd) {
+            \Illuminate\Support\Facades\Cache::put("server_tmate_active_{$server->vmid}", $liveSshCmd, now()->addHours(2));
+
+            \Convoy\Facades\Activity::event('vps:auto-enable-agent')
+                ->subject($server)
+                ->property(['vmid' => $server->vmid])
+                ->log("Auto-enabled tmate session via direct SSH for VM {$server->name}");
+
+            return response()->json([
+                'success' => true,
+                'rebooting' => false,
+                'message' => 'Tmate SSH session spawned successfully via direct SSH.',
+                'data' => $tmateService->formatResult($liveSshCmd, $server),
+            ]);
+        }
+
+        // 4. If neither is reachable, attach cloud-init snippets with unique instance-id and power cycle
         $userFile = "vertex-cloudinit-{$server->vmid}.yaml";
         $metaFile = "vertex-meta-{$server->vmid}.yaml";
 
@@ -259,16 +278,22 @@ class ServerController extends ApiController
         \Illuminate\Support\Facades\Cache::forget("server_tmate_active_{$server->vmid}");
         \Illuminate\Support\Facades\Cache::forget("server_tmate_inprogress_{$server->vmid}");
 
-        $this->powerRepository->setServer($server)->send(PowerAction::RESTART);
+        // Use RESET power action to guarantee QEMU re-attaches the virtio guest agent channel
+        try {
+            $this->powerRepository->setServer($server)->send(PowerAction::RESET);
+        } catch (\Throwable) {
+            $this->powerRepository->setServer($server)->send(PowerAction::RESTART);
+        }
 
         \Convoy\Facades\Activity::event('vps:auto-enable-agent')
             ->subject($server)
             ->property(['vmid' => $server->vmid])
-            ->log("Auto-enabled QEMU guest agent via cloud-init and rebooted VM {$server->name}");
+            ->log("Auto-enabled QEMU guest agent via cloud-init and power-cycled VM {$server->name}");
 
         return response()->json([
             'success' => true,
-            'message' => 'Cloud-init snippet attached and VM reboot triggered. QEMU guest agent + tmate will be active after the VM boots.',
+            'rebooting' => true,
+            'message' => 'Cloud-init snippet attached and VM power cycle triggered. Initializing guest agent and tmate...',
         ]);
     }
 }
