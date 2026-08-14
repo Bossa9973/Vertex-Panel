@@ -22,220 +22,188 @@ class TmateSessionService
     }
 
     /**
-     * Spawns an on-demand tmate SSH session inside the VM via Proxmox QEMU Guest Agent,
-     * or falls back seamlessly to Proxmox Web Console if QEMU agent is not active.
+     * Spawns an on-demand tmate SSH session inside the VM via Proxmox QEMU Guest Agent or direct SSH fallback.
      */
     public function createSession(Server $server): array
     {
-        // 0. Check for an existing active tmate session in cache for instant reconnect
-        $cachedSsh = Cache::get("server_tmate_active_{$server->vmid}");
-        if ($cachedSsh && is_string($cachedSsh) && !empty($cachedSsh)) {
-            return $this->formatResult($cachedSsh, $server);
-        }
+        $cacheKey = "server_tmate_active_{$server->vmid}";
 
-        // 0a. Restrict tmate session launch during first 5 minutes (300 seconds) after server creation (cloud-init initial install)
-        if ($server->created_at) {
-            $secondsSinceCreation = $server->created_at->diffInSeconds(now(), false);
-            if ($secondsSinceCreation >= 0 && $secondsSinceCreation < 300) {
-                $remainingSeconds = 300 - (int) $secondsSinceCreation;
-                $minutes = (int) ceil($remainingSeconds / 60);
-
-                $notice = "tmate terminal access is restricted for the first 5 minutes after server creation to ensure Cloud-Init finishes initial system setup and package configuration properly. Please wait approximately {$minutes} minute(s) ({$remainingSeconds}s remaining).";
-
-                return $this->getFallbackConsoleResult($server, $notice, true, $remainingSeconds);
+        // 1. Return cached active SSH command if generated within expiration period
+        if ($cachedSsh = Cache::get($cacheKey)) {
+            if (is_string($cachedSsh) && !empty($cachedSsh)) {
+                return $this->formatResult($cachedSsh, $server);
             }
         }
 
-        $dedupKey = "server_tmate_inprogress_{$server->vmid}";
+        // 2. Proxmox QEMU Guest Agent — execute tmate installer & session spawner
+        $sshCmd = $this->attemptProxmoxTmateExec($server);
 
-        // 1. Short dedup guard — if a spawn is already in-flight from a concurrent request, wait briefly
-        if (Cache::get($dedupKey)) {
-            usleep(1500000); // wait 1.5 s
-        }
-
-        Cache::put($dedupKey, true, now()->addSeconds(3));
-
-        // 2. Proxmox QEMU Guest Agent — attempt tmate execution directly
-        $sshCmd = $this->attemptProxmoxTmateExec($server, $errorNotice);
-
-        // 3. Fallback: attempt direct SSH
+        // 3. Direct SSH fallback if guest agent is unreachable
         if (!$sshCmd) {
             $sshCmd = $this->attemptSshTmateExec($server);
         }
 
-        Cache::forget($dedupKey);
-
         if ($sshCmd) {
-            // Cache active SSH session for 2 hours for instant reconnect
-            Cache::put("server_tmate_active_{$server->vmid}", $sshCmd, now()->addHours(2));
+            Cache::put($cacheKey, $sshCmd, now()->addHours(2));
             return $this->formatResult($sshCmd, $server);
         }
 
-        // 4. If agent was absent, auto-attach snippet so reboot installs it
+        // 4. Ensure cloud-init snippet is attached so VM has qemu-guest-agent configured on reboot
         $this->ensureCloudInitSnippetAttached($server);
 
-        $notice = $errorNotice ?: "QEMU Guest Agent is not responding inside this VM. Please ensure the VM is running and 'qemu-guest-agent' service is active.";
-        return $this->getFallbackConsoleResult($server, $notice);
+        // 5. Informative fallback notice
+        return [
+            'ssh_cmd'     => null,
+            'url'         => null,
+            'notice'      => "QEMU Guest Agent is not responding inside this VM. Please ensure the VM is running and 'qemu-guest-agent' service is active.",
+            'server_vmid' => $server->vmid,
+            'server_uuid' => $server->uuid,
+            'server_name' => $server->name,
+        ];
     }
 
     /**
      * Executes the exact tmate command via Proxmox QEMU Guest Agent and reads /tmp/tmate.log.
      */
-    private function attemptProxmoxTmateExec(Server $server, ?string &$errorNotice = null): ?string
+    private function attemptProxmoxTmateExec(Server $server): ?string
     {
         try {
             $this->guestAgentRepository->setServer($server);
 
-            // Ensure agent: 1 is set in Proxmox hardware configuration
+            // Ensure agent: 1 is enabled in Proxmox hardware configuration
             try {
                 $this->configRepository->setServer($server)->update(['agent' => 1]);
             } catch (\Throwable) {}
 
-            // 1. Check if guest agent is responsive
+            // Pre-check if guest agent is responsive
             if (!$this->guestAgentRepository->ping()) {
-                $errorNotice = "QEMU Guest Agent is not responding inside this VM. Please ensure the VM is running and guest agent is enabled.";
                 return null;
             }
 
-            // 2. First check if a healthy session is already recorded in /tmp/tmate.log
+            // 1. First check if a healthy session is already recorded in /tmp/tmate.log
             try {
                 $existingLog = $this->guestAgentRepository->fileRead('/tmp/tmate.log');
                 $existingCmd = $this->decodeFileContent($existingLog);
                 if (!empty($existingCmd) && (Str::startsWith($existingCmd, 'ssh ') || Str::contains($existingCmd, '@tmate.io'))) {
-                    Log::info("Reusing existing active tmate session from /tmp/tmate.log for VM {$server->vmid}: {$existingCmd}");
+                    Log::info("Reusing active tmate session from /tmp/tmate.log for VM {$server->vmid}: {$existingCmd}");
                     return $existingCmd;
                 }
             } catch (\Throwable) {}
 
-            // 3. Comprehensive launcher & self-healing tmate script:
-            //  - Ensures /tmp permissions
-            //  - Checks if existing /tmp/tmate.sock is active and reusable
-            //  - Fast downloads official static binary if missing (0.5s), with distro package fallback
-            //  - Launches detached session and waits for tmate connection
-            //  - Writes SSH command to /tmp/tmate.log
-            $execCmd = <<<'BASH'
-#!/bin/sh
-export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-chmod 1777 /tmp 2>/dev/null || true
-
-# 1. Quick check for existing healthy tmate session
-if [ -S /tmp/tmate.sock ]; then
-    SSH_EXISTING=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' 2>/dev/null || true)
-    if [ -n "$SSH_EXISTING" ] && echo "$SSH_EXISTING" | grep -q 'ssh '; then
-        echo "$SSH_EXISTING" > /tmp/tmate.log
-        chmod 644 /tmp/tmate.log 2>/dev/null || true
-        exit 0
-    fi
-fi
-
-# 2. Cleanup stale files if socket is dead
-rm -f /tmp/tmate.sock /tmp/tmate.log /tmp/tmate_err.log
-pkill -9 -f "tmate -S /tmp/tmate.sock" 2>/dev/null || true
-
-# 3. Ensure tmate binary is present (fast static binary download first)
-if ! command -v tmate >/dev/null 2>&1; then
-    ARCH=$(uname -m)
-    TMATE_TAR="tmate-2.4.0-static-linux-amd64.tar.xz"
-    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-        TMATE_TAR="tmate-2.4.0-static-linux-arm64v8.tar.xz"
-    elif [ "$ARCH" = "armv7l" ]; then
-        TMATE_TAR="tmate-2.4.0-static-linux-arm32v7.tar.xz"
-    elif [ "$ARCH" = "i686" ] || [ "$ARCH" = "i386" ]; then
-        TMATE_TAR="tmate-2.4.0-static-linux-i386.tar.xz"
-    fi
-
-    mkdir -p /tmp/tmate_dl
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --connect-timeout 5 --max-time 15 "https://github.com/tmate-io/tmate/releases/download/2.4.0/${TMATE_TAR}" -o "/tmp/tmate_dl/${TMATE_TAR}" 2>/dev/null || true
-    elif command -v wget >/dev/null 2>&1; then
-        wget -q --timeout=15 "https://github.com/tmate-io/tmate/releases/download/2.4.0/${TMATE_TAR}" -O "/tmp/tmate_dl/${TMATE_TAR}" 2>/dev/null || true
-    fi
-
-    if [ -f "/tmp/tmate_dl/${TMATE_TAR}" ]; then
-        tar -xJf "/tmp/tmate_dl/${TMATE_TAR}" -C /tmp/tmate_dl 2>/dev/null || true
-        cp /tmp/tmate_dl/tmate-*/tmate /usr/local/bin/tmate 2>/dev/null || cp /tmp/tmate_dl/tmate /usr/local/bin/tmate 2>/dev/null || true
-        chmod 755 /usr/local/bin/tmate 2>/dev/null || true
-        rm -rf /tmp/tmate_dl
-    fi
-fi
-
-# Fallback to package manager if static download failed
-if ! command -v tmate >/dev/null 2>&1; then
-    if command -v apt-get >/dev/null 2>&1; then
-        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate curl ca-certificates xz-utils >/dev/null 2>&1 || true
-    elif command -v apk >/dev/null 2>&1; then
-        apk add --no-cache tmate curl ca-certificates xz >/dev/null 2>&1 || true
-    elif command -v dnf >/dev/null 2>&1; then
-        dnf install -y epel-release tmate curl ca-certificates xz >/dev/null 2>&1 || true
-    elif command -v yum >/dev/null 2>&1; then
-        yum install -y epel-release tmate curl ca-certificates xz >/dev/null 2>&1 || true
-    elif command -v pacman >/dev/null 2>&1; then
-        pacman -Sy --noconfirm tmate curl ca-certificates xz >/dev/null 2>&1 || true
-    fi
-fi
-
-# 4. Launch detached session
-tmate -S /tmp/tmate.sock new-session -d 2>/tmp/tmate_err.log || true
-
-# 5. Poll for tmate-ready
-for i in $(seq 1 30); do
-    tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true
-    SSH_STR=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' 2>/dev/null || true)
-    if [ -n "$SSH_STR" ] && echo "$SSH_STR" | grep -q 'ssh '; then
-        echo "$SSH_STR" > /tmp/tmate.log
-        chmod 644 /tmp/tmate.log 2>/dev/null || true
-        exit 0
-    fi
-    sleep 0.3
-done
-BASH;
-            // Write runner script directly inside VM to avoid any shell escaping issues
-            try {
-                $this->guestAgentRepository->fileWrite('/tmp/vertex_tmate.sh', $execCmd, true);
-            } catch (\Throwable $wEx) {
-                Log::debug("fileWrite /tmp/vertex_tmate.sh failed for VM {$server->vmid}: {$wEx->getMessage()}");
-            }
+            // 2. Comprehensive launcher & self-healing tmate script:
+            $execCmd = "export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; "
+                . "chmod 1777 /tmp 2>/dev/null || true; "
+                . "if [ -S /tmp/tmate.sock ]; then "
+                . "  SSH_EXISTING=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' 2>/dev/null || true); "
+                . "  if [ -n \"\$SSH_EXISTING\" ] && echo \"\$SSH_EXISTING\" | grep -q 'ssh '; then "
+                . "    echo \"\$SSH_EXISTING\" > /tmp/tmate.log; "
+                . "    chmod 644 /tmp/tmate.log 2>/dev/null || true; "
+                . "    exit 0; "
+                . "  fi; "
+                . "fi; "
+                . "pkill -9 tmate >/dev/null 2>&1 || true; "
+                . "rm -f /tmp/tmate.sock /tmp/tmate.log; "
+                . "if ! command -v tmate >/dev/null 2>&1; then "
+                . "  (curl -fsSL --connect-timeout 5 https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz -o /tmp/tmate.tar.xz 2>/dev/null && tar -xJf /tmp/tmate.tar.xz -C /tmp 2>/dev/null && cp /tmp/tmate-*/tmate /usr/local/bin/tmate 2>/dev/null && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || true; "
+                . "  if ! command -v tmate >/dev/null 2>&1; then "
+                . "    (DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) 2>/dev/null || true; "
+                . "  fi; "
+                . "fi; "
+                . "tmate -S /tmp/tmate.sock new-session -d >/dev/null 2>&1 || true; "
+                . "for i in $(seq 1 40); do "
+                . "  tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' > /tmp/tmate.log 2>/dev/null || true; "
+                . "  if grep -q '@' /tmp/tmate.log 2>/dev/null; then chmod 644 /tmp/tmate.log 2>/dev/null; exit 0; fi; "
+                . "  sleep 0.25; "
+                . "done";
 
             // Execute script via Proxmox QEMU Guest Agent
-            $this->guestAgentRepository->exec('/bin/sh /tmp/vertex_tmate.sh');
+            $this->guestAgentRepository->exec($execCmd);
 
-            // Poll /tmp/tmate.log for up to 30 seconds (60 × 500 ms)
-            for ($attempt = 1; $attempt <= 60; $attempt++) {
-                usleep(500000); // 500 ms
+            // Poll /tmp/tmate.log for up to 10 seconds (33 × 300 ms)
+            for ($attempt = 1; $attempt <= 33; $attempt++) {
+                usleep(300000); // 300 ms
 
                 try {
                     $fileData = $this->guestAgentRepository->fileRead('/tmp/tmate.log');
                     $content = $this->decodeFileContent($fileData);
 
                     if (!empty($content) && (Str::startsWith($content, 'ssh ') || Str::contains($content, '@tmate.io'))) {
-                        Log::info("Tmate session established for VM {$server->vmid} on poll attempt {$attempt}: {$content}");
+                        Log::info("Tmate session established for VM {$server->vmid} on attempt {$attempt}: {$content}");
                         return $content;
                     }
                 } catch (\Throwable) {
                     // /tmp/tmate.log not written yet — keep waiting
                 }
             }
+        } catch (\Throwable $e) {
+            Log::error("Proxmox Tmate Guest Agent Exec error for VM {$server->vmid}: " . $e->getMessage());
+        }
 
-            // After polling without a result, check tmate stderr log for diagnosis
-            try {
-                $errData = $this->guestAgentRepository->fileRead('/tmp/tmate_err.log');
-                $errContent = $this->decodeFileContent($errData);
-                if (!empty($errContent)) {
-                    Log::warning("Tmate launch failed for VM {$server->vmid}. tmate stderr: {$errContent}");
-                    $errorNotice = 'tmate could not connect: ' . Str::limit($errContent, 120);
+        return null;
+    }
+
+    /**
+     * Direct SSH fallback if guest agent is not yet reachable.
+     */
+    public function attemptSshTmateExec(Server $server): ?string
+    {
+        try {
+            $server->loadMissing('addresses');
+            $primaryAddress = $server->addresses->where('is_primary', true)->first()
+                ?? $server->addresses->first();
+
+            $ip = $primaryAddress?->address;
+            if (empty($ip)) {
+                return null;
+            }
+
+            $config = collect($this->configRepository->setServer($server)->getConfig());
+            $password = $config->where('key', '=', 'cipassword')->first()['value'] ?? null;
+
+            if (empty($password)) {
+                return null;
+            }
+
+            $ssh = new \phpseclib3\Net\SSH2($ip, 22, 4);
+            $ssh->setTimeout(15);
+
+            if (!$ssh->login('root', $password)) {
+                return null;
+            }
+
+            $cmd = 'export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; '
+                . 'chmod 1777 /tmp 2>/dev/null || true; '
+                . 'if ! command -v qemu-ga >/dev/null 2>&1; then '
+                . '  DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true; '
+                . '  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qemu-guest-agent >/dev/null 2>&1 || true; '
+                . 'fi; '
+                . 'systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; '
+                . 'if ! command -v tmate >/dev/null 2>&1; then '
+                . '  (curl -fsSL --connect-timeout 5 "https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || true; '
+                . 'fi; '
+                . 'pkill -9 -f tmate >/dev/null 2>&1 || true; '
+                . 'rm -f /tmp/tmate.sock /tmp/tmate.log; '
+                . 'tmate -S /tmp/tmate.sock new-session -d 2>/dev/null || true; '
+                . 'tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true; '
+                . 'tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}" 2>/dev/null || true';
+
+            $output = trim((string) $ssh->exec($cmd));
+
+            if (!empty($output)) {
+                $lines = explode("\n", $output);
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if (Str::startsWith($line, 'ssh ') || Str::contains($line, '@tmate.io')) {
+                        Log::info("Tmate session spawned via direct SSH for VM {$server->vmid}: {$line}");
+                        try {
+                            $this->configRepository->setServer($server)->update(['agent' => 1]);
+                        } catch (\Throwable) {}
+                        return $line;
+                    }
                 }
-            } catch (\Throwable) {
             }
         } catch (\Throwable $e) {
-            $msg = $e->getMessage();
-            Log::error("Proxmox Tmate Guest Agent Exec error for VM {$server->vmid}: {$msg}");
-
-            if (Str::containsAny($msg, ['not running', 'Agent', 'agent', '500', 'connection', 'Communication'])) {
-                $errorNotice = "QEMU Guest Agent is not responding. Please ensure 'qemu-guest-agent' is installed and running inside the VM.";
-            } else {
-                $errorNotice = "Guest Agent execution error: {$msg}";
-            }
+            Log::debug("attemptSshTmateExec fallback failed for VM {$server->vmid}: {$e->getMessage()}");
         }
 
         return null;
@@ -263,49 +231,12 @@ BASH;
     private function formatResult(string $sshCmd, Server $server): array
     {
         return [
-            'ssh_cmd' => $sshCmd,
-            'url' => $sshCmd,
+            'ssh_cmd'     => $sshCmd,
+            'url'         => $sshCmd,
             'server_vmid' => $server->vmid,
             'server_uuid' => $server->uuid,
             'server_name' => $server->name,
         ];
-    }
-
-    /**
-     * Fallback result when QEMU guest agent is inactive.
-     */
-    private function getFallbackConsoleResult(Server $server, string $notice, bool $restricted = false, int $remainingSeconds = 0): array
-    {
-        $result = [
-            'ssh_cmd'           => null,
-            'url'               => null,
-            'notice'            => $notice,
-            'restricted'        => $restricted,
-            'remaining_seconds' => $remainingSeconds,
-            'fallback_console'  => false,
-            'server_vmid'       => $server->vmid,
-            'server_uuid'       => $server->uuid,
-            'server_name'       => $server->name,
-        ];
-
-        try {
-            $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'terminal_console_mode')->first();
-            $mode = $setting?->value ?? 'both';
-
-            if ($mode === 'both') {
-                $credentials = $this->consoleService->createConsoleUserCredentials($server);
-                $result['fallback_console'] = true;
-                $result['console_ticket']   = $credentials->ticket;
-                $result['console_vmid']     = $server->vmid;
-                $result['console_node']     = $server->node->cluster;
-                $result['console_fqdn']     = $server->node->fqdn;
-                $result['console_port']     = $server->node->port;
-            }
-        } catch (\Throwable $ex) {
-            Log::warning("Could not generate fallback console ticket for server {$server->id}: " . $ex->getMessage());
-        }
-
-        return $result;
     }
 
     /**
@@ -335,85 +266,5 @@ BASH;
         } catch (\Throwable $e) {
             Log::debug("Could not auto-attach cloud-init snippet for server {$server->id}: {$e->getMessage()}");
         }
-    }
-
-    /**
-     * Fallback: connect directly to the guest via SSH (using primary IP + root password)
-     * and retrieve the live tmate SSH command when Proxmox QEMU Agent is not yet active.
-     */
-    public function attemptSshTmateExec(Server $server): ?string
-    {
-        try {
-            // 1. Get primary IP address of the server
-            $server->loadMissing('addresses');
-            $primaryAddress = $server->addresses->where('is_primary', true)->first()
-                ?? $server->addresses->first();
-
-            $ip = $primaryAddress?->address;
-            if (empty($ip)) {
-                return null;
-            }
-
-            // 2. Retrieve root password from Proxmox cloud-init config
-            $config = collect($this->configRepository->setServer($server)->getConfig());
-            $password = $config->where('key', '=', 'cipassword')->first()['value'] ?? null;
-
-            if (empty($password)) {
-                return null;
-            }
-
-            // 3. Connect via phpseclib3 SSH2 with a 4s connection timeout
-            $ssh = new \phpseclib3\Net\SSH2($ip, 22, 4);
-            $ssh->setTimeout(20);
-
-            if (!$ssh->login('root', $password)) {
-                return null;
-            }
-
-            // 4. Execute self-healing setup and tmate launcher
-            $cmd = 'export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; '
-                . 'chmod 1777 /tmp 2>/dev/null || true; '
-                . 'if ! command -v qemu-ga >/dev/null 2>&1; then '
-                . '  DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true; '
-                . '  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qemu-guest-agent >/dev/null 2>&1 || true; '
-                . 'fi; '
-                . 'systemctl daemon-reload >/dev/null 2>&1 || true; '
-                . 'systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; '
-                . 'systemctl start qemu-guest-agent >/dev/null 2>&1 || true; '
-                . 'if ! command -v tmate >/dev/null 2>&1; then '
-                . '  (curl -fsSL --connect-timeout 5 "https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || true; '
-                . 'fi; '
-                . 'if ! command -v tmate >/dev/null 2>&1; then '
-                . '  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate >/dev/null 2>&1 || true; '
-                . 'fi; '
-                . 'pkill -9 -f tmate >/dev/null 2>&1 || true; '
-                . 'rm -f /tmp/tmate.sock /tmp/tmate.log; '
-                . 'tmate -S /tmp/tmate.sock new-session -d 2>/dev/null || true; '
-                . 'tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true; '
-                . 'tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}" 2>/dev/null || true';
-
-            $output = trim((string) $ssh->exec($cmd));
-
-            if (!empty($output)) {
-                $lines = explode("\n", $output);
-                foreach ($lines as $line) {
-                    $line = trim($line);
-                    if (Str::startsWith($line, 'ssh ') || Str::contains($line, '@tmate.io')) {
-                        Log::info("Tmate session successfully spawned via direct SSH fallback for VM {$server->vmid}");
-
-                        // Also ensure agent: 1 is enabled in Proxmox hardware config
-                        try {
-                            $this->configRepository->setServer($server)->update(['agent' => 1]);
-                        } catch (\Throwable) {}
-
-                        return $line;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::debug("attemptSshTmateExec fallback failed for VM {$server->vmid}: {$e->getMessage()}");
-        }
-
-        return null;
     }
 }
