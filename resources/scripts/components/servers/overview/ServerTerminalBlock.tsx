@@ -30,16 +30,17 @@ const ServerTerminalBlock = () => {
     const handleAutoEnableReboot = async () => {
         setRebootLoading(true)
         try {
-            // Backend: uploads cloud-init snippet to Proxmox local storage,
-            // sets cicustom on the VM, then triggers restart via Proxmox API.
-            // On boot, cloud-init installs qemu-guest-agent + tmate automatically.
-            await http.post(`/api/client/servers/${uuid}/auto-enable-agent`)
-            const lockUntil = Date.now() + 30000
-            localStorage.setItem(`power_lock_until_${uuid}`, String(lockUntil))
-            setPowerLockSeconds(30)
-            setModalOpened(false)
+            const res = await http.post(`/api/client/servers/${uuid}/auto-enable-agent`)
+            if (res.data?.data?.ssh_cmd || res.data?.data?.url) {
+                setSshCmd(res.data.data.ssh_cmd || res.data.data.url)
+                setNoticeMsg(null)
+                setModalOpened(true)
+            } else {
+                setModalOpened(false)
+            }
         } catch (err: any) {
             console.error('Failed to auto-enable agent and reboot:', err)
+            setModalOpened(false)
         } finally {
             setRebootLoading(false)
         }

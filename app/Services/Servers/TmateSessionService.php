@@ -33,7 +33,7 @@ class TmateSessionService
             return $this->formatResult($cachedSsh, $server);
         }
 
-        // 0a. Restrict tmate session launch during first 5 minutes (300 seconds) after server creation
+        // 0a. Restrict tmate session launch during first 5 minutes (300 seconds) after server creation (cloud-init initial install)
         if ($server->created_at) {
             $secondsSinceCreation = $server->created_at->diffInSeconds(now(), false);
             if ($secondsSinceCreation >= 0 && $secondsSinceCreation < 300) {
@@ -46,43 +46,14 @@ class TmateSessionService
             }
         }
 
-        // 0b. Restrict tmate session launch during first 30 seconds after server boot/power action
-        $lastPowerAction = Cache::get("server_last_power_action_{$server->vmid}") ?? Cache::get("server_last_boot_{$server->vmid}");
-        if ($lastPowerAction) {
-            $elapsedSincePower = now()->timestamp - (int) $lastPowerAction;
-            if ($elapsedSincePower >= 0 && $elapsedSincePower < 30) {
-                $remainingSeconds = 30 - $elapsedSincePower;
-
-                $notice = "tmate terminal access is temporarily restricted for 30 seconds after server boot/power action to allow system services and QEMU guest agent to initialize properly. Please wait {$remainingSeconds} second(s).";
-
-                return $this->getFallbackConsoleResult($server, $notice, true, $remainingSeconds);
-            }
-        }
-
-        // 0c. Enforce 15-second cooldown between requesting new tmate SSH sessions
-        $lastTmateReq = Cache::get("server_last_tmate_req_{$server->vmid}");
-        if ($lastTmateReq) {
-            $elapsedSinceReq = now()->timestamp - (int) $lastTmateReq;
-            if ($elapsedSinceReq >= 0 && $elapsedSinceReq < 15) {
-                $remainingSeconds = 15 - $elapsedSinceReq;
-
-                $notice = "A brief 15-second cooldown is enforced between requesting new tmate SSH sessions. Please wait {$remainingSeconds} second(s).";
-
-                return $this->getFallbackConsoleResult($server, $notice, true, $remainingSeconds);
-            }
-        }
-
-        // Record timestamp of this new tmate SSH session request
-        Cache::put("server_last_tmate_req_{$server->vmid}", now()->timestamp, now()->addMinutes(5));
-
         $dedupKey = "server_tmate_inprogress_{$server->vmid}";
 
         // 1. Short dedup guard — if a spawn is already in-flight from a concurrent request, wait briefly
         if (Cache::get($dedupKey)) {
-            usleep(2000000); // wait 2.0 s
+            usleep(1500000); // wait 1.5 s
         }
 
-        Cache::put($dedupKey, true, now()->addSeconds(2));
+        Cache::put($dedupKey, true, now()->addSeconds(3));
 
         // 2. Proxmox QEMU Guest Agent — attempt tmate execution directly
         $sshCmd = $this->attemptProxmoxTmateExec($server, $errorNotice);
@@ -115,19 +86,35 @@ class TmateSessionService
         try {
             $this->guestAgentRepository->setServer($server);
 
+            // Ensure agent: 1 is set in Proxmox hardware configuration
+            try {
+                $this->configRepository->setServer($server)->update(['agent' => 1]);
+            } catch (\Throwable) {}
+
             // 1. Check if guest agent is responsive
             if (!$this->guestAgentRepository->ping()) {
                 $errorNotice = "QEMU Guest Agent is not responding inside this VM. Please ensure the VM is running and guest agent is enabled.";
                 return null;
             }
 
-            // 2. Comprehensive launcher & self-healing tmate script:
+            // 2. First check if a healthy session is already recorded in /tmp/tmate.log
+            try {
+                $existingLog = $this->guestAgentRepository->fileRead('/tmp/tmate.log');
+                $existingCmd = $this->decodeFileContent($existingLog);
+                if (!empty($existingCmd) && (Str::startsWith($existingCmd, 'ssh ') || Str::contains($existingCmd, '@tmate.io'))) {
+                    Log::info("Reusing existing active tmate session from /tmp/tmate.log for VM {$server->vmid}: {$existingCmd}");
+                    return $existingCmd;
+                }
+            } catch (\Throwable) {}
+
+            // 3. Comprehensive launcher & self-healing tmate script:
             //  - Ensures /tmp permissions
             //  - Checks if existing /tmp/tmate.sock is active and reusable
-            //  - Installs tmate via distro package manager or official static binary fallback
+            //  - Fast downloads official static binary if missing (0.5s), with distro package fallback
             //  - Launches detached session and waits for tmate connection
             //  - Writes SSH command to /tmp/tmate.log
             $execCmd = <<<'BASH'
+#!/bin/sh
 export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 chmod 1777 /tmp 2>/dev/null || true
 
@@ -142,28 +129,10 @@ if [ -S /tmp/tmate.sock ]; then
 fi
 
 # 2. Cleanup stale files if socket is dead
-pkill -9 -f "tmate -S /tmp/tmate.sock" 2>/dev/null || true
 rm -f /tmp/tmate.sock /tmp/tmate.log /tmp/tmate_err.log
+pkill -9 -f "tmate -S /tmp/tmate.sock" 2>/dev/null || true
 
-# 3. Ensure tmate binary is present
-if ! command -v tmate >/dev/null 2>&1; then
-    if command -v apt-get >/dev/null 2>&1; then
-        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate curl ca-certificates xz-utils >/dev/null 2>&1 || true
-    elif command -v apk >/dev/null 2>&1; then
-        apk add --no-cache tmate curl ca-certificates xz >/dev/null 2>&1 || true
-    elif command -v dnf >/dev/null 2>&1; then
-        dnf install -y epel-release >/dev/null 2>&1 || true
-        dnf install -y tmate curl ca-certificates xz >/dev/null 2>&1 || true
-    elif command -v yum >/dev/null 2>&1; then
-        yum install -y epel-release >/dev/null 2>&1 || true
-        yum install -y tmate curl ca-certificates xz >/dev/null 2>&1 || true
-    elif command -v pacman >/dev/null 2>&1; then
-        pacman -Sy --noconfirm tmate curl ca-certificates xz >/dev/null 2>&1 || true
-    fi
-fi
-
-# 4. Static binary fallback if package manager failed
+# 3. Ensure tmate binary is present (fast static binary download first)
 if ! command -v tmate >/dev/null 2>&1; then
     ARCH=$(uname -m)
     TMATE_TAR="tmate-2.4.0-static-linux-amd64.tar.xz"
@@ -177,24 +146,40 @@ if ! command -v tmate >/dev/null 2>&1; then
 
     mkdir -p /tmp/tmate_dl
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --connect-timeout 8 --max-time 20 "https://github.com/tmate-io/tmate/releases/download/2.4.0/${TMATE_TAR}" -o "/tmp/tmate_dl/${TMATE_TAR}" 2>/dev/null || true
+        curl -fsSL --connect-timeout 5 --max-time 15 "https://github.com/tmate-io/tmate/releases/download/2.4.0/${TMATE_TAR}" -o "/tmp/tmate_dl/${TMATE_TAR}" 2>/dev/null || true
     elif command -v wget >/dev/null 2>&1; then
-        wget -q --timeout=20 "https://github.com/tmate-io/tmate/releases/download/2.4.0/${TMATE_TAR}" -O "/tmp/tmate_dl/${TMATE_TAR}" 2>/dev/null || true
+        wget -q --timeout=15 "https://github.com/tmate-io/tmate/releases/download/2.4.0/${TMATE_TAR}" -O "/tmp/tmate_dl/${TMATE_TAR}" 2>/dev/null || true
     fi
 
     if [ -f "/tmp/tmate_dl/${TMATE_TAR}" ]; then
         tar -xJf "/tmp/tmate_dl/${TMATE_TAR}" -C /tmp/tmate_dl 2>/dev/null || true
         cp /tmp/tmate_dl/tmate-*/tmate /usr/local/bin/tmate 2>/dev/null || cp /tmp/tmate_dl/tmate /usr/local/bin/tmate 2>/dev/null || true
-        chmod +x /usr/local/bin/tmate 2>/dev/null || true
+        chmod 755 /usr/local/bin/tmate 2>/dev/null || true
         rm -rf /tmp/tmate_dl
     fi
 fi
 
-# 5. Launch detached session
+# Fallback to package manager if static download failed
+if ! command -v tmate >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate curl ca-certificates xz-utils >/dev/null 2>&1 || true
+    elif command -v apk >/dev/null 2>&1; then
+        apk add --no-cache tmate curl ca-certificates xz >/dev/null 2>&1 || true
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y epel-release tmate curl ca-certificates xz >/dev/null 2>&1 || true
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y epel-release tmate curl ca-certificates xz >/dev/null 2>&1 || true
+    elif command -v pacman >/dev/null 2>&1; then
+        pacman -Sy --noconfirm tmate curl ca-certificates xz >/dev/null 2>&1 || true
+    fi
+fi
+
+# 4. Launch detached session
 tmate -S /tmp/tmate.sock new-session -d 2>/tmp/tmate_err.log || true
 
-# 6. Poll for tmate-ready
-for i in $(seq 1 25); do
+# 5. Poll for tmate-ready
+for i in $(seq 1 30); do
     tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true
     SSH_STR=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' 2>/dev/null || true)
     if [ -n "$SSH_STR" ] && echo "$SSH_STR" | grep -q 'ssh '; then
@@ -202,11 +187,11 @@ for i in $(seq 1 25); do
         chmod 644 /tmp/tmate.log 2>/dev/null || true
         exit 0
     fi
-    sleep 0.4
+    sleep 0.3
 done
 BASH;
 
-            // Execute command via Proxmox QEMU Guest Agent API
+            // Execute script via Proxmox QEMU Guest Agent
             $this->guestAgentRepository->exec($execCmd);
 
             // Poll /tmp/tmate.log for up to 30 seconds (60 × 500 ms)

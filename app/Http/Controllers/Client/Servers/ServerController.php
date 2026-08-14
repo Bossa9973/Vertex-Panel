@@ -188,7 +188,7 @@ class ServerController extends ApiController
      * and tmate are installed on next boot, then triggers a VM restart via Proxmox.
      *
      * Called when the user clicks "Auto-Enable & Reboot VM" in the tmate modal.
-     * Everything runs server-side: snippet upload → cicustom → restart.
+     * If guest agent is already active, spawns the tmate session directly without reboot.
      */
     public function autoEnableAgent(
         Request $request,
@@ -197,21 +197,54 @@ class ServerController extends ApiController
         ProxmoxConfigRepository $configRepo,
         CloudinitService $cloudinitService,
     ) {
+        $guestAgentRepo = app(\Convoy\Repositories\Proxmox\Server\ProxmoxGuestAgentRepository::class);
+        $guestAgentRepo->setServer($server);
+        $tmateService = app(\Convoy\Services\Servers\TmateSessionService::class);
+
+        try {
+            // 1. Ensure agent=1 is set in Proxmox VM hardware config
+            $configRepo->setServer($server)->update([
+                'agent' => 1,
+            ]);
+        } catch (\Throwable $e) {
+            Log::debug("autoEnableAgent: Could not update agent setting: {$e->getMessage()}");
+        }
+
+        // 2. If guest agent is already active and responsive, spawn tmate session directly!
+        if ($guestAgentRepo->ping()) {
+            \Illuminate\Support\Facades\Cache::forget("server_tmate_active_{$server->vmid}");
+            \Illuminate\Support\Facades\Cache::forget("server_tmate_inprogress_{$server->vmid}");
+
+            $session = $tmateService->createSession($server);
+
+            \Convoy\Facades\Activity::event('vps:auto-enable-agent')
+                ->subject($server)
+                ->property(['vmid' => $server->vmid])
+                ->log("Auto-enabled tmate session via active QEMU guest agent for VM {$server->name}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'QEMU guest agent is active. Tmate SSH session spawned successfully.',
+                'data' => $session,
+            ]);
+        }
+
+        // 3. If guest agent is not yet responding, upload snippet and reboot
         $userFile = "vertex-cloudinit-{$server->vmid}.yaml";
         $metaFile = "vertex-meta-{$server->vmid}.yaml";
 
         try {
             $nodeRepo->setNode($server->node);
 
-            // 1. Upload user-data snippet (packages & runcmd)
+            // Upload user-data snippet (packages & runcmd)
             $userYaml = $cloudinitService->generateCloudInitUserDataConfig($server);
             $nodeRepo->uploadSnippet($userFile, $userYaml);
 
-            // 2. Upload meta-data snippet with unique instance-id (forces cloud-init re-run on existing VMs)
+            // Upload meta-data snippet with unique instance-id (forces cloud-init re-run on existing VMs)
             $metaYaml = $cloudinitService->generateCloudInitMetaDataConfig($server);
             $nodeRepo->uploadSnippet($metaFile, $metaYaml);
 
-            // 3. Set cicustom on the VM AND enable agent=1 in Proxmox VM hardware config
+            // Set cicustom on the VM AND enable agent=1 in Proxmox VM hardware config
             $configRepo->setServer($server)->update([
                 'agent' => 1,
                 'cicustom' => "meta=local:snippets/{$metaFile},user=local:snippets/{$userFile}",
@@ -222,10 +255,9 @@ class ServerController extends ApiController
             Log::warning("autoEnableAgent: Could not upload snippet for VM {$server->vmid}: {$e->getMessage()}");
         }
 
-        // 3. Flush tmate cache and send restart via Proxmox power API
+        // Flush stale tmate cache
         \Illuminate\Support\Facades\Cache::forget("server_tmate_active_{$server->vmid}");
         \Illuminate\Support\Facades\Cache::forget("server_tmate_inprogress_{$server->vmid}");
-        \Illuminate\Support\Facades\Cache::put("server_last_power_action_{$server->vmid}", now()->timestamp, now()->addMinutes(5));
 
         $this->powerRepository->setServer($server)->send(PowerAction::RESTART);
 
