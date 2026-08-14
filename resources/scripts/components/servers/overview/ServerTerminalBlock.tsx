@@ -138,12 +138,9 @@ const ServerTerminalBlock = () => {
                     setSshCmd(cmd)
                     setNoticeMsg(null)
                     setModalOpened(true)
-                    const lockUntil = Date.now() + 30000
-                    localStorage.setItem(`power_lock_until_${uuid}`, String(lockUntil))
-                    setPowerLockSeconds(30)
                 } else if (data.notice || data.fallback_console) {
                     setSshCmd(null)
-                    setNoticeMsg(data.notice || 'QEMU Guest Agent is not active inside this VM operating system yet.')
+                    setNoticeMsg(data.notice || 'QEMU Guest Agent is not responding inside this VM.')
                     setModalOpened(true)
                 }
             }

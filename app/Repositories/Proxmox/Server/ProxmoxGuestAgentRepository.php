@@ -101,8 +101,35 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
     {
         Assert::isInstanceOf($this->server, Server::class);
 
+        // Proxmox REST API expects 'command' as a string.
+        // We wrap complex scripts in a base64 pipe to guarantee zero shell escaping issues.
+        $b64 = base64_encode($command);
+        $execString = "/bin/sh -c \"echo {$b64} | base64 -d | /bin/sh\"";
+
+        $response = $this->getHttpClient()
+            ->withUrlParameters([
+                'node' => $this->node->cluster,
+                'server' => $this->server->vmid,
+            ])
+            ->post('/api2/json/nodes/{node}/qemu/{server}/agent/exec', [
+                'command' => $execString,
+            ])
+            ->json();
+
+        return $this->getData($response);
+    }
+
+    /**
+     * Write file inside VM via Proxmox QEMU Guest Agent.
+     */
+    public function fileWrite(string $file, string $content, bool $encode = true)
+    {
+        Assert::isInstanceOf($this->server, Server::class);
+
         $params = [
-            'command' => ['/bin/sh', '-c', $command],
+            'file' => $file,
+            'content' => $encode ? base64_encode($content) : $content,
+            'encode' => $encode ? 1 : 0,
         ];
 
         $response = $this->getHttpClient()
@@ -110,7 +137,7 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
                 'node' => $this->node->cluster,
                 'server' => $this->server->vmid,
             ])
-            ->post('/api2/json/nodes/{node}/qemu/{server}/agent/exec', $params)
+            ->post('/api2/json/nodes/{node}/qemu/{server}/agent/file-write', $params)
             ->json();
 
         return $this->getData($response);

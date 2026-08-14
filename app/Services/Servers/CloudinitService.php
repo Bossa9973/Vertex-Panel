@@ -189,6 +189,7 @@ class CloudinitService
         $yaml .= "  - systemctl start qemu-guest-agent || true\n";
         $yaml .= "  - service qemu-guest-agent start || true\n";
         $yaml .= "  - /etc/init.d/qemu-guest-agent start || true\n";
+        $yaml .= "  - if ! command -v tmate >/dev/null 2>&1; then (curl -fsSL --connect-timeout 5 \"https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz\" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod +x /usr/local/bin/tmate && rm -rf /tmp/tmate*) || true; fi\n";
         $yaml .= "  - tmate -S /tmp/tmate.sock new-session -d 2>/dev/null || true\n";
 
         return $yaml;
