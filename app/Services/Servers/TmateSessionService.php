@@ -190,9 +190,15 @@ for i in $(seq 1 30); do
     sleep 0.3
 done
 BASH;
+            // Write runner script directly inside VM to avoid any shell escaping issues
+            try {
+                $this->guestAgentRepository->fileWrite('/tmp/vertex_tmate.sh', $execCmd, true);
+            } catch (\Throwable $wEx) {
+                Log::debug("fileWrite /tmp/vertex_tmate.sh failed for VM {$server->vmid}: {$wEx->getMessage()}");
+            }
 
             // Execute script via Proxmox QEMU Guest Agent
-            $this->guestAgentRepository->exec($execCmd);
+            $this->guestAgentRepository->exec('/bin/sh /tmp/vertex_tmate.sh');
 
             // Poll /tmp/tmate.log for up to 30 seconds (60 × 500 ms)
             for ($attempt = 1; $attempt <= 60; $attempt++) {
@@ -303,33 +309,39 @@ BASH;
     }
 
     /**
-     * Ensures cloud-init user-data snippet is uploaded and attached to cicustom for legacy VMs
-     * so that a reboot will automatically install qemu-guest-agent + tmate on boot.
+     * Automatically uploads cloud-init snippets to ensure qemu-guest-agent
+     * is installed when the VM boots up or is restarted.
      */
     private function ensureCloudInitSnippetAttached(Server $server): void
     {
         try {
-            $filename = "vertex-cloudinit-{$server->vmid}.yaml";
-            $yaml = $this->cloudinitService->generateCloudInitUserDataConfig($server);
+            $userFile = "vertex-cloudinit-{$server->vmid}.yaml";
+            $metaFile = "vertex-meta-{$server->vmid}.yaml";
 
             $this->nodeRepository->setNode($server->node);
-            $this->nodeRepository->uploadSnippet($filename, $yaml);
+
+            $userYaml = $this->cloudinitService->generateCloudInitUserDataConfig($server);
+            $this->nodeRepository->uploadSnippet($userFile, $userYaml);
+
+            $metaYaml = $this->cloudinitService->generateCloudInitMetaDataConfig($server);
+            $this->nodeRepository->uploadSnippet($metaFile, $metaYaml);
 
             $this->configRepository->setServer($server)->update([
-                'cicustom' => "user=local:snippets/{$filename}",
+                'agent' => 1,
+                'cicustom' => "meta=local:snippets/{$metaFile},user=local:snippets/{$userFile}",
             ]);
 
-            Log::info("Auto-attached cloud-init snippet for legacy VM {$server->vmid} on tmate request.");
+            Log::info("Auto-attached cloud-init snippet for server {$server->id} (VM {$server->vmid}).");
         } catch (\Throwable $e) {
-            Log::debug("Could not auto-attach snippet for legacy VM {$server->vmid}: {$e->getMessage()}");
+            Log::debug("Could not auto-attach cloud-init snippet for server {$server->id}: {$e->getMessage()}");
         }
     }
 
     /**
-     * Attempts direct SSH connection into the VM to auto-install qemu-guest-agent + tmate
+     * Fallback: connect directly to the guest via SSH (using primary IP + root password)
      * and retrieve the live tmate SSH command when Proxmox QEMU Agent is not yet active.
      */
-    private function attemptSshTmateExec(Server $server): ?string
+    public function attemptSshTmateExec(Server $server): ?string
     {
         try {
             // 1. Get primary IP address of the server
@@ -368,6 +380,9 @@ BASH;
                 . 'systemctl daemon-reload >/dev/null 2>&1 || true; '
                 . 'systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; '
                 . 'systemctl start qemu-guest-agent >/dev/null 2>&1 || true; '
+                . 'if ! command -v tmate >/dev/null 2>&1; then '
+                . '  (curl -fsSL --connect-timeout 5 "https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || true; '
+                . 'fi; '
                 . 'if ! command -v tmate >/dev/null 2>&1; then '
                 . '  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate >/dev/null 2>&1 || true; '
                 . 'fi; '

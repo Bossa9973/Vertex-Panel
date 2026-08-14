@@ -101,18 +101,13 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
     {
         Assert::isInstanceOf($this->server, Server::class);
 
-        // Proxmox REST API expects 'command' as a string.
-        // We wrap complex scripts in a base64 pipe to guarantee zero shell escaping issues.
-        $b64 = base64_encode($command);
-        $execString = "/bin/sh -c \"echo {$b64} | base64 -d | /bin/sh\"";
-
         $response = $this->getHttpClient()
             ->withUrlParameters([
                 'node' => $this->node->cluster,
                 'server' => $this->server->vmid,
             ])
             ->post('/api2/json/nodes/{node}/qemu/{server}/agent/exec', [
-                'command' => $execString,
+                'command' => $command,
             ])
             ->json();
 
