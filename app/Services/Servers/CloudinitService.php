@@ -167,6 +167,9 @@ class CloudinitService
         $yaml .= "  - curl\n";
         $yaml .= "  - tmate\n";
         $yaml .= "\n";
+        $yaml .= "bootcmd:\n";
+        $yaml .= "  - [ sh, -c, \"systemctl start qemu-guest-agent || true\" ]\n";
+        $yaml .= "\n";
 
         if ($user) {
             $yaml .= "user: {$user}\n";
@@ -185,7 +188,7 @@ class CloudinitService
 
         $yaml .= "\nruncmd:\n";
         $yaml .= "  - systemctl daemon-reload || true\n";
-        $yaml .= "  - systemctl enable --now qemu-guest-agent || true\n";
+        $yaml .= "  - systemctl enable qemu-guest-agent || true\n";
         $yaml .= "  - systemctl start qemu-guest-agent || true\n";
         $yaml .= "  - service qemu-guest-agent start || true\n";
         $yaml .= "  - /etc/init.d/qemu-guest-agent start || true\n";

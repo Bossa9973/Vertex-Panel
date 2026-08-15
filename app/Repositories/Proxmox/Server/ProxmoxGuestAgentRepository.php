@@ -12,17 +12,14 @@ use Convoy\Exceptions\Repository\Proxmox\ProxmoxConnectionException;
 class ProxmoxGuestAgentRepository extends ProxmoxRepository
 {
     /**
-     * Ping Guest Agent to verify if it is active and responding.
+     * Ping Guest Agent with configurable retries, delay, and optional logger callback.
      */
-    public function ping(): bool
+    public function pingWithRetry(int $retries = 3, int $delayMs = 2000, ?\Closure $logger = null): bool
     {
         Assert::isInstanceOf($this->server, Server::class);
 
-        // Retry up to 3 times with 1.5 s between attempts.
-        // The QEMU guest agent can be transiently unresponsive
-        // (e.g. during heavy VM load or a brief service restart)
-        // and a single ping failure should not trigger a fallback.
-        for ($attempt = 1; $attempt <= 3; $attempt++) {
+        for ($i = 0; $i < $retries; $i++) {
+            $attempt = $i + 1;
             try {
                 $this->getHttpClient()
                     ->withUrlParameters([
@@ -32,15 +29,30 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
                     ->post('/api2/json/nodes/{node}/qemu/{server}/agent/ping')
                     ->json();
 
+                if ($logger) {
+                    $logger("[INFO] Agent ping attempt {$attempt}/{$retries} for VM {$this->server->vmid}: SUCCESS");
+                }
                 return true;
-            } catch (\Throwable) {
-                if ($attempt < 3) {
-                    usleep(1500000); // 1.5 s before next attempt
+            } catch (\Throwable $e) {
+                if ($logger) {
+                    $retryMsg = ($i < $retries - 1) ? "FAILED, retrying in " . ($delayMs / 1000) . "s..." : "FAILED (all attempts exhausted)";
+                    $logger("[INFO] Agent ping attempt {$attempt}/{$retries} for VM {$this->server->vmid}: {$retryMsg}");
+                }
+                if ($i < $retries - 1) {
+                    usleep($delayMs * 1000);
                 }
             }
         }
 
         return false;
+    }
+
+    /**
+     * Single-attempt ping method.
+     */
+    public function ping(): bool
+    {
+        return $this->pingWithRetry(1, 0);
     }
 
 

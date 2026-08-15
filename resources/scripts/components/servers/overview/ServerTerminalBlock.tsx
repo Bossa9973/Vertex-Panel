@@ -21,26 +21,43 @@ const ServerTerminalBlock = () => {
     const [rebootLoading, setRebootLoading] = useState<boolean>(false)
     const [isRepairing, setIsRepairing] = useState<boolean>(false)
     const [repairStatusText, setRepairStatusText] = useState<string>('')
+    const [elapsedSeconds, setElapsedSeconds] = useState<number>(0)
     const pollingRef = useRef<NodeJS.Timeout | null>(null)
+    const timerRef = useRef<NodeJS.Timeout | null>(null)
 
-    // Cleanup polling on unmount
+    // Cleanup polling & timer on unmount
     useEffect(() => {
         return () => {
-            if (pollingRef.current) {
-                clearInterval(pollingRef.current)
-            }
+            if (pollingRef.current) clearInterval(pollingRef.current)
+            if (timerRef.current) clearInterval(timerRef.current)
         }
     }, [])
+
+    const handleCancelRepair = () => {
+        if (pollingRef.current) clearInterval(pollingRef.current)
+        if (timerRef.current) clearInterval(timerRef.current)
+        setIsRepairing(false)
+        setRebootLoading(false)
+        setNoticeMsg('Auto-repair cancelled. To install manually, SSH into your VM and run: apt-get update && apt-get install -y qemu-guest-agent && systemctl enable --now qemu-guest-agent')
+    }
 
     const handleAutoEnableReboot = async () => {
         setRebootLoading(true)
         setIsRepairing(true)
-        setRepairStatusText('Configuring QEMU Guest Agent & Cloud-Init...')
+        setElapsedSeconds(0)
+        setRepairStatusText('Configuring QEMU Guest Agent & Proxmox VM hardware...')
+
+        if (timerRef.current) clearInterval(timerRef.current)
+        timerRef.current = setInterval(() => {
+            setElapsedSeconds(prev => prev + 1)
+        }, 1000)
 
         try {
             const res = await http.post(`/api/client/servers/${uuid}/auto-enable-agent`)
-            if (res.data?.data?.ssh_cmd || res.data?.data?.url) {
-                setSshCmd(res.data.data.ssh_cmd || res.data.data.url)
+            const initialData = res.data?.data
+            if (initialData?.ssh_cmd || initialData?.url) {
+                if (timerRef.current) clearInterval(timerRef.current)
+                setSshCmd(initialData.ssh_cmd || initialData.url)
                 setNoticeMsg(null)
                 setIsRepairing(false)
                 setRebootLoading(false)
@@ -48,46 +65,77 @@ const ServerTerminalBlock = () => {
                 return
             }
 
-            // If power cycle was triggered, poll every 3 seconds for up to 60s
-            setRepairStatusText('VM power-cycled. Initializing services & connecting to tmate...')
+            // Power cycle was triggered — start 3s polling loop
+            setRepairStatusText('VM power-cycled. Initializing QEMU guest agent and connecting to tmate...')
             let attempts = 0
             const maxAttempts = 20
 
-            if (pollingRef.current) {
-                clearInterval(pollingRef.current)
-            }
+            if (pollingRef.current) clearInterval(pollingRef.current)
 
             pollingRef.current = setInterval(async () => {
                 attempts++
                 try {
                     const pollRes = await http.post(`/api/client/servers/${uuid}/create-sshx-session`)
-                    const pollData = pollRes.data?.data
-                    const cmd = pollData?.ssh_cmd || pollData?.url
-                    if (cmd) {
+                    const data = pollRes.data?.data
+
+                    if (data?.ssh_cmd || data?.url) {
+                        // Success — stop polling & timer
                         if (pollingRef.current) clearInterval(pollingRef.current)
-                        setSshCmd(cmd)
+                        if (timerRef.current) clearInterval(timerRef.current)
+                        setSshCmd(data.ssh_cmd || data.url)
                         setNoticeMsg(null)
                         setIsRepairing(false)
                         setRebootLoading(false)
                         return
                     }
-                } catch {
-                    // Still booting/initializing
+
+                    if (data?.notice) {
+                        const lowerNotice = data.notice.toLowerCase()
+                        if (lowerNotice.includes('failed') || lowerNotice.includes('error')) {
+                            // Terminal failure — stop polling, show error
+                            if (pollingRef.current) clearInterval(pollingRef.current)
+                            if (timerRef.current) clearInterval(timerRef.current)
+                            setIsRepairing(false)
+                            setRebootLoading(false)
+                            setNoticeMsg(data.notice)
+                            return
+                        } else {
+                            // Transient state — keep polling, update live status text
+                            setRepairStatusText(data.notice)
+                        }
+                    }
+                } catch (err: any) {
+                    const errorNotice = err?.response?.data?.notice || err?.response?.data?.message
+                    if (errorNotice) {
+                        const lower = errorNotice.toLowerCase()
+                        if (lower.includes('failed') || lower.includes('error')) {
+                            if (pollingRef.current) clearInterval(pollingRef.current)
+                            if (timerRef.current) clearInterval(timerRef.current)
+                            setIsRepairing(false)
+                            setRebootLoading(false)
+                            setNoticeMsg(errorNotice)
+                            return
+                        }
+                    }
                 }
 
+                // After 20 failed poll attempts (60 seconds)
                 if (attempts >= maxAttempts) {
                     if (pollingRef.current) clearInterval(pollingRef.current)
+                    if (timerRef.current) clearInterval(timerRef.current)
                     setIsRepairing(false)
                     setRebootLoading(false)
-                    setNoticeMsg('VM was reconfigured and power-cycled. Initialization may take an additional moment. Please click "1-Click Repair & Start tmate" again or try connecting shortly.')
+                    setNoticeMsg('Auto-repair timed out after 60 seconds. Your VM may need a longer boot time or the guest image may not support automatic agent installation. Manual fix: SSH into the VM and run: apt-get install -y qemu-guest-agent && systemctl enable --now qemu-guest-agent')
                 }
             }, 3000)
 
         } catch (err: any) {
             console.error('Failed to auto-enable agent and reboot:', err)
+            if (timerRef.current) clearInterval(timerRef.current)
             setIsRepairing(false)
             setRebootLoading(false)
-            setNoticeMsg('Unable to automatically reconfigure VM. Please ensure the server is powered on and try again.')
+            const errorDetail = err?.response?.data?.errors?.[0]?.detail || err?.response?.data?.message || 'Unable to automatically reconfigure VM.'
+            setNoticeMsg(errorDetail)
         }
     }
 
@@ -199,7 +247,9 @@ const ServerTerminalBlock = () => {
             {/* tmate SSH Session Details Modal */}
             <Modal
                 opened={modalOpened}
-                onClose={() => setModalOpened(false)}
+                onClose={() => {
+                    if (!isRepairing) setModalOpened(false)
+                }}
                 title={
                     <div className='flex items-center gap-2 font-bold text-white text-base'>
                         <CommandLineIcon className='w-5 h-5 text-indigo-400' />
@@ -227,11 +277,26 @@ const ServerTerminalBlock = () => {
                             <div className='w-12 h-12 rounded-full border-2 border-blue-500/20 border-t-blue-500 animate-spin' />
                             <ArrowPathIcon className='w-5 h-5 text-blue-400 absolute' />
                         </div>
-                        <div className='space-y-1.5 max-w-sm'>
+                        <div className='space-y-2 max-w-sm'>
                             <h4 className='text-sm font-semibold text-gray-100'>Repairing VM & Starting tmate</h4>
-                            <p className='text-xs text-gray-400 leading-relaxed'>
+                            <div className='inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20'>
+                                Waiting for agent... ({elapsedSeconds}s elapsed)
+                            </div>
+                            <p className='text-xs text-gray-400 leading-relaxed pt-1'>
                                 {repairStatusText || 'Configuring QEMU Guest Agent and initializing tmate session. The SSH command will appear here automatically once ready.'}
                             </p>
+                        </div>
+
+                        <div className='pt-3'>
+                            <Button
+                                variant='subtle'
+                                size='xs'
+                                color='gray'
+                                onClick={handleCancelRepair}
+                                className='text-gray-400 hover:text-white'
+                            >
+                                Cancel & Try Manually
+                            </Button>
                         </div>
                     </div>
                 )}
@@ -290,7 +355,7 @@ const ServerTerminalBlock = () => {
                                 <LockClosedIcon className='w-4 h-4 text-amber-400' />
                                 <span>QEMU Guest Agent Required for tmate</span>
                             </div>
-                            <p className='text-xs text-amber-200/90 leading-relaxed'>
+                            <p className='text-xs text-amber-200/90 leading-relaxed whitespace-pre-line'>
                                 {noticeMsg}
                             </p>
                         </div>
