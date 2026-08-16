@@ -188,7 +188,7 @@ class TmateSessionService
                 } catch (\Throwable) {}
             }
 
-            // 2. Layer 5: Comprehensive in-guest runner script with noexec check, network check, and timeout logging:
+            // 2. Layer 5: Comprehensive in-guest runner script — DNS hosts injected first, then network check
             $scriptContent = "#!/bin/sh\n"
                 . "export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n"
                 . "TMATE_WORK_DIR=/tmp\n"
@@ -200,12 +200,19 @@ class TmateSessionService
                 . "rm -f /tmp/_exec_test.sh 2>/dev/null || true\n"
                 . "chmod 1777 \$TMATE_WORK_DIR 2>/dev/null || true\n"
                 . "\n"
-                . "if ! curl -fsSL --connect-timeout 5 --max-time 8 https://tmate.io > /dev/null 2>&1; then\n"
-                . "  echo 'TMATE_NETWORK_ERROR: Cannot reach tmate.io' > \${TMATE_WORK_DIR}/tmate.log\n"
-                . "  chmod 644 \${TMATE_WORK_DIR}/tmate.log 2>/dev/null || true\n"
-                . "  exit 1\n"
-                . "fi\n"
+                // ── STEP 1: Inject static DNS entries — bypasses DNS entirely ──
+                . "grep -q 'tmate.io' /etc/hosts 2>/dev/null || cat >> /etc/hosts << 'HOSTS_EOF'\n"
+                . "143.198.67.135   tmate.io\n"
+                . "143.198.67.135   nyc1.tmate.io\n"
+                . "159.223.125.10   sfo2.tmate.io\n"
+                . "167.99.210.183   ams1.tmate.io\n"
+                . "139.59.215.191   sgp1.tmate.io\n"
+                . "140.82.121.4     github.com\n"
+                . "185.199.108.133  raw.githubusercontent.com\n"
+                . "185.199.108.133  objects.githubusercontent.com\n"
+                . "HOSTS_EOF\n"
                 . "\n"
+                // ── STEP 2: Check for existing live session ──
                 . "if [ -S \${TMATE_WORK_DIR}/tmate.sock ]; then\n"
                 . "  SSH_EXISTING=\$(tmate -S \${TMATE_WORK_DIR}/tmate.sock display -p '#{tmate_ssh}' 2>/dev/null || true)\n"
                 . "  if [ -n \"\$SSH_EXISTING\" ] && echo \"\$SSH_EXISTING\" | grep -q 'ssh '; then\n"
@@ -219,22 +226,32 @@ class TmateSessionService
                 . "pkill -9 tmate 2>/dev/null || true\n"
                 . "rm -f \${TMATE_WORK_DIR}/tmate.sock \${TMATE_WORK_DIR}/tmate.log \${TMATE_WORK_DIR}/tmate_err.log\n"
                 . "\n"
+                // ── STEP 3: Install tmate binary if missing ──
                 . "if ! command -v tmate >/dev/null 2>&1; then\n"
-                . "  (curl -fsSL --connect-timeout 5 https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz -o \${TMATE_WORK_DIR}/tmate.tar.xz 2>/dev/null \\\n"
+                . "  (curl -fsSL --connect-timeout 10 --max-time 30 https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz -o \${TMATE_WORK_DIR}/tmate.tar.xz 2>/dev/null \\\n"
                 . "   && tar -xJf \${TMATE_WORK_DIR}/tmate.tar.xz -C \${TMATE_WORK_DIR} 2>/dev/null \\\n"
                 . "   && cp \${TMATE_WORK_DIR}/tmate-*/tmate /usr/local/bin/tmate 2>/dev/null \\\n"
                 . "   && chmod 755 /usr/local/bin/tmate 2>/dev/null \\\n"
                 . "   && rm -rf \${TMATE_WORK_DIR}/tmate*) || true\n"
                 . "  if ! command -v tmate >/dev/null 2>&1; then\n"
-                . "    (DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) 2>/dev/null || true\n"
+                . "    (DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) 2>/dev/null || true\n"
                 . "  fi\n"
                 . "fi\n"
                 . "\n"
+                // ── STEP 4: Check network reachability (after hosts injection, so DNS is resolved) ──
+                . "if ! curl -fsSL --connect-timeout 10 --max-time 15 https://tmate.io > /dev/null 2>&1; then\n"
+                . "  echo 'TMATE_NETWORK_ERROR: Cannot reach tmate.io even after static hosts injection' > \${TMATE_WORK_DIR}/tmate.log\n"
+                . "  chmod 644 \${TMATE_WORK_DIR}/tmate.log 2>/dev/null || true\n"
+                . "  exit 1\n"
+                . "fi\n"
+                . "\n"
+                // ── STEP 5: Launch tmate session ──
                 . "tmate -S \${TMATE_WORK_DIR}/tmate.sock set-option -g destroy-unattached off 2>/dev/null || true\n"
                 . "tmate -S \${TMATE_WORK_DIR}/tmate.sock set-option -g remain-on-exit on 2>/dev/null || true\n"
                 . "tmate -S \${TMATE_WORK_DIR}/tmate.sock set-option -g tmate-keepalive 10 2>/dev/null || true\n"
                 . "tmate -S \${TMATE_WORK_DIR}/tmate.sock new-session -d 'bash -l' 2>\${TMATE_WORK_DIR}/tmate_err.log || tmate -S \${TMATE_WORK_DIR}/tmate.sock new-session -d 2>>\${TMATE_WORK_DIR}/tmate_err.log || true\n"
                 . "\n"
+                // ── STEP 6: Poll for SSH string ──
                 . "for i in \$(seq 1 40); do\n"
                 . "  tmate -S \${TMATE_WORK_DIR}/tmate.sock wait tmate-ready 2>/dev/null || true\n"
                 . "  SSH_STR=\$(tmate -S \${TMATE_WORK_DIR}/tmate.sock display -p '#{tmate_ssh}' 2>/dev/null || true)\n"
@@ -246,7 +263,7 @@ class TmateSessionService
                 . "  sleep 0.25\n"
                 . "done\n"
                 . "\n"
-                . "echo 'TMATE_TIMEOUT: tmate started but did not produce SSH string after 10s. Check: tmate connectivity, /tmp exec permissions, tmate binary integrity.' > \${TMATE_WORK_DIR}/tmate.log\n"
+                . "echo 'TMATE_TIMEOUT: tmate started but did not produce SSH string after 10s.' > \${TMATE_WORK_DIR}/tmate.log\n"
                 . "chmod 644 \${TMATE_WORK_DIR}/tmate.log 2>/dev/null || true\n";
 
             // Write script into VM filesystem

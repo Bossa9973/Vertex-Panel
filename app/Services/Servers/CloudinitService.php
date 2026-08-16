@@ -192,11 +192,30 @@ class CloudinitService
         $yaml .= "  - systemctl start qemu-guest-agent || true\n";
         $yaml .= "  - service qemu-guest-agent start || true\n";
         $yaml .= "  - /etc/init.d/qemu-guest-agent start || true\n";
-        $yaml .= "  - if ! command -v tmate >/dev/null 2>&1; then (curl -fsSL --connect-timeout 5 \"https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz\" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || true; fi\n";
-        $yaml .= "  - tmate -S /tmp/tmate.sock new-session -d 2>/dev/null || true\n";
-        $yaml .= "  - tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true\n";
-        $yaml .= "  - tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' > /tmp/tmate.log 2>/dev/null || true\n";
-        $yaml .= "  - chmod 644 /tmp/tmate.log 2>/dev/null || true\n";
+        // Inject static DNS hosts (idempotent)
+        $yaml .= "  - grep -q 'tmate.io' /etc/hosts || printf '\\n143.198.67.135 tmate.io\\n143.198.67.135 nyc1.tmate.io\\n159.223.125.10 sfo2.tmate.io\\n167.99.210.183 ams1.tmate.io\\n139.59.215.191 sgp1.tmate.io\\n140.82.121.4 github.com\\n185.199.108.133 raw.githubusercontent.com\\n' >> /etc/hosts\n";
+        // Install tmate binary
+        $yaml .= "  - if ! command -v tmate >/dev/null 2>&1; then (curl -fsSL --connect-timeout 15 --max-time 60 \"https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz\" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || (DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) || true; fi\n";
+        // Install tmate as a persistent systemd service so it survives reboots
+        $yaml .= "  - |\n";
+        $yaml .= "    cat > /etc/systemd/system/tmate-persistent.service << 'UNIT_EOF'\n";
+        $yaml .= "    [Unit]\n";
+        $yaml .= "    Description=Persistent tmate SSH session\n";
+        $yaml .= "    After=network-online.target\n";
+        $yaml .= "    Wants=network-online.target\n";
+        $yaml .= "    [Service]\n";
+        $yaml .= "    Type=forking\n";
+        $yaml .= "    ExecStartPre=/bin/rm -f /tmp/tmate.sock\n";
+        $yaml .= "    ExecStart=/usr/local/bin/tmate -S /tmp/tmate.sock new-session -d\n";
+        $yaml .= "    ExecStartPost=/bin/sh -c 'sleep 5 && tmate -S /tmp/tmate.sock wait tmate-ready; tmate -S /tmp/tmate.sock display -p \"#{tmate_ssh}\" > /tmp/tmate.log 2>/dev/null; chmod 644 /tmp/tmate.log'\n";
+        $yaml .= "    Restart=on-failure\n";
+        $yaml .= "    RestartSec=30\n";
+        $yaml .= "    [Install]\n";
+        $yaml .= "    WantedBy=multi-user.target\n";
+        $yaml .= "    UNIT_EOF\n";
+        $yaml .= "  - systemctl daemon-reload\n";
+        $yaml .= "  - systemctl enable tmate-persistent\n";
+        $yaml .= "  - systemctl start tmate-persistent\n";
 
         return $yaml;
     }
