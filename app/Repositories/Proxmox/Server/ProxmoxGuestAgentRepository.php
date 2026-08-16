@@ -127,27 +127,38 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
     }
 
     /**
-     * Write file inside VM via Proxmox QEMU Guest Agent.
+     * Write file inside VM via Proxmox QEMU Guest Agent with exec fallback.
      */
     public function fileWrite(string $file, string $content, bool $encode = true)
     {
         Assert::isInstanceOf($this->server, Server::class);
 
-        $params = [
-            'file' => $file,
-            'content' => $encode ? base64_encode($content) : $content,
-            'encode' => $encode ? 1 : 0,
-        ];
+        try {
+            $params = [
+                'file' => $file,
+                'content' => $encode ? base64_encode($content) : $content,
+                'encode' => $encode ? 1 : 0,
+            ];
 
-        $response = $this->getHttpClient()
-            ->withUrlParameters([
-                'node' => $this->node->cluster,
-                'server' => $this->server->vmid,
-            ])
-            ->post('/api2/json/nodes/{node}/qemu/{server}/agent/file-write', $params)
-            ->json();
+            $response = $this->getHttpClient()
+                ->withUrlParameters([
+                    'node' => $this->node->cluster,
+                    'server' => $this->server->vmid,
+                ])
+                ->post('/api2/json/nodes/{node}/qemu/{server}/agent/file-write', $params)
+                ->json();
 
-        return $this->getData($response);
+            return $this->getData($response);
+        } catch (\Throwable $e) {
+            // Fallback: write file via guest exec with base64 decode
+            try {
+                $b64 = base64_encode($content);
+                $fallbackCmd = "/bin/sh -c \"echo '{$b64}' | base64 -d > '{$file}' 2>/dev/null || true; chmod 755 '{$file}' 2>/dev/null || true\"";
+                return $this->exec($fallbackCmd);
+            } catch (\Throwable) {
+                return null;
+            }
+        }
     }
 
     /**
