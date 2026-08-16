@@ -341,21 +341,37 @@ class TmateSessionService
             $ssh = new \phpseclib3\Net\SSH2($ip, 22, 4);
             $ssh->setTimeout(15);
 
-            if (!$ssh->login('root', $password)) {
-                $this->logTmate('WARNING', "Direct SSH login failed (root@{$ip}) for VM {$vmid}");
+            $ciUser = $config->where('key', '=', 'ciuser')->first()['value'] ?? null;
+            $usernames = array_unique(array_filter([$ciUser, 'root', 'ubuntu', 'debian', 'centos', 'cloud-user', 'admin']));
+            $loggedIn = false;
+            $activeUser = 'root';
+
+            foreach ($usernames as $user) {
+                try {
+                    if ($ssh->login($user, $password)) {
+                        $loggedIn = true;
+                        $activeUser = $user;
+                        $this->logTmate('INFO', "Direct SSH login SUCCESS as '{$activeUser}' on {$ip} for VM {$vmid}");
+                        break;
+                    }
+                } catch (\Throwable) {}
+            }
+
+            if (!$loggedIn) {
+                $this->logTmate('WARNING', "Direct SSH login failed across usernames [" . implode(', ', $usernames) . "] on {$ip} for VM {$vmid}");
                 return null;
             }
 
-            $this->logTmate('INFO', "Direct SSH login successful on {$ip} for VM {$vmid}. Executing in-guest installer...");
+            $sudoPrefix = ($activeUser !== 'root') ? "echo '{$password}' | sudo -S " : '';
 
             $cmd = 'export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; '
                 . 'chmod 1777 /tmp 2>/dev/null || true; '
                 . 'if ! command -v qemu-ga >/dev/null 2>&1; then '
-                . '  (DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qemu-guest-agent) >/dev/null 2>&1 || true; '
+                . '  (' . $sudoPrefix . 'DEBIAN_FRONTEND=noninteractive apt-get update -qq && ' . $sudoPrefix . 'DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qemu-guest-agent) >/dev/null 2>&1 || true; '
                 . 'fi; '
-                . 'systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; '
+                . $sudoPrefix . 'systemctl enable --now qemu-guest-agent >/dev/null 2>&1 || true; '
                 . 'if ! command -v tmate >/dev/null 2>&1; then '
-                . '  (curl -fsSL --connect-timeout 5 "https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || true; '
+                . '  (curl -fsSL --connect-timeout 5 "https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && ' . $sudoPrefix . 'cp /tmp/tmate-*/tmate /usr/local/bin/tmate && ' . $sudoPrefix . 'chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || true; '
                 . 'fi; '
                 . 'pkill -9 -f tmate >/dev/null 2>&1 || true; '
                 . 'rm -f /tmp/tmate.sock /tmp/tmate.log; '
@@ -363,8 +379,17 @@ class TmateSessionService
                 . 'tmate -S /tmp/tmate.sock set-option -g remain-on-exit on 2>/dev/null || true; '
                 . 'tmate -S /tmp/tmate.sock set-option -g tmate-keepalive 10 2>/dev/null || true; '
                 . 'tmate -S /tmp/tmate.sock new-session -d "bash -l" 2>/dev/null || tmate -S /tmp/tmate.sock new-session -d 2>/dev/null || true; '
-                . 'tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true; '
-                . 'tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}" 2>/dev/null || true';
+                . 'for i in $(seq 1 40); do '
+                . '  tmate -S /tmp/tmate.sock wait tmate-ready 2>/dev/null || true; '
+                . '  SSH_STR=$(tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}" 2>/dev/null || true); '
+                . '  if [ -n "$SSH_STR" ] && echo "$SSH_STR" | grep -q "ssh "; then '
+                . '    echo "$SSH_STR" > /tmp/tmate.log; '
+                . '    chmod 644 /tmp/tmate.log 2>/dev/null || true; '
+                . '    echo "$SSH_STR"; '
+                . '    exit 0; '
+                . '  fi; '
+                . '  sleep 0.25; '
+                . 'done';
 
             $output = trim((string) $ssh->exec($cmd));
 
