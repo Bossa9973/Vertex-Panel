@@ -157,17 +157,21 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
     {
         Assert::isInstanceOf($this->server, Server::class);
 
-        $response = $this->getHttpClient()
-            ->withUrlParameters([
-                'node' => $this->node->cluster,
-                'server' => $this->server->vmid,
-            ])
-            ->get('/api2/json/nodes/{node}/qemu/{server}/agent/file-read', [
-                'file' => $file,
-            ])
-            ->json();
+        try {
+            $response = $this->getHttpClient()
+                ->withUrlParameters([
+                    'node' => $this->node->cluster,
+                    'server' => $this->server->vmid,
+                ])
+                ->get('/api2/json/nodes/{node}/qemu/{server}/agent/file-read', [
+                    'file' => $file,
+                ])
+                ->json();
 
-        return $this->getData($response);
+            return $this->getData($response);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
