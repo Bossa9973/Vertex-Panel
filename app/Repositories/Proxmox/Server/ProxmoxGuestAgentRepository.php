@@ -119,7 +119,7 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
                 'server' => $this->server->vmid,
             ])
             ->post('/api2/json/nodes/{node}/qemu/{server}/agent/exec', [
-                'command' => $command,
+                'command' => is_array($command) ? $command : ['/bin/sh', '-c', $command],
             ])
             ->json();
 
