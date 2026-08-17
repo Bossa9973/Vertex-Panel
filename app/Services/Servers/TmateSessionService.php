@@ -188,20 +188,36 @@ class TmateSessionService
                 } catch (\Throwable) {}
             }
 
-            // 2. Layer 5: Comprehensive in-guest runner script — DNS hosts injected first, then network check
+            // 2. Layer 5: In-guest diagnostic runner — every step logs to tmate_debug.log
             $scriptContent = "#!/bin/sh\n"
+                . "set -e\n"
                 . "export PATH=\$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n"
+                . "TS() { date '+%Y-%m-%dT%H:%M:%S'; }\n"
+                . "DBG=\${TMATE_WORK_DIR:-/tmp}/tmate_debug.log\n"
+                . "LOG() { echo \"[\$(TS)] \$*\" >> \"\$DBG\" 2>/dev/null || true; }\n"
+                . "LOG '=== vertex tmate runner start ==='\n"
+                . "LOG \"PATH=\$PATH\"\n"
+                . "LOG \"uname=\$(uname -a 2>/dev/null || echo unknown)\"\n"
+                . "\n"
+                // ── noexec check ──
                 . "TMATE_WORK_DIR=/tmp\n"
                 . "echo '#!/bin/sh' > /tmp/_exec_test.sh 2>/dev/null || true\n"
                 . "chmod +x /tmp/_exec_test.sh 2>/dev/null || true\n"
                 . "if ! /tmp/_exec_test.sh 2>/dev/null; then\n"
+                . "  LOG 'WARN: /tmp is noexec, switching to /var/tmp'\n"
                 . "  TMATE_WORK_DIR=/var/tmp\n"
                 . "fi\n"
                 . "rm -f /tmp/_exec_test.sh 2>/dev/null || true\n"
                 . "chmod 1777 \$TMATE_WORK_DIR 2>/dev/null || true\n"
+                . "DBG=\${TMATE_WORK_DIR}/tmate_debug.log\n"
+                . "LOG \"TMATE_WORK_DIR=\$TMATE_WORK_DIR\"\n"
                 . "\n"
-                // ── STEP 1: Inject static DNS entries — bypasses DNS entirely ──
-                . "grep -q 'tmate.io' /etc/hosts 2>/dev/null || cat >> /etc/hosts << 'HOSTS_EOF'\n"
+                // ── STEP 1: /etc/hosts DNS injection ──
+                . "LOG 'STEP 1: injecting static DNS into /etc/hosts'\n"
+                . "if grep -q 'tmate.io' /etc/hosts 2>/dev/null; then\n"
+                . "  LOG 'STEP 1: already present, skipping'\n"
+                . "else\n"
+                . "  cat >> /etc/hosts << 'HOSTS_EOF'\n"
                 . "143.198.67.135   tmate.io\n"
                 . "143.198.67.135   nyc1.tmate.io\n"
                 . "159.223.125.10   sfo2.tmate.io\n"
@@ -211,73 +227,126 @@ class TmateSessionService
                 . "185.199.108.133  raw.githubusercontent.com\n"
                 . "185.199.108.133  objects.githubusercontent.com\n"
                 . "HOSTS_EOF\n"
+                . "  LOG 'STEP 1: /etc/hosts updated'\n"
+                . "fi\n"
                 . "\n"
                 // ── STEP 2: Check for existing live session ──
+                . "LOG 'STEP 2: checking for existing live tmate session'\n"
                 . "if [ -S \${TMATE_WORK_DIR}/tmate.sock ]; then\n"
+                . "  LOG 'STEP 2: socket exists, querying tmate display'\n"
                 . "  SSH_EXISTING=\$(tmate -S \${TMATE_WORK_DIR}/tmate.sock display -p '#{tmate_ssh}' 2>/dev/null || true)\n"
+                . "  LOG \"STEP 2: existing ssh string=[\$SSH_EXISTING]\"\n"
                 . "  if [ -n \"\$SSH_EXISTING\" ] && echo \"\$SSH_EXISTING\" | grep -q 'ssh '; then\n"
+                . "    LOG 'STEP 2: reusing existing session, writing to tmate.log'\n"
                 . "    echo \"\$SSH_EXISTING\" > \${TMATE_WORK_DIR}/tmate.log\n"
                 . "    chmod 644 \${TMATE_WORK_DIR}/tmate.log 2>/dev/null || true\n"
+                . "    chmod 644 \"\$DBG\" 2>/dev/null || true\n"
                 . "    exit 0\n"
                 . "  fi\n"
+                . "  LOG 'STEP 2: socket present but no valid ssh string, killing stale session'\n"
                 . "fi\n"
                 . "\n"
                 . "pkill -9 -f \"tmate -S \${TMATE_WORK_DIR}/tmate.sock\" 2>/dev/null || true\n"
                 . "pkill -9 tmate 2>/dev/null || true\n"
                 . "rm -f \${TMATE_WORK_DIR}/tmate.sock \${TMATE_WORK_DIR}/tmate.log \${TMATE_WORK_DIR}/tmate_err.log\n"
+                . "LOG 'STEP 2: stale session cleared'\n"
                 . "\n"
-                // ── STEP 3: Install tmate binary if missing ──
-                . "if ! command -v tmate >/dev/null 2>&1; then\n"
-                . "  (curl -fsSL --connect-timeout 10 --max-time 30 https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz -o \${TMATE_WORK_DIR}/tmate.tar.xz 2>/dev/null \\\n"
-                . "   && tar -xJf \${TMATE_WORK_DIR}/tmate.tar.xz -C \${TMATE_WORK_DIR} 2>/dev/null \\\n"
-                . "   && cp \${TMATE_WORK_DIR}/tmate-*/tmate /usr/local/bin/tmate 2>/dev/null \\\n"
-                . "   && chmod 755 /usr/local/bin/tmate 2>/dev/null \\\n"
-                . "   && rm -rf \${TMATE_WORK_DIR}/tmate*) || true\n"
-                . "  if ! command -v tmate >/dev/null 2>&1; then\n"
-                . "    (DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) 2>/dev/null || true\n"
+                // ── STEP 3: Install tmate binary ──
+                . "LOG 'STEP 3: checking tmate binary'\n"
+                . "if command -v tmate >/dev/null 2>&1; then\n"
+                . "  LOG \"STEP 3: tmate already installed at \$(command -v tmate) version=\$(tmate -V 2>/dev/null || echo unknown)\"\n"
+                . "else\n"
+                . "  LOG 'STEP 3: tmate not found, attempting install from internal mirror http://10.0.0.1:9999/tmate-static'\n"
+                . "  CURL_OUT=\$(curl -fsSL --connect-timeout 10 --max-time 60 'http://10.0.0.1:9999/tmate-static' -o /usr/local/bin/tmate 2>&1); CURL_RC=\$?\n"
+                . "  LOG \"STEP 3: internal mirror curl exit=\$CURL_RC output=[\$CURL_OUT]\"\n"
+                . "  if [ \$CURL_RC -eq 0 ]; then\n"
+                . "    chmod 755 /usr/local/bin/tmate 2>/dev/null || true\n"
+                . "    LOG 'STEP 3: tmate installed from internal mirror OK'\n"
+                . "  else\n"
+                . "    LOG 'STEP 3: internal mirror failed, trying GitHub release'\n"
+                . "    CURL2_OUT=\$(curl -fsSL --connect-timeout 10 --max-time 60 'https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz' -o \${TMATE_WORK_DIR}/tmate.tar.xz 2>&1); CURL2_RC=\$?\n"
+                . "    LOG \"STEP 3: github curl exit=\$CURL2_RC output=[\$CURL2_OUT]\"\n"
+                . "    if [ \$CURL2_RC -eq 0 ]; then\n"
+                . "      tar -xJf \${TMATE_WORK_DIR}/tmate.tar.xz -C \${TMATE_WORK_DIR} 2>/dev/null && cp \${TMATE_WORK_DIR}/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf \${TMATE_WORK_DIR}/tmate*\n"
+                . "      LOG 'STEP 3: tmate installed from GitHub OK'\n"
+                . "    else\n"
+                . "      LOG 'STEP 3: GitHub also failed, trying apt-get'\n"
+                . "      APT_OUT=\$(DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate 2>&1); APT_RC=\$?\n"
+                . "      LOG \"STEP 3: apt-get exit=\$APT_RC output=[\$APT_OUT]\"\n"
+                . "    fi\n"
+                . "  fi\n"
+                . "  if command -v tmate >/dev/null 2>&1; then\n"
+                . "    LOG \"STEP 3: tmate now available at \$(command -v tmate)\"\n"
+                . "  else\n"
+                . "    LOG 'STEP 3: FATAL: tmate still not found after all install attempts'\n"
+                . "    echo 'TMATE_INSTALL_FAILED: could not install tmate binary' > \${TMATE_WORK_DIR}/tmate.log\n"
+                . "    chmod 644 \${TMATE_WORK_DIR}/tmate.log \"\$DBG\" 2>/dev/null || true\n"
+                . "    exit 1\n"
                 . "  fi\n"
                 . "fi\n"
                 . "\n"
-                // ── STEP 4: Check network reachability (after hosts injection, so DNS is resolved) ──
-                . "if ! curl -fsSL --connect-timeout 10 --max-time 15 https://tmate.io > /dev/null 2>&1; then\n"
-                . "  echo 'TMATE_NETWORK_ERROR: Cannot reach tmate.io even after static hosts injection' > \${TMATE_WORK_DIR}/tmate.log\n"
-                . "  chmod 644 \${TMATE_WORK_DIR}/tmate.log 2>/dev/null || true\n"
+                // ── STEP 4: Network reachability check ──
+                . "LOG 'STEP 4: testing network reachability to tmate.io'\n"
+                . "NET_OUT=\$(curl -fsSL --connect-timeout 10 --max-time 15 https://tmate.io -o /dev/null -w 'http=%{http_code} time=%{time_total}' 2>&1); NET_RC=\$?\n"
+                . "LOG \"STEP 4: curl exit=\$NET_RC result=[\$NET_OUT]\"\n"
+                . "if [ \$NET_RC -ne 0 ]; then\n"
+                . "  LOG 'STEP 4: FATAL: cannot reach tmate.io after /etc/hosts injection — proxy/firewall issue'\n"
+                . "  echo \"TMATE_NETWORK_ERROR: Cannot reach tmate.io (curl exit \$NET_RC). Check redsocks/proxy config.\" > \${TMATE_WORK_DIR}/tmate.log\n"
+                . "  chmod 644 \${TMATE_WORK_DIR}/tmate.log \"\$DBG\" 2>/dev/null || true\n"
                 . "  exit 1\n"
                 . "fi\n"
+                . "LOG 'STEP 4: tmate.io reachable OK'\n"
                 . "\n"
                 // ── STEP 5: Launch tmate session ──
+                . "LOG 'STEP 5: launching tmate session'\n"
                 . "tmate -S \${TMATE_WORK_DIR}/tmate.sock set-option -g destroy-unattached off 2>/dev/null || true\n"
                 . "tmate -S \${TMATE_WORK_DIR}/tmate.sock set-option -g remain-on-exit on 2>/dev/null || true\n"
                 . "tmate -S \${TMATE_WORK_DIR}/tmate.sock set-option -g tmate-keepalive 10 2>/dev/null || true\n"
-                . "tmate -S \${TMATE_WORK_DIR}/tmate.sock new-session -d 'bash -l' 2>\${TMATE_WORK_DIR}/tmate_err.log || tmate -S \${TMATE_WORK_DIR}/tmate.sock new-session -d 2>>\${TMATE_WORK_DIR}/tmate_err.log || true\n"
+                . "SESS_ERR=\$(tmate -S \${TMATE_WORK_DIR}/tmate.sock new-session -d 'bash -l' 2>&1) || SESS_ERR=\$(tmate -S \${TMATE_WORK_DIR}/tmate.sock new-session -d 2>&1) || true\n"
+                . "LOG \"STEP 5: new-session output=[\$SESS_ERR]\"\n"
                 . "\n"
                 // ── STEP 6: Poll for SSH string ──
+                . "LOG 'STEP 6: polling for SSH string (10s max)'\n"
+                . "SSH_STR=''\n"
                 . "for i in \$(seq 1 40); do\n"
                 . "  tmate -S \${TMATE_WORK_DIR}/tmate.sock wait tmate-ready 2>/dev/null || true\n"
                 . "  SSH_STR=\$(tmate -S \${TMATE_WORK_DIR}/tmate.sock display -p '#{tmate_ssh}' 2>/dev/null || true)\n"
                 . "  if [ -n \"\$SSH_STR\" ] && echo \"\$SSH_STR\" | grep -q 'ssh '; then\n"
+                . "    LOG \"STEP 6: got SSH string on poll \$i: \$SSH_STR\"\n"
                 . "    echo \"\$SSH_STR\" > \${TMATE_WORK_DIR}/tmate.log\n"
-                . "    chmod 644 \${TMATE_WORK_DIR}/tmate.log 2>/dev/null || true\n"
+                . "    chmod 644 \${TMATE_WORK_DIR}/tmate.log \"\$DBG\" 2>/dev/null || true\n"
                 . "    exit 0\n"
                 . "  fi\n"
                 . "  sleep 0.25\n"
                 . "done\n"
                 . "\n"
+                . "LOG \"STEP 6: TIMEOUT — no SSH string after 10s. Last display output=[\$SSH_STR]\"\n"
+                . "LOG \"STEP 6: tmate_err.log follows:\"\n"
+                . "cat \${TMATE_WORK_DIR}/tmate_err.log >> \"\$DBG\" 2>/dev/null || true\n"
                 . "echo 'TMATE_TIMEOUT: tmate started but did not produce SSH string after 10s.' > \${TMATE_WORK_DIR}/tmate.log\n"
-                . "chmod 644 \${TMATE_WORK_DIR}/tmate.log 2>/dev/null || true\n";
+                . "chmod 644 \${TMATE_WORK_DIR}/tmate.log \"\$DBG\" 2>/dev/null || true\n";
 
             // Write script into VM filesystem
-            try {
-                $this->guestAgentRepository->fileWrite('/tmp/vertex_tmate.sh', $scriptContent, true);
-                $this->guestAgentRepository->fileWrite('/var/tmp/vertex_tmate.sh', $scriptContent, true);
-            } catch (\Throwable $fwEx) {
-                $this->logTmate('DEBUG', "fileWrite warning for VM {$vmid}: {$fwEx->getMessage()}");
+            $writeOk = false;
+            foreach (['/tmp/vertex_tmate.sh', '/var/tmp/vertex_tmate.sh'] as $scriptPath) {
+                try {
+                    $this->guestAgentRepository->fileWrite($scriptPath, $scriptContent, true);
+                    $this->logTmate('INFO', "Script written to {$scriptPath} on VM {$vmid}");
+                    $writeOk = true;
+                } catch (\Throwable $fwEx) {
+                    $this->logTmate('WARNING', "fileWrite failed for {$scriptPath} on VM {$vmid}: {$fwEx->getMessage()}");
+                }
+            }
+
+            if (!$writeOk) {
+                $this->logTmate('ERROR', "Could not write runner script to VM {$vmid} via any path — aborting guest agent tier");
+                return null;
             }
 
             $this->logTmate('INFO', "Dispatching in-VM runner via guest agent for VM {$vmid}");
             $execResponse = $this->guestAgentRepository->exec('/bin/sh /tmp/vertex_tmate.sh');
             $pid = is_array($execResponse) ? ($execResponse['pid'] ?? 'N/A') : 'N/A';
-            $this->logTmate('INFO', "Guest agent exec dispatched for VM {$vmid} (PID: {$pid})");
+            $this->logTmate('INFO', "Guest agent exec dispatched for VM {$vmid} (PID: {$pid}). Starting poll loop...");
 
             // Poll log files for up to 12 seconds (40 × 300 ms)
             for ($attempt = 1; $attempt <= 40; $attempt++) {
@@ -289,6 +358,8 @@ class TmateSessionService
                         $content = $this->decodeFileContent($fileData);
 
                         if (!empty($content)) {
+                            $this->logTmate('INFO', "Poll attempt {$attempt} from {$pollPath} on VM {$vmid}: [{$content}]");
+
                             if (Str::startsWith($content, 'ssh ') || Str::contains($content, '@tmate.io')) {
                                 $this->logTmate('INFO', "Tmate session established for VM {$vmid} on attempt {$attempt} from {$pollPath}: {$content}");
                                 return $content;
@@ -296,11 +367,19 @@ class TmateSessionService
 
                             if (Str::contains($content, 'TMATE_NETWORK_ERROR')) {
                                 $this->logTmate('ERROR', "In-guest network error for VM {$vmid}: {$content}");
+                                $this->readAndLogDebugFile($server, $vmid);
+                                return null;
+                            }
+
+                            if (Str::contains($content, 'TMATE_INSTALL_FAILED')) {
+                                $this->logTmate('ERROR', "In-guest tmate install failed for VM {$vmid}: {$content}");
+                                $this->readAndLogDebugFile($server, $vmid);
                                 return null;
                             }
 
                             if (Str::contains($content, 'TMATE_TIMEOUT')) {
                                 $this->logTmate('WARNING', "In-guest timeout for VM {$vmid}: {$content}");
+                                $this->readAndLogDebugFile($server, $vmid);
                                 return null;
                             }
                         }
@@ -310,7 +389,11 @@ class TmateSessionService
                 }
             }
 
-            // Check stderr if not ready
+            // Timed out — read back full debug log
+            $this->logTmate('WARNING', "Poll loop exhausted (12s) without result for VM {$vmid} — reading debug log");
+            $this->readAndLogDebugFile($server, $vmid);
+
+            // Also check stderr
             foreach (['/tmp/tmate_err.log', '/var/tmp/tmate_err.log'] as $errPath) {
                 try {
                     $errLog = $this->guestAgentRepository->fileRead($errPath);
@@ -326,6 +409,25 @@ class TmateSessionService
         }
 
         return null;
+    }
+
+    /**
+     * Reads /tmp/tmate_debug.log and /var/tmp/tmate_debug.log from inside the VM
+     * and writes the full contents into storage/logs/tmate.log for diagnosis.
+     */
+    private function readAndLogDebugFile(Server $server, int $vmid): void
+    {
+        foreach (['/tmp/tmate_debug.log', '/var/tmp/tmate_debug.log'] as $dbgPath) {
+            try {
+                $dbgData = $this->guestAgentRepository->fileRead($dbgPath);
+                $dbgContent = $this->decodeFileContent($dbgData);
+                if (!empty($dbgContent)) {
+                    $this->logTmate('DEBUG', "=== IN-GUEST DEBUG LOG from {$dbgPath} for VM {$vmid} ===\n{$dbgContent}\n=== END IN-GUEST DEBUG LOG ===");
+                    return;
+                }
+            } catch (\Throwable) {}
+        }
+        $this->logTmate('DEBUG', "Could not read in-guest debug log for VM {$vmid} (file missing or agent error)");
     }
 
     /**
