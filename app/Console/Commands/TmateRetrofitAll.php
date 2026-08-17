@@ -80,8 +80,8 @@ class TmateRetrofitAll extends Command
             } catch (\Throwable $e) {
                 $msg = $e->getMessage();
 
-                // Guest agent not running — reboot so cloud-init installs tmate on next boot
-                if (str_contains($msg, 'QEMU guest agent is not running')) {
+                // Guest agent not running or timed out — reboot so cloud-init installs tmate on next boot
+                if (stripos($msg, 'guest agent is not running') !== false || stripos($msg, 'guest-ping') !== false || stripos($msg, 'guest-exec') !== false) {
                     try {
                         $this->guestAgentRepository->getHttpClient()
                             ->withUrlParameters([
@@ -97,7 +97,7 @@ class TmateRetrofitAll extends Command
                     $success++;
 
                 // VM doesn't exist on Proxmox — silently skip, don't count either way
-                } elseif (str_contains($msg, 'does not exist')) {
+                } elseif (stripos($msg, 'does not exist') !== false) {
                     $this->line("  [SKIP] VM not found on Proxmox");
 
                 // Any other error — mark as failed

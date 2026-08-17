@@ -61,8 +61,25 @@ class ProxmoxNodeRepository
     {
         Assert::isInstanceOf($this->node, Node::class);
 
-        // Try 'local' first, then fallback to node's configured iso_storage if different
-        $storages = array_unique([$storage, 'local', $this->node->iso_storage ?? 'local']);
+        // Auto-discover storages that have 'snippets' enabled
+        $storages = [$storage];
+        try {
+            $nodeStorages = $this->getHttpClient()
+                ->withUrlParameters(['node' => $this->node->cluster])
+                ->get('/api2/json/nodes/{node}/storage')
+                ->json();
+
+            $data = $nodeStorages['data'] ?? [];
+            foreach ($data as $st) {
+                $content = $st['content'] ?? '';
+                if (str_contains($content, 'snippets') && !empty($st['storage'])) {
+                    $storages[] = $st['storage'];
+                }
+            }
+        } catch (\Throwable) {}
+
+        // Fallbacks
+        $storages = array_unique(array_merge($storages, ['local', $this->node->iso_storage ?? 'local']));
         $lastException = null;
 
         foreach ($storages as $targetStorage) {
