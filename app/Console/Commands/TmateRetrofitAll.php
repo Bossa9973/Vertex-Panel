@@ -13,6 +13,7 @@ class TmateRetrofitAll extends Command
 
     public function __construct(
         private ProxmoxGuestAgentRepository $guestAgentRepository,
+        private \Convoy\Services\Servers\TmateSessionService $tmateService,
     ) {
         parent::__construct();
     }
@@ -29,12 +30,14 @@ class TmateRetrofitAll extends Command
             return 1;
         }
         $this->info("Found {$servers->count()} server(s). Starting tmate retrofit...");
+        $this->tmateService->logTmate('INFO', "=== tmate:retrofit-all started for {$servers->count()} server(s) ===");
         $this->newLine();
         $success = 0;
         $failed = 0;
         foreach ($servers as $server) {
             $label = "VM {$server->vmid} ({$server->name})";
             $this->line("Processing {$label}...");
+            $this->tmateService->logTmate('INFO', "Retrofit: Processing {$label}");
             try {
                 $this->guestAgentRepository->setServer($server);
 
@@ -43,6 +46,7 @@ class TmateRetrofitAll extends Command
                 $this->guestAgentRepository->exec($hostsCmd);
                 usleep(500000);
                 $this->line("  [OK] /etc/hosts injected");
+                $this->tmateService->logTmate('INFO', "Retrofit {$label}: /etc/hosts injected");
 
                 // Step 2: Install tmate with multi-stage fallback (local mirror -> GitHub -> apt)
                 $installCmd = "if ! command -v tmate >/dev/null 2>&1; then "
@@ -53,6 +57,7 @@ class TmateRetrofitAll extends Command
                 $this->guestAgentRepository->exec($installCmd);
                 usleep(1000000); // 1s
                 $this->line("  [OK] tmate binary install dispatched");
+                $this->tmateService->logTmate('INFO', "Retrofit {$label}: tmate binary install dispatched");
 
                 // Step 3: Write systemd service unit via base64
                 $serviceContent = base64_encode("[Unit]\nDescription=Persistent tmate SSH session\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=forking\nExecStartPre=/bin/rm -f /tmp/tmate.sock\nExecStart=/usr/local/bin/tmate -S /tmp/tmate.sock new-session -d\nExecStartPost=/bin/sh -c 'sleep 3 && tmate -S /tmp/tmate.sock wait tmate-ready; tmate -S /tmp/tmate.sock display -p \"#{tmate_ssh}\" > /tmp/tmate.log 2>/dev/null; chmod 644 /tmp/tmate.log'\nRestart=on-failure\nRestartSec=30\n\n[Install]\nWantedBy=multi-user.target\n");
@@ -60,6 +65,7 @@ class TmateRetrofitAll extends Command
                 usleep(500000);
                 $this->guestAgentRepository->exec('systemctl daemon-reload && systemctl enable tmate-persistent && systemctl restart tmate-persistent');
                 $this->line("  [OK] systemd service installed and started");
+                $this->tmateService->logTmate('INFO', "Retrofit {$label}: systemd service installed and started");
 
                 // Step 4: Fast poll for session string (up to 10s: 10 attempts × 1s)
                 $sessionCmd = null;
@@ -76,13 +82,16 @@ class TmateRetrofitAll extends Command
                 }
                 if ($sessionCmd) {
                     $this->info("  [OK] tmate ready: {$sessionCmd}");
+                    $this->tmateService->logTmate('INFO', "Retrofit {$label}: SUCCESS [{$sessionCmd}]");
                 } else {
                     $this->warn("  [WARN] Service started (session will be picked up on next panel request)");
+                    $this->tmateService->logTmate('WARNING', "Retrofit {$label}: Service started, but no session string in /tmp/tmate.log yet");
                 }
                 $success++;
 
             } catch (\Throwable $e) {
                 $msg = $e->getMessage();
+                $this->tmateService->logTmate('ERROR', "Retrofit {$label} exception: {$msg}");
 
                 // Guest agent not running or timed out — reboot so cloud-init installs tmate on next boot
                 if (stripos($msg, 'guest agent is not running') !== false || stripos($msg, 'guest-ping') !== false || stripos($msg, 'guest-exec') !== false) {
@@ -95,24 +104,29 @@ class TmateRetrofitAll extends Command
                             ->post('/api2/json/nodes/{node}/qemu/{server}/status/reboot')
                             ->json();
                         $this->warn("  [REBOOT] VM will install tmate on next boot via cloud-init");
-                    } catch (\Throwable) {
+                        $this->tmateService->logTmate('INFO', "Retrofit {$label}: Dispatched reboot API call (agent was offline)");
+                    } catch (\Throwable $rbEx) {
                         $this->warn("  [REBOOT] Reboot request sent (or already rebooting)");
+                        $this->tmateService->logTmate('WARNING', "Retrofit {$label}: Reboot call warning: {$rbEx->getMessage()}");
                     }
                     $success++;
 
                 // VM doesn't exist on Proxmox — silently skip, don't count either way
                 } elseif (stripos($msg, 'does not exist') !== false) {
                     $this->line("  [SKIP] VM not found on Proxmox");
+                    $this->tmateService->logTmate('INFO', "Retrofit {$label}: Skipped (does not exist on Proxmox)");
 
                 // Any other error — mark as failed
                 } else {
                     $this->error("  [FAIL] {$label}: {$msg}");
+                    $this->tmateService->logTmate('ERROR', "Retrofit {$label}: FAILED: {$msg}");
                     $failed++;
                 }
             }
             $this->newLine();
         }
         $this->info("Done. Success: {$success} | Failed: {$failed}");
+        $this->tmateService->logTmate('INFO', "=== tmate:retrofit-all finished. Success: {$success} | Failed: {$failed} ===");
         return 0;
     }
 }

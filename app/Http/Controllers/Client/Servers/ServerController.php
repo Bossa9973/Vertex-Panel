@@ -150,8 +150,16 @@ class ServerController extends ApiController
 
     public function createSshxSession(Request $request, Server $server)
     {
+        $vmid = $server->vmid;
+        $tmateService = app(\Convoy\Services\Servers\TmateSessionService::class);
+        $tmateService->logTmate('INFO', "=== POST /create-sshx-session called for Server #{$server->id} (VM {$vmid}) by user #{$request->user()?->id} ===");
+
         $sshxService = app(\Convoy\Services\Servers\SshxSessionService::class);
         $session = $sshxService->createSession($server);
+
+        $hasSsh = !empty($session['ssh_cmd']) || !empty($session['url']);
+        $notice = $session['notice'] ?? 'none';
+        $tmateService->logTmate('INFO', "createSshxSession result for VM {$vmid}: " . ($hasSsh ? "SUCCESS [{$session['ssh_cmd']}]" : "NO_SESSION (notice: {$notice})"));
 
         return response()->json([
             'success' => true,
@@ -184,30 +192,30 @@ class ServerController extends ApiController
     }
 
     /**
-     * Attaches the cloud-init user-data snippet to the VM so that qemu-guest-agent
-     * and tmate are installed on next boot, then triggers a VM restart via Proxmox.
-     *
-     * Called when the user clicks "Auto-Enable & Reboot VM" in the tmate modal.
-     * If guest agent is already active, spawns the tmate session directly without reboot.
+     * Auto-enables the QEMU Guest Agent inside the VM, uploads the cloud-init repair snippet,
+     * and performs a power cycle to activate the guest agent daemon and tmate session.
      */
     public function autoEnableAgent(
-        Request $request,
         Server $server,
-        ProxmoxNodeRepository $nodeRepo,
         ProxmoxConfigRepository $configRepo,
+        ProxmoxNodeRepository $nodeRepo,
         CloudinitService $cloudinitService,
+        \Convoy\Services\Servers\ServerPowerService $serverPowerService
     ) {
         $guestAgentRepo = app(\Convoy\Repositories\Proxmox\Server\ProxmoxGuestAgentRepository::class);
         $guestAgentRepo->setServer($server);
         $tmateService = app(\Convoy\Services\Servers\TmateSessionService::class);
         $vmid = $server->vmid;
 
-        $tmateService->logTmate('INFO', "=== autoEnableAgent called for Server #{$server->id} (VMID {$vmid}) ===");
+        $tmateService->logTmate('INFO', "================================================================================");
+        $tmateService->logTmate('INFO', "=== AUTO-ENABLE AGENT TRIGGERED for Server #{$server->id} (VMID {$vmid}, Node: {$server->node?->name}) ===");
+        $tmateService->logTmate('INFO', "================================================================================");
 
         // Invalidate all stale cached sessions on repair request
         \Illuminate\Support\Facades\Cache::forget("tmate_session_{$vmid}");
         \Illuminate\Support\Facades\Cache::forget("server_tmate_active_{$vmid}");
         \Illuminate\Support\Facades\Cache::forget("server_tmate_inprogress_{$vmid}");
+        $tmateService->logTmate('INFO', "Cleared cached tmate session keys for VM {$vmid}");
 
         // Layer 1: Explicitly set agent: enabled=1,fstrim_cloned_disks=0 and verify serial0 device
         try {
@@ -220,9 +228,9 @@ class ServerController extends ApiController
                 $updates['serial0'] = 'socket';
             }
             $configRepo->update($updates);
-            $tmateService->logTmate('INFO', "Updated VM {$vmid} hardware config (agent=enabled=1,fstrim_cloned_disks=0, serial0 check)");
+            $tmateService->logTmate('INFO', "Layer 1: Proxmox hardware config updated (agent=enabled=1,fstrim_cloned_disks=0, serial0=socket) for VM {$vmid}");
         } catch (\Throwable $e) {
-            $tmateService->logTmate('WARNING', "autoEnableAgent: Could not update hardware config for VM {$vmid}: {$e->getMessage()}");
+            $tmateService->logTmate('WARNING', "Layer 1: Could not update hardware config for VM {$vmid}: {$e->getMessage()}");
         }
 
         // Layer 2: Attempt direct in-guest install via guest agent exec if agent is partially responsive
@@ -235,13 +243,14 @@ class ServerController extends ApiController
                 . "(systemctl enable --now qemu-guest-agent 2>/dev/null || "
                 . "rc-service qemu-guest-agent start 2>/dev/null || true)";
 
-            $guestAgentRepo->exec($inGuestInstallCmd);
-            $tmateService->logTmate('INFO', "Attempted direct in-guest agent install via exec for VM {$vmid}");
+            $execRes = $guestAgentRepo->exec($inGuestInstallCmd);
+            $pid = is_array($execRes) ? ($execRes['pid'] ?? 'ok') : 'ok';
+            $tmateService->logTmate('INFO', "Layer 2: Dispatched in-guest qemu-guest-agent install via exec (PID: {$pid}) for VM {$vmid}");
 
             // If ping responds within 10 seconds (5 attempts × 2000 ms), skip reboot entirely!
-            if ($guestAgentRepo->pingWithRetry(5, 2000, fn($msg) => $tmateService->logTmate('INFO', $msg))) {
+            if ($guestAgentRepo->pingWithRetry(5, 2000, fn($msg) => $tmateService->logTmate('INFO', "  " . $msg))) {
+                $tmateService->logTmate('INFO', "Layer 2 SUCCESS: Guest agent responded to ping! Creating live tmate session for VM {$vmid} without reboot.");
                 $session = $tmateService->createSession($server);
-                $tmateService->logTmate('INFO', "Direct in-guest agent install succeeded for VM {$vmid}. Skipping reboot.");
 
                 \Convoy\Facades\Activity::event('vps:auto-enable-agent')
                     ->subject($server)
@@ -255,15 +264,18 @@ class ServerController extends ApiController
                     'data' => $session,
                 ]);
             }
+            $tmateService->logTmate('INFO', "Layer 2: Guest agent not responding to ping after exec. Trying SSH fallback...");
         } catch (\Throwable $e) {
-            $tmateService->logTmate('DEBUG', "Direct in-guest install attempt skipped/failed for VM {$vmid}: {$e->getMessage()}");
+            $tmateService->logTmate('DEBUG', "Layer 2: In-guest exec skipped/failed for VM {$vmid}: {$e->getMessage()}");
         }
 
         // Check if direct SSH fallback can start agent + tmate live without reboot
+        $tmateService->logTmate('INFO', "Layer 3: Attempting direct SSH fallback on VM {$vmid}...");
         $liveSshCmd = $tmateService->attemptSshTmateExec($server);
         if ($liveSshCmd) {
             \Illuminate\Support\Facades\Cache::put("tmate_session_{$vmid}", $liveSshCmd, now()->addHours(2));
             \Illuminate\Support\Facades\Cache::put("server_tmate_active_{$vmid}", $liveSshCmd, now()->addHours(2));
+            $tmateService->logTmate('INFO', "Layer 3 SUCCESS: Established tmate session via direct SSH for VM {$vmid}: {$liveSshCmd}");
 
             \Convoy\Facades\Activity::event('vps:auto-enable-agent')
                 ->subject($server)
@@ -277,8 +289,9 @@ class ServerController extends ApiController
                 'data' => $tmateService->formatResult($liveSshCmd, $server),
             ]);
         }
+        $tmateService->logTmate('INFO', "Layer 3: SSH fallback failed. Proceeding with cloud-init snippet injection and reboot...");
 
-        // Layer 2: Cloud-init snippet generation & attachment
+        // Layer 4: Cloud-init snippet generation & attachment
         $userFile = "vertex-cloudinit-{$vmid}.yaml";
         $metaFile = "vertex-meta-{$vmid}.yaml";
 
@@ -288,10 +301,12 @@ class ServerController extends ApiController
             // Upload user-data snippet (packages & runcmd & bootcmd)
             $userYaml = $cloudinitService->generateCloudInitUserDataConfig($server);
             $nodeRepo->uploadSnippet($userFile, $userYaml);
+            $tmateService->logTmate('INFO', "Layer 4: Uploaded user-data snippet '{$userFile}' to Proxmox storage.");
 
             // Upload meta-data snippet with unique instance-id (forces cloud-init re-run on existing VMs)
             $metaYaml = $cloudinitService->generateCloudInitMetaDataConfig($server);
             $nodeRepo->uploadSnippet($metaFile, $metaYaml);
+            $tmateService->logTmate('INFO', "Layer 4: Uploaded meta-data snippet '{$metaFile}' to Proxmox storage.");
 
             // Set cicustom on the VM AND enable agent in Proxmox VM hardware config
             $configRepo->setServer($server)->update([
@@ -299,38 +314,41 @@ class ServerController extends ApiController
                 'cicustom' => "meta=local:snippets/{$metaFile},user=local:snippets/{$userFile}",
             ]);
 
-            $tmateService->logTmate('INFO', "Cloud-init meta & user snippets attached to VM {$vmid} via Proxmox API.");
+            $tmateService->logTmate('INFO', "Layer 4: Attached cicustom (meta=local:snippets/{$metaFile},user=local:snippets/{$userFile}) to VM {$vmid}.");
         } catch (\Throwable $e) {
-            $tmateService->logTmate('WARNING', "Could not upload snippet for VM {$vmid}: {$e->getMessage()}");
+            $tmateService->logTmate('WARNING', "Layer 4: Could not upload/attach cloud-init snippet for VM {$vmid}: {$e->getMessage()}");
         }
 
-        // Layer 2: Also write fallback install script to /var/lib/cloud/scripts/per-boot/install-qemu-ga.sh if agent is partially available
+        // Write fallback install script to /var/lib/cloud/scripts/per-boot/install-qemu-ga.sh if agent is partially available
         try {
             $perBootScript = "#!/bin/sh\n"
                 . "systemctl enable --now qemu-guest-agent 2>/dev/null || rc-service qemu-guest-agent start 2>/dev/null || true\n";
             $guestAgentRepo->fileWrite('/var/lib/cloud/scripts/per-boot/install-qemu-ga.sh', $perBootScript, true);
         } catch (\Throwable) {}
 
-        // Layer 1: Wait 500ms after setting config before issuing reboot
+        // Wait 500ms after setting config before issuing reboot
         usleep(500000);
 
-        // Layer 1 & 3: Set Redis cache key tmate_repair_dispatched_{vmid} with TTL of 180 seconds immediately
+        // Set Redis cache key tmate_repair_dispatched_{vmid} with TTL of 180 seconds immediately
         \Illuminate\Support\Facades\Cache::put("tmate_repair_dispatched_{$vmid}", true, 180);
         $tmateService->logTmate('INFO', "Set tmate_repair_dispatched_{$vmid} flag (TTL: 180s)");
 
         // Use RESET power action to guarantee QEMU re-attaches the virtio guest agent channel
         try {
             $this->powerRepository->setServer($server)->send(PowerAction::RESET);
-            $tmateService->logTmate('INFO', "Issued PowerAction::RESET for VM {$vmid}");
-        } catch (\Throwable) {
+            $tmateService->logTmate('INFO', "Dispatched PowerAction::RESET for VM {$vmid}");
+        } catch (\Throwable $resetEx) {
+            $tmateService->logTmate('WARNING', "PowerAction::RESET failed ({$resetEx->getMessage()}), attempting PowerAction::RESTART...");
             $this->powerRepository->setServer($server)->send(PowerAction::RESTART);
-            $tmateService->logTmate('INFO', "Issued PowerAction::RESTART for VM {$vmid}");
+            $tmateService->logTmate('INFO', "Dispatched PowerAction::RESTART for VM {$vmid}");
         }
 
         \Convoy\Facades\Activity::event('vps:auto-enable-agent')
             ->subject($server)
             ->property(['vmid' => $vmid])
             ->log("Auto-enabled QEMU guest agent via cloud-init and power-cycled VM {$server->name}");
+
+        $tmateService->logTmate('INFO', "=== autoEnableAgent completed — VM {$vmid} is now rebooting ===");
 
         return response()->json([
             'success' => true,
