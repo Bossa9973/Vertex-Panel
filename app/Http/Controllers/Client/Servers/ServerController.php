@@ -196,11 +196,11 @@ class ServerController extends ApiController
      * and performs a power cycle to activate the guest agent daemon and tmate session.
      */
     public function autoEnableAgent(
+        Request $request,
         Server $server,
         ProxmoxConfigRepository $configRepo,
         ProxmoxNodeRepository $nodeRepo,
         CloudinitService $cloudinitService,
-        \Convoy\Services\Servers\ServerPowerService $serverPowerService
     ) {
         $guestAgentRepo = app(\Convoy\Repositories\Proxmox\Server\ProxmoxGuestAgentRepository::class);
         $guestAgentRepo->setServer($server);
@@ -210,6 +210,8 @@ class ServerController extends ApiController
         $tmateService->logTmate('INFO', "================================================================================");
         $tmateService->logTmate('INFO', "=== AUTO-ENABLE AGENT TRIGGERED for Server #{$server->id} (VMID {$vmid}, Node: {$server->node?->name}) ===");
         $tmateService->logTmate('INFO', "================================================================================");
+
+        try {
 
         // Invalidate all stale cached sessions on repair request
         \Illuminate\Support\Facades\Cache::forget("tmate_session_{$vmid}");
@@ -355,5 +357,21 @@ class ServerController extends ApiController
             'rebooting' => true,
             'message' => 'Cloud-init snippet attached and VM power cycle triggered. Initializing guest agent and tmate...',
         ]);
+        } catch (\Throwable $e) {
+            $tmateService->logTmate('ERROR', "autoEnableAgent FATAL EXCEPTION for VM {$vmid}: " . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'rebooting' => false,
+                'message' => "Auto-repair error: " . $e->getMessage(),
+                'errors' => [
+                    ['detail' => $e->getMessage()]
+                ],
+            ], 500);
+        }
     }
 }
