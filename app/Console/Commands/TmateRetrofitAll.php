@@ -51,20 +51,20 @@ class TmateRetrofitAll extends Command
                     . "|| (DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) 2>/dev/null "
                     . "|| true; fi";
                 $this->guestAgentRepository->exec($installCmd);
-                usleep(5000000);
+                usleep(1000000); // 1s
                 $this->line("  [OK] tmate binary install dispatched");
 
                 // Step 3: Write systemd service unit via base64
-                $serviceContent = base64_encode("[Unit]\nDescription=Persistent tmate SSH session\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=forking\nExecStartPre=/bin/rm -f /tmp/tmate.sock\nExecStart=/usr/local/bin/tmate -S /tmp/tmate.sock new-session -d\nExecStartPost=/bin/sh -c 'sleep 5 && tmate -S /tmp/tmate.sock wait tmate-ready; tmate -S /tmp/tmate.sock display -p \"#{tmate_ssh}\" > /tmp/tmate.log 2>/dev/null; chmod 644 /tmp/tmate.log'\nRestart=on-failure\nRestartSec=30\n\n[Install]\nWantedBy=multi-user.target\n");
+                $serviceContent = base64_encode("[Unit]\nDescription=Persistent tmate SSH session\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=forking\nExecStartPre=/bin/rm -f /tmp/tmate.sock\nExecStart=/usr/local/bin/tmate -S /tmp/tmate.sock new-session -d\nExecStartPost=/bin/sh -c 'sleep 3 && tmate -S /tmp/tmate.sock wait tmate-ready; tmate -S /tmp/tmate.sock display -p \"#{tmate_ssh}\" > /tmp/tmate.log 2>/dev/null; chmod 644 /tmp/tmate.log'\nRestart=on-failure\nRestartSec=30\n\n[Install]\nWantedBy=multi-user.target\n");
                 $this->guestAgentRepository->exec("echo {$serviceContent} | base64 -d > /etc/systemd/system/tmate-persistent.service");
                 usleep(500000);
                 $this->guestAgentRepository->exec('systemctl daemon-reload && systemctl enable tmate-persistent && systemctl restart tmate-persistent');
                 $this->line("  [OK] systemd service installed and started");
 
-                // Step 4: Poll for session string (up to 2 minutes)
+                // Step 4: Fast poll for session string (up to 10s: 10 attempts × 1s)
                 $sessionCmd = null;
-                for ($i = 0; $i < 24; $i++) {
-                    usleep(5000000);
+                for ($i = 0; $i < 10; $i++) {
+                    usleep(1000000); // 1s interval
                     try {
                         $fileData = $this->guestAgentRepository->fileRead('/tmp/tmate.log');
                         $content = trim(base64_decode($fileData['content'] ?? '') ?: ($fileData['content'] ?? ''));
@@ -77,7 +77,7 @@ class TmateRetrofitAll extends Command
                 if ($sessionCmd) {
                     $this->info("  [OK] tmate ready: {$sessionCmd}");
                 } else {
-                    $this->warn("  [WARN] No session string yet");
+                    $this->warn("  [WARN] Service started (session will be picked up on next panel request)");
                 }
                 $success++;
 
