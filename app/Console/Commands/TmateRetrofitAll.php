@@ -44,8 +44,12 @@ class TmateRetrofitAll extends Command
                 usleep(500000);
                 $this->line("  [OK] /etc/hosts injected");
 
-                // Step 2: Install tmate from internal Proxmox host mirror
-                $installCmd = "if ! command -v tmate >/dev/null 2>&1; then curl -fsSL --connect-timeout 10 --max-time 60 'http://10.0.0.1:9999/tmate-static' -o /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate || true; fi";
+                // Step 2: Install tmate with multi-stage fallback (local mirror -> GitHub -> apt)
+                $installCmd = "if ! command -v tmate >/dev/null 2>&1; then "
+                    . "(curl -fsSL --connect-timeout 5 --max-time 30 'http://10.0.0.1:9999/tmate-static' -o /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate) 2>/dev/null "
+                    . "|| (curl -fsSL --connect-timeout 10 --max-time 60 'https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz' -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) 2>/dev/null "
+                    . "|| (DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) 2>/dev/null "
+                    . "|| true; fi";
                 $this->guestAgentRepository->exec($installCmd);
                 usleep(5000000);
                 $this->line("  [OK] tmate binary install dispatched");
