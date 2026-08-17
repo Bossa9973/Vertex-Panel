@@ -37,6 +37,8 @@ class Kernel extends ConsoleKernel
         $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
         $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
         $schedule->command(KeepQemuAgentAndTmateAliveCommand::class)->everyFiveMinutes();
+        // Daily at 3 AM — retrofit any VMs that were offline or rebooted and missed tmate install
+        $schedule->command('tmate:retrofit-all')->dailyAt('03:00');
     }
 
     /**

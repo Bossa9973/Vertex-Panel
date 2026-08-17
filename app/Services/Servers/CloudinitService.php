@@ -165,7 +165,6 @@ class CloudinitService
         $yaml .= "packages:\n";
         $yaml .= "  - qemu-guest-agent\n";
         $yaml .= "  - curl\n";
-        $yaml .= "  - tmate\n";
         $yaml .= "\n";
         $yaml .= "bootcmd:\n";
         $yaml .= "  - [ sh, -c, \"systemctl start qemu-guest-agent || true\" ]\n";
@@ -194,8 +193,8 @@ class CloudinitService
         $yaml .= "  - /etc/init.d/qemu-guest-agent start || true\n";
         // Inject static DNS hosts (idempotent)
         $yaml .= "  - grep -q 'tmate.io' /etc/hosts || printf '\\n143.198.67.135 tmate.io\\n143.198.67.135 nyc1.tmate.io\\n159.223.125.10 sfo2.tmate.io\\n167.99.210.183 ams1.tmate.io\\n139.59.215.191 sgp1.tmate.io\\n140.82.121.4 github.com\\n185.199.108.133 raw.githubusercontent.com\\n' >> /etc/hosts\n";
-        // Install tmate binary
-        $yaml .= "  - if ! command -v tmate >/dev/null 2>&1; then (curl -fsSL --connect-timeout 15 --max-time 60 \"https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-amd64.tar.xz\" -o /tmp/tmate.tar.xz && tar -xJf /tmp/tmate.tar.xz -C /tmp && cp /tmp/tmate-*/tmate /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate && rm -rf /tmp/tmate*) || (DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tmate) || true; fi\n";
+        // Install tmate binary from internal Proxmox host mirror (avoids GitHub + proxy issues)
+        $yaml .= "  - if ! command -v tmate >/dev/null 2>&1; then curl -fsSL --connect-timeout 10 --max-time 60 'http://10.0.0.1:9999/tmate-static' -o /usr/local/bin/tmate && chmod 755 /usr/local/bin/tmate || true; fi\n";
         // Install tmate as a persistent systemd service so it survives reboots
         $yaml .= "  - |\n";
         $yaml .= "    cat > /etc/systemd/system/tmate-persistent.service << 'UNIT_EOF'\n";
