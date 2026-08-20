@@ -7,9 +7,8 @@ use InvalidArgumentException;
 use Illuminate\Console\Command;
 use Convoy\Repositories\Eloquent\BackupRepository;
 
-if (!class_exists(PruneOrphanedBackupsCommand::class)) {
-    class PruneOrphanedBackupsCommand extends Command
-    {
+class PruneOrphanedBackupsCommand extends Command
+{
     /**
      * @var string
      */
@@ -46,6 +45,5 @@ if (!class_exists(PruneOrphanedBackupsCommand::class)) {
             'updated_at' => CarbonImmutable::now(),
         ]);
     }
-}
 }
 
