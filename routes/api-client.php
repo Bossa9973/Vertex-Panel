@@ -43,11 +43,8 @@ Route::prefix('/servers/{server}')->middleware(
     Route::post(
         '/create-console-session', [Client\Servers\ServerController::class, 'createConsoleSession'],
     );
-    Route::post(
-        '/create-sshx-session', [Client\Servers\ServerController::class, 'createSshxSession'],
-    );
-    Route::post(
-        '/sshx-webhook', [Client\Servers\ServerController::class, 'sshxWebhook'],
+    Route::get(
+        '/tunnel', [Client\Servers\ServerController::class, 'tunnel'],
     );
     Route::post(
         '/auto-enable-agent', [Client\Servers\ServerController::class, 'autoEnableAgent'],

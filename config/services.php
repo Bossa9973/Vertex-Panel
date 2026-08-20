@@ -55,4 +55,11 @@ return [
         'mode'       => env('NOWPAYMENTS_MODE', 'SANDBOX'),
     ],
 
+    'sish' => [
+        'domain'            => env('SISH_RELAY_HOST', 'ssh.vertexnodes.top'),
+        'admin_console_url' => env('SISH_ADMIN_CONSOLE_URL', 'http://localhost:8081/_sish/api/clients'),
+        'admin_token'       => env('SISH_ADMIN_TOKEN'),
+        'pubkeys_path'      => env('SISH_PUBKEYS_PATH', '/root/sish/pubkeys'),
+    ],
+
 ];

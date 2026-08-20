@@ -11,7 +11,6 @@ use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use Convoy\Console\Commands\Maintenance\PruneUsersCommand;
 use Convoy\Console\Commands\Server\UpdateRateLimitsCommand;
 use Convoy\Console\Commands\Maintenance\PruneOrphanedBackupsCommand;
-use Convoy\Console\Commands\Server\KeepQemuAgentAndTmateAliveCommand;
 
 class Kernel extends ConsoleKernel
 {
@@ -36,9 +35,16 @@ class Kernel extends ConsoleKernel
         $schedule->command(PruneUsersCommand::class)->daily();
         $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
         $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
-        $schedule->command(KeepQemuAgentAndTmateAliveCommand::class)->everyFiveMinutes();
-        // Daily at 3 AM — retrofit any VMs that were offline or rebooted and missed tmate install
-        $schedule->command('tmate:retrofit-all')->dailyAt('03:00');
+
+        // Poll sish admin API to update tunnel_port for any server whose tunnel came up since last run
+        $schedule->call(function () {
+            \Convoy\Models\Server::whereIn('tunnel_status', ['pending', 'offline'])
+                ->whereNotNull('tunnel_token')
+                ->each(function ($server) {
+                    app(\Convoy\Services\VertexTunnelService::class)
+                        ->pollAssignedPort($server);
+                });
+        })->everyFiveMinutes()->name('poll-tunnel-ports')->withoutOverlapping();
     }
 
     /**
