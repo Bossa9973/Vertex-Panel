@@ -155,45 +155,155 @@ class CloudinitService
      */
     public function generateCloudInitUserDataConfig(Server $server): string
     {
+        return $this->dumpCloudInitArray(
+            $this->generateCloudInitUserDataArray($server)
+        );
+    }
+
+    /**
+     * Returns the cloud-init user-data as a plain PHP array so callers can
+     * merge additional keys (write_files, runcmd, etc.) before serialising —
+     * avoiding the duplicate-key YAML problem entirely.
+     */
+    public function generateCloudInitUserDataArray(Server $server): array
+    {
         $config = collect($this->configRepository->setServer($server)->getConfig());
         $user = $config->where('key', '=', 'ciuser')->first()['value'] ?? 'root';
         $rawPassword = $config->where('key', '=', 'cipassword')->first()['value'] ?? null;
         $sshKeysRaw = $config->where('key', '=', 'sshkeys')->first()['value'] ?? null;
         $sshKey = $sshKeysRaw ? rawurldecode($sshKeysRaw) : null;
 
-        $yaml = "#cloud-config\n";
-        $yaml .= "package_update: true\n";
-        $yaml .= "package_upgrade: false\n";
-        $yaml .= "packages:\n";
-        $yaml .= "  - qemu-guest-agent\n";
-        $yaml .= "\n";
-        $yaml .= "bootcmd:\n";
-        $yaml .= "  - [ sh, -c, \"systemctl start qemu-guest-agent || true\" ]\n";
-        $yaml .= "\n";
+        $data = [
+            'package_update'  => true,
+            'package_upgrade' => false,
+            'packages'        => ['qemu-guest-agent'],
+            'bootcmd'         => [
+                ['sh', '-c', 'systemctl start qemu-guest-agent || true'],
+            ],
+        ];
 
         if ($user) {
-            $yaml .= "user: {$user}\n";
+            $data['user'] = $user;
         }
 
         if ($rawPassword) {
-            $yaml .= "password: {$rawPassword}\n";
-            $yaml .= "chpasswd: { expire: false }\n";
-            $yaml .= "ssh_pwauth: true\n";
+            $data['password']  = $rawPassword;
+            $data['chpasswd']  = ['expire' => false];
+            $data['ssh_pwauth'] = true;
         }
 
         if ($sshKey) {
-            $yaml .= "ssh_authorized_keys:\n";
-            $yaml .= "  - \"{$sshKey}\"\n";
+            $data['ssh_authorized_keys'] = [$sshKey];
         }
 
-        $yaml .= "\nruncmd:\n";
-        $yaml .= "  - systemctl daemon-reload || true\n";
-        $yaml .= "  - systemctl enable qemu-guest-agent || true\n";
-        $yaml .= "  - systemctl start qemu-guest-agent || true\n";
-        $yaml .= "  - service qemu-guest-agent start || true\n";
-        $yaml .= "  - /etc/init.d/qemu-guest-agent start || true\n";
+        $data['runcmd'] = [
+            'systemctl daemon-reload || true',
+            'systemctl enable qemu-guest-agent || true',
+            'systemctl start qemu-guest-agent || true',
+            'service qemu-guest-agent start || true',
+            '/etc/init.d/qemu-guest-agent start || true',
+        ];
+
+        return $data;
+    }
+
+    /**
+     * Serialises a cloud-init data array into a #cloud-config YAML string.
+     *
+     * Handles the cloud-init-relevant scalar types, lists of scalars,
+     * lists of mappings (write_files), and nested mappings (chpasswd).
+     * Does NOT aim to be a general-purpose YAML serialiser — only the
+     * keys that generateCloudInitUserDataArray() (and callers) actually use.
+     */
+    public function dumpCloudInitArray(array $data): string
+    {
+        $yaml = "#cloud-config\n";
+
+        foreach ($data as $key => $value) {
+            $yaml .= $this->dumpCloudInitValue($key, $value, 0);
+        }
 
         return $yaml;
+    }
+
+    private function dumpCloudInitValue(string $key, mixed $value, int $indent): string
+    {
+        $pad = str_repeat(' ', $indent);
+
+        if (is_bool($value)) {
+            return "{$pad}{$key}: " . ($value ? 'true' : 'false') . "\n";
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return "{$pad}{$key}: {$value}\n";
+        }
+
+        if (is_string($value)) {
+            if (str_contains($value, "\n")) {
+                $out = "{$pad}{$key}: |\n";
+                foreach (explode("\n", rtrim($value)) as $line) {
+                    $out .= "{$pad}  {$line}\n";
+                }
+                return $out;
+            }
+            $needsQuoting = preg_match('/[:\[\]{},#&*!|>\'"%@`]|^(true|false|null|yes|no)$/i', $value);
+            $escaped = str_replace('"', '\\"', $value);
+            return $needsQuoting ? "{$pad}{$key}: \"{$escaped}\"\n" : "{$pad}{$key}: {$value}\n";
+        }
+
+        if (is_array($value)) {
+            $isAssoc = array_keys($value) !== range(0, count($value) - 1);
+            if ($isAssoc) {
+                $out = "{$pad}{$key}:\n";
+                foreach ($value as $k => $v) {
+                    $out .= $this->dumpCloudInitValue((string) $k, $v, $indent + 2);
+                }
+                return $out;
+            }
+
+            $out = "{$pad}{$key}:\n";
+            foreach ($value as $item) {
+                if (! is_array($item)) {
+                    // Scalar list item (runcmd lines, package names, etc.)
+                    $escaped = is_string($item) ? str_replace('"', '\\"', $item) : $item;
+                    $needsQ  = is_string($item) && preg_match('/[:\[\]{},#&*!|>\'"%@`]|^(true|false|null|yes|no)$/i', $item);
+                    $out    .= $needsQ ? "{$pad}  - \"{$escaped}\"\n" : "{$pad}  - {$item}\n";
+                    continue;
+                }
+
+                $itemKeys = array_keys($item);
+
+                // Sequence-of-sequences — e.g. bootcmd: [['sh', '-c', 'cmd']]
+                if ($itemKeys === range(0, count($item) - 1)) {
+                    $encoded = implode(', ', array_map(fn ($s) => "\"{$s}\"", $item));
+                    $out .= "{$pad}  - [{$encoded}]\n";
+                    continue;
+                }
+
+                // Sequence-of-mappings — e.g. write_files items
+                $firstKey = $itemKeys[0];
+                $firstVal = $item[$firstKey];
+                $restKeys = array_slice($itemKeys, 1);
+
+                if (is_string($firstVal) && str_contains($firstVal, "\n")) {
+                    // Literal block scalar — e.g. multi-line private key
+                    $out .= "{$pad}  - {$firstKey}: |\n";
+                    foreach (explode("\n", rtrim($firstVal)) as $line) {
+                        $out .= "{$pad}    {$line}\n";
+                    }
+                } else {
+                    $scalarLine = $this->dumpCloudInitValue($firstKey, $firstVal, 0);
+                    $out .= "{$pad}  - " . ltrim($scalarLine);
+                }
+
+                foreach ($restKeys as $k) {
+                    $out .= $this->dumpCloudInitValue($k, $item[$k], $indent + 4);
+                }
+            }
+            return $out;
+        }
+
+        return '';
     }
 
     /**

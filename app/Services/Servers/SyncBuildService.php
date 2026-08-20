@@ -2,6 +2,7 @@
 
 namespace Convoy\Services\Servers;
 
+use App\Services\VertexTunnelService;
 use Convoy\Data\Server\Proxmox\Config\DiskData;
 use Convoy\Enums\Server\DiskInterface;
 use Convoy\Models\Server;
@@ -21,6 +22,7 @@ readonly class SyncBuildService
         private ProxmoxConfigRepository $allocationRepository,
         private ProxmoxDiskRepository   $diskRepository,
         private ProxmoxNodeRepository   $nodeRepository,
+        private VertexTunnelService     $tunnelService,
     )
     {
     }
@@ -89,26 +91,59 @@ readonly class SyncBuildService
         try {
             $this->nodeRepository->setNode($server->node);
 
-            // 1. Upload user-data snippet
+            // 1. Generate base user-data (installs qemu-guest-agent)
             $userYaml = $this->cloudinitService->generateCloudInitUserDataConfig($server);
+
+            // 2. Provision the sish reverse-tunnel keypair and register the pubkey.
+            //    Returns the PEM private key string. Also sets tunnel_token on the server.
+            $privateKey = $this->tunnelService->provision($server);
+
+            // 3. Get cloud-init data as a PHP array (avoids duplicate-key YAML problem).
+            //    Merge tunnel write_files and runcmd entries before serialising.
+            $userArray = $this->cloudinitService->generateCloudInitUserDataArray($server);
+
+            $userArray['write_files'] = array_merge(
+                $userArray['write_files'] ?? [],
+                [
+                    [
+                        'path'        => '/etc/vertex/vm_key',
+                        'permissions' => '0600',
+                        'owner'       => 'root:root',
+                        'encoding'    => 'text',
+                        'content'     => trim($privateKey) . "\n",
+                    ],
+                ]
+            );
+            $userArray['runcmd'] = array_merge(
+                $userArray['runcmd'] ?? [],
+                [
+                    'mkdir -p /etc/vertex',
+                    'chmod 600 /etc/vertex/vm_key || true',
+                    'systemctl daemon-reload || true',
+                    'systemctl enable vertex-tunnel.service || true',
+                    'systemctl restart vertex-tunnel.service || true',
+                ]
+            );
+
+            $userYaml = $this->cloudinitService->dumpCloudInitArray($userArray);
+
+            // 4. Upload the merged user-data snippet
             $this->nodeRepository->uploadSnippet($userFile, $userYaml);
 
-            // 2. Upload meta-data snippet with unique instance-id
+            // 5. Upload meta-data snippet with unique instance-id
             $metaYaml = $this->cloudinitService->generateCloudInitMetaDataConfig($server);
             $this->nodeRepository->uploadSnippet($metaFile, $metaYaml);
 
-            // Point the VM's cloud-init at the uploaded snippets and enable agent: 1
+            // 6. Point the VM's cloud-init at the snippets and enable the guest agent
             $this->allocationRepository->setServer($server)->update([
-                'agent' => 1,
+                'agent'    => 1,
                 'cicustom' => "meta=local:snippets/{$metaFile},user=local:snippets/{$userFile}",
             ]);
 
-            Log::info("Cloud-init meta & user snippets uploaded for VM {$server->vmid}");
+            Log::info("Cloud-init snippets (with tunnel key) uploaded for VM {$server->vmid}");
         } catch (\Throwable $e) {
-            // Non-fatal: if snippet upload fails (e.g. storage doesn't support snippets,
-            // or API token lacks permission), log a warning and continue.
-            // EnsureGuestAgentJob will still wait for the agent; it will just take longer
-            // if qemu-guest-agent isn't pre-installed in the template.
+            // Non-fatal: log and continue. EnsureGuestAgentJob will still wait for
+            // the agent; the tunnel will simply not be available until the next rebuild.
             Log::warning(
                 "Failed to upload cloud-init snippet for VM {$server->vmid}: {$e->getMessage()}. " .
                 "Ensure Proxmox 'local' storage has snippets content type enabled and the API token has Datastore.AllocateTemplate permission.",
