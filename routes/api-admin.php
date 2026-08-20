@@ -56,6 +56,7 @@ Route::prefix('/nodes')->group(function () {
         Route::get('/', [Admin\Nodes\NodeController::class, 'show']);
         Route::put('/', [Admin\Nodes\NodeController::class, 'update']);
         Route::delete('/', [Admin\Nodes\NodeController::class, 'destroy']);
+        Route::post('/reset-root-password', [Admin\Nodes\NodeController::class, 'resetRootPassword']);
 
         /*
         |--------------------------------------------------------------------------

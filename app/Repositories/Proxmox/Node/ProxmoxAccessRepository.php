@@ -98,4 +98,18 @@ class ProxmoxAccessRepository extends ProxmoxRepository
 
         return UserCredentialsData::fromRaw($this->getData($response));
     }
+
+    /**
+     * Updates or resets the password for a user on the Proxmox VE node using the Proxmox Access API.
+     */
+    public function updatePassword(string $userid, string $password): void
+    {
+        Assert::isInstanceOf($this->node, Node::class);
+
+        $this->getHttpClient()
+            ->put('/api2/json/access/password', [
+                'userid'   => $userid,
+                'password' => $password,
+            ]);
+    }
 }

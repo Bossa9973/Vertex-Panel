@@ -73,4 +73,53 @@ class NodeController extends ApiController
 
         return $this->returnNoContent();
     }
+
+    /**
+     * Resets the Proxmox VE root (or specified user) password using the Proxmox Access API.
+     */
+    public function resetRootPassword(
+        Request $request,
+        Node $node,
+        \Convoy\Repositories\Proxmox\Node\ProxmoxAccessRepository $accessRepository
+    ) {
+        $request->validate([
+            'password' => 'required|string|min:6|max:128',
+            'userid'   => 'sometimes|nullable|string|max:64',
+        ]);
+
+        $userid = $request->input('userid') ?: 'root@pam';
+        if (!str_contains($userid, '@')) {
+            $userid .= '@pam';
+        }
+
+        try {
+            $accessRepository->setNode($node)->updatePassword(
+                $userid,
+                $request->input('password')
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to reset PVE password for {$userid} on node #{$node->id} ({$node->name}): {$e->getMessage()}");
+
+            return response()->json([
+                'errors' => [
+                    [
+                        'code'   => 'ProxmoxPasswordResetFailedException',
+                        'status' => '500',
+                        'detail' => 'Failed to reset Proxmox password: ' . $e->getMessage(),
+                    ]
+                ]
+            ], 500);
+        }
+
+        \Convoy\Facades\Activity::event('node:reset-root-password')
+            ->subject($node)
+            ->property(['node_id' => $node->id, 'node_name' => $node->name, 'userid' => $userid])
+            ->log("Reset PVE password for {$userid} on node {$node->name}");
+
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully updated PVE password for {$userid} on {$node->name}.",
+        ]);
+    }
 }
+

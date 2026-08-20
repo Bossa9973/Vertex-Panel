@@ -22,13 +22,14 @@ import Table, {
 
 import SearchBar from '@/components/admin/SearchBar'
 import CreateNodeModal from '@/components/admin/nodes/CreateNodeModal'
-
+import ResetPveRootPasswordModal from '@/components/admin/nodes/ResetPveRootPasswordModal'
 
 const NodesContainer = () => {
     const { t: tStrings } = useTranslation('strings')
     const { t } = useTranslation('admin.nodes.index')
     const [page, setPage] = usePagination()
     const [open, setOpen] = useState(false)
+    const [passwordResetNode, setPasswordResetNode] = useState<Node | null>(null)
     const { clearFlashes, clearAndAddHttpError } =
         useFlashKey('admin.nodes.index')
 
@@ -99,6 +100,11 @@ const NodesContainer = () => {
                 >
                     Copy ID
                 </Menu.Item>
+                <Menu.Item
+                    onClick={() => setPasswordResetNode(node)}
+                >
+                    Reset PVE Password
+                </Menu.Item>
                 <Menu.Divider />
                 <Menu.Item
                     color='red'
@@ -118,6 +124,11 @@ const NodesContainer = () => {
                 showFlashKey='admin.nodes.index'
             >
                 <CreateNodeModal open={open} onClose={() => setOpen(false)} />
+                <ResetPveRootPasswordModal
+                    open={Boolean(passwordResetNode)}
+                    onClose={() => setPasswordResetNode(null)}
+                    node={passwordResetNode}
+                />
                 <SearchBar
                     value={query}
                     onChange={e => setQuery(e.target.value)}
