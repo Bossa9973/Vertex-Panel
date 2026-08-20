@@ -7,8 +7,9 @@ use InvalidArgumentException;
 use Illuminate\Console\Command;
 use Convoy\Repositories\Eloquent\BackupRepository;
 
-class PruneOrphanedBackupsCommand extends Command
-{
+if (!class_exists(PruneOrphanedBackupsCommand::class)) {
+    class PruneOrphanedBackupsCommand extends Command
+    {
     /**
      * @var string
      */
@@ -46,3 +47,5 @@ class PruneOrphanedBackupsCommand extends Command
         ]);
     }
 }
+}
+
