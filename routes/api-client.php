@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/servers', [Client\IndexController::class, 'index']);
 Route::get('/announcement-status', [Client\IndexController::class, 'announcementStatus']);
+Route::get('/terminal-mode', [Client\IndexController::class, 'terminalMode']);
 
 Route::prefix('/credits')->group(function () {
     Route::get('/', [Client\CreditsController::class, 'index']);
@@ -59,6 +60,12 @@ Route::prefix('/servers/{server}')->middleware(
     });
     Route::post(
         '/auto-enable-agent', [Client\Servers\ServerController::class, 'autoEnableAgent'],
+    );
+    Route::get(
+        '/terminal-mode', [Client\Servers\ServerController::class, 'terminalMode'],
+    );
+    Route::post(
+        '/tmate-session', [Client\Servers\ServerController::class, 'tmateSession'],
     );
 
     Route::prefix('/backups')->group(function () {

@@ -16,6 +16,7 @@ use Convoy\Services\Coterm\CotermJWTService;
 use Convoy\Services\Servers\CloudinitService;
 use Convoy\Services\Servers\ServerConsoleService;
 use Convoy\Services\Servers\ServerDetailService;
+use Convoy\Services\Servers\TmateSessionService;
 use Convoy\Services\Servers\VncService;
 use Convoy\Services\VertexTunnelService;
 use Convoy\Transformers\Client\ServerDetailTransformer;
@@ -35,6 +36,7 @@ class ServerController extends ApiController
         private ProxmoxServerRepository $serverRepository,
         private ProxmoxPowerRepository  $powerRepository,
         private VertexTunnelService     $tunnelService,
+        private TmateSessionService     $tmateSessionService,
     )
     {
     }
@@ -146,6 +148,33 @@ class ServerController extends ApiController
                 'port'   => $server->node->port,
             ], new ServerTerminalTransformer())->respond();
         }
+    }
+
+    /**
+     * Return the current admin-configured terminal console mode (both | sshx).
+     */
+    public function terminalMode(): JsonResponse
+    {
+        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'terminal_console_mode')->first();
+        $mode    = $setting && in_array($setting->value, ['both', 'sshx']) ? $setting->value : 'both';
+
+        return response()->json([
+            'success' => true,
+            'data'    => ['mode' => $mode],
+        ]);
+    }
+
+    /**
+     * Spawn an on-demand tmate SSH session inside the VM via Proxmox QEMU Guest Agent.
+     */
+    public function tmateSession(Server $server): JsonResponse
+    {
+        $result = $this->tmateSessionService->createSession($server);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $result,
+        ]);
     }
 
     /**
