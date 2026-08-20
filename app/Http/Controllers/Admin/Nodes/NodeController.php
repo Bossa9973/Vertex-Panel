@@ -100,12 +100,23 @@ class NodeController extends ApiController
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Failed to reset PVE password for {$userid} on node #{$node->id} ({$node->name}): {$e->getMessage()}");
 
+            $raw = $e->getMessage();
+            if (str_contains($raw, 'cURL error 28') || str_contains(strtolower($raw), 'timed out')) {
+                $detail = "Connection to Proxmox VE node {$node->name} ({$node->fqdn}:{$node->port}) timed out. Ensure the node is online and port {$node->port} is open in firewalls.";
+            } elseif (str_contains($raw, '403') || str_contains(strtolower($raw), 'permission denied')) {
+                $detail = "Proxmox API returned 403 Forbidden. Ensure the API token has Administrator permissions on path / with privilege separation disabled.";
+            } elseif (str_contains($raw, '401') || str_contains(strtolower($raw), 'authentication failed')) {
+                $detail = "Proxmox authentication failed. Please verify the node's API Token ID and Secret in Node Settings.";
+            } else {
+                $detail = "Failed to reset Proxmox password: " . $raw;
+            }
+
             return response()->json([
                 'errors' => [
                     [
                         'code'   => 'ProxmoxPasswordResetFailedException',
                         'status' => '500',
-                        'detail' => 'Failed to reset Proxmox password: ' . $e->getMessage(),
+                        'detail' => $detail,
                     ]
                 ]
             ], 500);
