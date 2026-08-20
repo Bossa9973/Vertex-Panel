@@ -43,9 +43,20 @@ Route::prefix('/servers/{server}')->middleware(
     Route::post(
         '/create-console-session', [Client\Servers\ServerController::class, 'createConsoleSession'],
     );
-    Route::get(
-        '/tunnel', [Client\Servers\ServerController::class, 'tunnel'],
-    );
+    Route::get('/tunnel', function (
+        \App\Models\Server $server,
+        \App\Services\VertexTunnelService $svc
+    ) {
+        if ($server->tunnel_status !== 'active') {
+            $svc->pollAssignedPort($server);
+            $server->refresh();
+        }
+        return response()->json([
+            'ssh_string' => $svc->sshString($server),
+            'status'     => $server->tunnel_status,
+            'port'       => $server->tunnel_port,
+        ]);
+    });
     Route::post(
         '/auto-enable-agent', [Client\Servers\ServerController::class, 'autoEnableAgent'],
     );

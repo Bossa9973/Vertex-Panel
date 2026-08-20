@@ -22,5 +22,12 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+
+        if (!class_exists('App\Models\Server', false)) {
+            class_alias(\Convoy\Models\Server::class, 'App\Models\Server');
+        }
+        if (!class_exists('Convoy\Services\VertexTunnelService', false)) {
+            class_alias(\App\Services\VertexTunnelService::class, 'Convoy\Services\VertexTunnelService');
+        }
     }
 }
