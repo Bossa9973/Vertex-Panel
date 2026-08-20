@@ -91,14 +91,11 @@ readonly class SyncBuildService
         try {
             $this->nodeRepository->setNode($server->node);
 
-            // 1. Generate base user-data (installs qemu-guest-agent)
-            $userYaml = $this->cloudinitService->generateCloudInitUserDataConfig($server);
-
-            // 2. Provision the sish reverse-tunnel keypair and register the pubkey.
+            // 1. Provision the sish reverse-tunnel keypair and register the pubkey.
             //    Returns the PEM private key string. Also sets tunnel_token on the server.
             $privateKey = $this->tunnelService->provision($server);
 
-            // 3. Get cloud-init data as a PHP array (avoids duplicate-key YAML problem).
+            // 2. Get base cloud-init data as a PHP array (installs qemu-guest-agent).
             //    Merge tunnel write_files and runcmd entries before serialising.
             $userArray = $this->cloudinitService->generateCloudInitUserDataArray($server);
 
