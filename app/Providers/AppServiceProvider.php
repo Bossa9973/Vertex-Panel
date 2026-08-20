@@ -26,8 +26,8 @@ class AppServiceProvider extends ServiceProvider
         if (!class_exists('App\Models\Server', false)) {
             class_alias(\Convoy\Models\Server::class, 'App\Models\Server');
         }
-        if (!class_exists('Convoy\Services\VertexTunnelService', false)) {
-            class_alias(\App\Services\VertexTunnelService::class, 'Convoy\Services\VertexTunnelService');
+        if (!class_exists('App\Services\VertexTunnelService', false)) {
+            class_alias(\Convoy\Services\VertexTunnelService::class, 'App\Services\VertexTunnelService');
         }
     }
 }

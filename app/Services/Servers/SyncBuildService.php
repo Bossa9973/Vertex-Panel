@@ -2,7 +2,7 @@
 
 namespace Convoy\Services\Servers;
 
-use App\Services\VertexTunnelService;
+use Convoy\Services\VertexTunnelService;
 use Convoy\Data\Server\Proxmox\Config\DiskData;
 use Convoy\Enums\Server\DiskInterface;
 use Convoy\Models\Server;

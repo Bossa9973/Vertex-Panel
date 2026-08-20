@@ -1,7 +1,7 @@
 <?php
-namespace App\Services;
+namespace Convoy\Services;
 
-use App\Models\Server;
+use Convoy\Models\Server;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;

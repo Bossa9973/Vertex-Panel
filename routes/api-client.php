@@ -44,8 +44,8 @@ Route::prefix('/servers/{server}')->middleware(
         '/create-console-session', [Client\Servers\ServerController::class, 'createConsoleSession'],
     );
     Route::get('/tunnel', function (
-        \App\Models\Server $server,
-        \App\Services\VertexTunnelService $svc
+        \Convoy\Models\Server $server,
+        \Convoy\Services\VertexTunnelService $svc
     ) {
         if ($server->tunnel_status !== 'active') {
             $svc->pollAssignedPort($server);
