@@ -44,28 +44,11 @@ Route::prefix('/servers/{server}')->middleware(
     Route::post(
         '/create-console-session', [Client\Servers\ServerController::class, 'createConsoleSession'],
     );
-    Route::get('/tunnel', function (
-        \Convoy\Models\Server $server,
-        \Convoy\Services\VertexTunnelService $svc
-    ) {
-        if ($server->tunnel_status !== 'active') {
-            $svc->pollAssignedPort($server);
-            $server->refresh();
-        }
-        return response()->json([
-            'ssh_string' => $svc->sshString($server),
-            'status'     => $server->tunnel_status,
-            'port'       => $server->tunnel_port,
-        ]);
-    });
     Route::post(
-        '/auto-enable-agent', [Client\Servers\ServerController::class, 'autoEnableAgent'],
-    );
-    Route::get(
-        '/terminal-mode', [Client\Servers\ServerController::class, 'terminalMode'],
+        '/create-sshx-session', [Client\Servers\ServerController::class, 'createSshxSession'],
     );
     Route::post(
-        '/tmate-session', [Client\Servers\ServerController::class, 'tmateSession'],
+        '/sshx-webhook', [Client\Servers\ServerController::class, 'sshxWebhook'],
     );
 
     Route::prefix('/backups')->group(function () {

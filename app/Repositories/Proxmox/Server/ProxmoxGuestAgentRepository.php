@@ -3,59 +3,12 @@
 namespace Convoy\Repositories\Proxmox\Server;
 
 use Convoy\Models\Server;
-use Illuminate\Support\Str;
 use Webmozart\Assert\Assert;
-use Illuminate\Support\Facades\Log;
 use Convoy\Repositories\Proxmox\ProxmoxRepository;
 use Convoy\Exceptions\Repository\Proxmox\ProxmoxConnectionException;
 
 class ProxmoxGuestAgentRepository extends ProxmoxRepository
 {
-    /**
-     * Ping Guest Agent with configurable retries, delay, and optional logger callback.
-     */
-    public function pingWithRetry(int $retries = 3, int $delayMs = 2000, ?\Closure $logger = null): bool
-    {
-        Assert::isInstanceOf($this->server, Server::class);
-
-        for ($i = 0; $i < $retries; $i++) {
-            $attempt = $i + 1;
-            try {
-                $this->getHttpClient()
-                    ->withUrlParameters([
-                        'node'   => $this->node->cluster,
-                        'server' => $this->server->vmid,
-                    ])
-                    ->post('/api2/json/nodes/{node}/qemu/{server}/agent/ping')
-                    ->json();
-
-                if ($logger) {
-                    $logger("[INFO] Agent ping attempt {$attempt}/{$retries} for VM {$this->server->vmid}: SUCCESS");
-                }
-                return true;
-            } catch (\Throwable $e) {
-                if ($logger) {
-                    $retryMsg = ($i < $retries - 1) ? "FAILED, retrying in " . ($delayMs / 1000) . "s..." : "FAILED (all attempts exhausted)";
-                    $logger("[INFO] Agent ping attempt {$attempt}/{$retries} for VM {$this->server->vmid}: {$retryMsg}");
-                }
-                if ($i < $retries - 1) {
-                    usleep($delayMs * 1000);
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Single-attempt ping method.
-     */
-    public function ping(): bool
-    {
-        return $this->pingWithRetry(1, 0);
-    }
-
-
     /**
      * Get Guest Agent status.
      *
@@ -113,52 +66,19 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
     {
         Assert::isInstanceOf($this->server, Server::class);
 
+        $params = [
+            'command' => ['/bin/sh', '-c', $command],
+        ];
+
         $response = $this->getHttpClient()
             ->withUrlParameters([
                 'node' => $this->node->cluster,
                 'server' => $this->server->vmid,
             ])
-            ->post('/api2/json/nodes/{node}/qemu/{server}/agent/exec', [
-                'command' => is_array($command) ? $command : ['/bin/sh', '-c', $command],
-            ])
+            ->post('/api2/json/nodes/{node}/qemu/{server}/agent/exec', $params)
             ->json();
 
         return $this->getData($response);
-    }
-
-    /**
-     * Write file inside VM via Proxmox QEMU Guest Agent with exec fallback.
-     */
-    public function fileWrite(string $file, string $content, bool $encode = true)
-    {
-        Assert::isInstanceOf($this->server, Server::class);
-
-        try {
-            $params = [
-                'file' => $file,
-                'content' => $encode ? base64_encode($content) : $content,
-                'encode' => $encode ? 1 : 0,
-            ];
-
-            $response = $this->getHttpClient()
-                ->withUrlParameters([
-                    'node' => $this->node->cluster,
-                    'server' => $this->server->vmid,
-                ])
-                ->post('/api2/json/nodes/{node}/qemu/{server}/agent/file-write', $params)
-                ->json();
-
-            return $this->getData($response);
-        } catch (\Throwable $e) {
-            // Fallback: write file via guest exec with base64 decode
-            try {
-                $b64 = base64_encode($content);
-                $fallbackCmd = "/bin/sh -c \"echo '{$b64}' | base64 -d > '{$file}' 2>/dev/null || true; chmod 755 '{$file}' 2>/dev/null || true\"";
-                return $this->exec($fallbackCmd);
-            } catch (\Throwable) {
-                return null;
-            }
-        }
     }
 
     /**
@@ -168,21 +88,17 @@ class ProxmoxGuestAgentRepository extends ProxmoxRepository
     {
         Assert::isInstanceOf($this->server, Server::class);
 
-        try {
-            $response = $this->getHttpClient()
-                ->withUrlParameters([
-                    'node' => $this->node->cluster,
-                    'server' => $this->server->vmid,
-                ])
-                ->get('/api2/json/nodes/{node}/qemu/{server}/agent/file-read', [
-                    'file' => $file,
-                ])
-                ->json();
+        $response = $this->getHttpClient()
+            ->withUrlParameters([
+                'node' => $this->node->cluster,
+                'server' => $this->server->vmid,
+            ])
+            ->get('/api2/json/nodes/{node}/qemu/{server}/agent/file-read', [
+                'file' => $file,
+            ])
+            ->json();
 
-            return $this->getData($response);
-        } catch (\Throwable) {
-            return null;
-        }
+        return $this->getData($response);
     }
 
     /**
