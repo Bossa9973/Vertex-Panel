@@ -1,58 +1,106 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ServerContext } from '@/state/server'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/20/solid'
-import { ComputerDesktopIcon, CommandLineIcon, BoltIcon } from '@heroicons/react/24/outline'
-import { Button } from '@mantine/core'
+import { CheckIcon, ClipboardDocumentIcon, SparklesIcon, CommandLineIcon, LockClosedIcon } from '@heroicons/react/24/outline'
+import { Button, Modal } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 import http from '@/api/http'
 import Card from '@/components/elements/Card'
 
-interface TunnelData {
-    ssh_string: string | null
-    status: 'pending' | 'active' | 'offline'
-    port: number | null
-}
-
-interface TmateData {
-    ssh_cmd: string | null
-    url: string | null
-    notice?: string
-    restricted?: boolean
-    remaining_seconds?: number
-    server_vmid?: number
-    server_uuid?: string
-    server_name?: string
-}
-
-type TerminalMode = 'both' | 'sshx'
-
 const ServerTerminalBlock = () => {
-    const server = ServerContext.useStoreState(state => state.server.data!)
-    const uuid = server.uuid
+    const serverData = ServerContext.useStoreState(state => state.server.data)
+    const uuid = serverData!.uuid
+    const rawCreatedAt = (serverData as any)?.createdAt || (serverData as any)?.created_at
     const { t } = useTranslation('server.overview')
     const { t: tStrings } = useTranslation('strings')
 
-    // SSH tunnel state — only relevant when coterm is not configured (no xtermjs)
-    const [tunnelData, setTunnelData] = useState<TunnelData | null>(null)
-    const [copied, setCopied] = useState(false)
-    const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const mountedRef = useRef(true)
+    const [terminalMode, setTerminalMode] = useState<'both' | 'sshx'>('both')
+    const [sshCmd, setSshCmd] = useState<string | null>(null)
+    const [tmateLoading, setTmateLoading] = useState<boolean>(false)
+    const [modalOpened, setModalOpened] = useState<boolean>(false)
+    const [copiedSsh, setCopiedSsh] = useState<boolean>(false)
+    const [secondsLeft, setSecondsLeft] = useState<number>(0)
 
-    // Admin-configured terminal mode
-    const [terminalMode, setTerminalMode] = useState<TerminalMode>('both')
-    const [modeLoading, setModeLoading] = useState(true)
+    useEffect(() => {
+        if (!rawCreatedAt) return
 
-    // tmate session state (for sshx mode)
-    const [tmateData, setTmateData] = useState<TmateData | null>(null)
-    const [tmateLoading, setTmateLoading] = useState(false)
-    const [tmateCopied, setTmateCopied] = useState(false)
+        const calculateRemaining = () => {
+            const createdMs = rawCreatedAt instanceof Date ? rawCreatedAt.getTime() : new Date(rawCreatedAt).getTime()
+            if (isNaN(createdMs)) return 0
+            const elapsedSeconds = Math.floor((Date.now() - createdMs) / 1000)
+            return Math.max(0, 300 - elapsedSeconds)
+        }
 
-    // Coterm is attached to the node — if cotermId is set, xterm.js is backed by coterm.
-    // We show the SSH tunnel block only when coterm is not configured (cotermId is null).
-    const hasCotermOrXterm = (server as any).node?.cotermId !== null
+        const initial = calculateRemaining()
+        setSecondsLeft(initial)
 
-    const launch = (useXterm: boolean = false, popup: boolean = false) => {
-        const type = useXterm ? 'xtermjs' : 'novnc'
+        if (initial <= 0) return
+
+        const timer = setInterval(() => {
+            const remaining = calculateRemaining()
+            setSecondsLeft(remaining)
+            if (remaining <= 0) {
+                clearInterval(timer)
+            }
+        }, 1000)
+
+        return () => clearInterval(timer)
+    }, [rawCreatedAt])
+
+    const formatTime = (secs: number) => {
+        const m = Math.floor(secs / 60)
+        const s = secs % 60
+        return `${m}:${s < 10 ? '0' : ''}${s}`
+    }
+
+    useEffect(() => {
+        http.get('/api/terminal-mode')
+            .then(res => {
+                if (res.data?.data?.mode) {
+                    setTerminalMode(res.data.data.mode)
+                }
+            })
+            .catch(() => {})
+    }, [])
+
+    const handleFetchTmateSession = async () => {
+        setTmateLoading(true)
+        try {
+            const res = await http.post(`/api/client/servers/${uuid}/create-sshx-session`)
+            if (res.data?.data) {
+                const data = res.data.data
+                if (data.restricted) {
+                    setSshCmd(null)
+                    return
+                }
+                const cmd = data.ssh_cmd || data.url
+                if (cmd) {
+                    setSshCmd(cmd)
+                    setModalOpened(true)
+                }
+            }
+        } catch (err: any) {
+            console.error('Failed to fetch tmate session:', err)
+            const errorMsg = err?.response?.data?.errors?.[0]?.detail || err?.response?.data?.message || err?.message || 'Error executing Proxmox guest agent request.'
+            setSshCmd(`Error: ${errorMsg}`)
+            setModalOpened(true)
+        } finally {
+            setTmateLoading(false)
+        }
+    }
+
+    const copySshToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text)
+        setCopiedSsh(true)
+        setTimeout(() => setCopiedSsh(false), 2000)
+    }
+
+    const launch = (type: 'novnc' | 'xtermjs' | 'sshx' = 'novnc', popup: boolean = false) => {
+        if (type === 'sshx') {
+            handleFetchTmateSession()
+            return
+        }
+
         if (popup) {
             window.open(
                 `/servers/${uuid}/terminal?type=${type}`,
@@ -67,246 +115,240 @@ const ServerTerminalBlock = () => {
         }
     }
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-    }
-
-    const copyTmateToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text)
-        setTmateCopied(true)
-        setTimeout(() => setTmateCopied(false), 2000)
-    }
-
-    const pollTunnel = async () => {
-        if (!uuid) return
-        try {
-            const { data } = await http.get<TunnelData>(`/api/client/servers/${uuid}/tunnel`)
-            if (!mountedRef.current) return
-            setTunnelData(data)
-            if (data.status !== 'active') {
-                pollRef.current = setTimeout(pollTunnel, 6000)
-            }
-        } catch {
-            if (mountedRef.current) {
-                pollRef.current = setTimeout(pollTunnel, 10000)
-            }
-        }
-    }
-
-    const requestTmateSession = async () => {
-        if (tmateLoading) return
-        setTmateLoading(true)
-        setTmateData(null)
-        try {
-            const { data } = await http.post<{ success: boolean; data: TmateData }>(`/api/client/servers/${uuid}/tmate-session`)
-            if (mountedRef.current) {
-                setTmateData(data.data)
-            }
-        } catch (err: any) {
-            if (mountedRef.current) {
-                setTmateData({
-                    ssh_cmd: null,
-                    url: null,
-                    notice: err?.response?.data?.errors?.[0]?.detail ?? 'Failed to create tmate session. Please try again.',
-                    restricted: false,
-                })
-            }
-        } finally {
-            if (mountedRef.current) {
-                setTmateLoading(false)
-            }
-        }
-    }
-
-    useEffect(() => {
-        mountedRef.current = true
-
-        // Fetch admin-configured terminal mode
-        http.get<{ success: boolean; data: { mode: TerminalMode } }>(`/api/client/servers/${uuid}/terminal-mode`)
-            .then(({ data }) => {
-                if (mountedRef.current) {
-                    setTerminalMode(data.data?.mode ?? 'both')
-                }
-            })
-            .catch(() => {
-                // Default to 'both' on error
-            })
-            .finally(() => {
-                if (mountedRef.current) setModeLoading(false)
-            })
-
-        // Only poll tunnel if coterm/xterm is not available — SSH is the fallback terminal access
-        if (!hasCotermOrXterm) {
-            pollTunnel()
-        }
-
-        return () => {
-            mountedRef.current = false
-            if (pollRef.current) clearTimeout(pollRef.current)
-        }
-    }, [uuid])
-
     return (
-        <Card className='relative flex flex-col col-span-10 md:col-span-5 font-sans overflow-hidden'>
-            <h5 className='h5'>{t('terminal.title')}</h5>
-            <p className='description-small mt-1'>
-                {t('terminal.description')}
-            </p>
+        <>
+            <Card className='relative flex flex-col col-span-10 md:col-span-5 font-sans overflow-hidden'>
+                {/* 5-minute Liquid Glass Blur Full Component Popup Overlay after Deploy */}
+                {secondsLeft > 0 && (
+                    <div className='absolute inset-0 z-30 flex flex-col items-center justify-center text-center p-6 bg-gradient-to-br from-neutral-950/85 via-blue-950/70 to-neutral-950/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl shadow-2xl transition-all duration-300 space-y-4 overflow-hidden'>
+                        {/* Abstract Radial Glow Backgrounds */}
+                        <div className='absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue-600/20 blur-3xl pointer-events-none' />
+                        <div className='absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-amber-500/15 blur-3xl pointer-events-none' />
 
-            <div className='flex flex-col space-y-4 mt-6'>
-                {!modeLoading && terminalMode === 'sshx' ? (
-                    /* ── tmate SSH Mode (admin set "Only tmate") ── */
-                    <div className='p-4 bg-neutral-900/60 border border-indigo-500/20 rounded-xl space-y-3'>
-                        <div className='flex items-center justify-between'>
-                            <div className='flex items-center gap-2'>
-                                <BoltIcon className='w-4 h-4 text-indigo-400' />
-                                <h6 className='h6 !text-sm font-bold text-white'>tmate SSH Session</h6>
-                                <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30'>
-                                    Instant
-                                </span>
-                            </div>
-                            {tmateCopied && <span className='text-emerald-400 text-xs font-bold'>✓ Copied!</span>}
+                        {/* Animated Glass Badge Icon */}
+                        <div className='relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/20 to-amber-500/20 border border-blue-400/40 text-blue-400 shadow-[0_0_30px_rgba(59,130,246,0.3)] backdrop-blur-md animate-pulse z-10'>
+                            <SparklesIcon className='h-7 w-7 text-blue-400' />
                         </div>
-                        <p className='text-xs text-stone-400 leading-relaxed'>
-                            Spawn a live tmate terminal session inside your VM via the QEMU Guest Agent. Copy the SSH command to connect instantly from your local terminal.
+
+                        {/* Title & Explanation */}
+                        <div className='relative z-10 space-y-1.5 max-w-sm'>
+                            <h6 className='text-lg font-extrabold text-white tracking-tight flex items-center justify-center gap-2'>
+                                Initial Cloud-Init Provisioning
+                            </h6>
+                            <p className='text-xs text-slate-300 leading-relaxed font-sans'>
+                                Terminal access is temporarily locked behind this boot shield for the first 5 minutes post-deployment to ensure Cloud-Init finishes initial OS package setup cleanly before accepting connections.
+                            </p>
+                        </div>
+
+                        {/* Countdown Pill */}
+                        <div className='relative z-10 flex items-center gap-2.5 px-4 py-2 rounded-full bg-neutral-900/90 border border-amber-500/40 shadow-lg shadow-amber-950/50 backdrop-blur-md'>
+                            <span className='w-2 h-2 rounded-full bg-amber-400 animate-ping' />
+                            <span className='text-[11px] font-bold text-slate-300 uppercase tracking-wider'>Unlocks In:</span>
+                            <span className='font-mono font-extrabold text-sm text-amber-400 tracking-widest'>
+                                {formatTime(secondsLeft)}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                <h5 className='h5'>{t('terminal.title')}</h5>
+                <p className='description-small mt-1'>
+                    {t('terminal.description')}
+                </p>
+
+                {terminalMode === 'sshx' ? (
+                    <div className='grid lg:grid-cols-1 mt-6 space-y-4'>
+                        <div className='flex flex-col justify-between py-2'>
+                            <div>
+                                <div className='flex items-center gap-2'>
+                                    <h6 className='h6'>tmate Terminal</h6>
+                                    <span className='px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center gap-1'>
+                                        <SparklesIcon className='w-3 h-3 text-indigo-400' /> Live Session
+                                    </span>
+                                </div>
+                                <p className='description-small mt-1 leading-relaxed'>
+                                    On-demand SSH terminal session powered by <a href="https://tmate.io" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">tmate.io</a>.
+                                </p>
+                            </div>
+
+                            {secondsLeft > 0 && (
+                                <div className='mt-3 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs text-amber-300 space-y-1'>
+                                    <div className='font-bold flex items-center gap-1.5'>
+                                        <span>⏳ Initial Cloud-Init Boot Setup</span>
+                                        <span className='ml-auto font-mono text-amber-200 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30'>
+                                            {formatTime(secondsLeft)} remaining
+                                        </span>
+                                    </div>
+                                    <p className='text-[11px] text-amber-300/80 leading-snug'>
+                                        tmate terminal sessions are locked for the first 5 minutes of server boot to allow Cloud-Init to complete initial package setup cleanly.
+                                    </p>
+                                </div>
+                            )}
+
+                            {sshCmd && (
+                                <div className='mt-4 p-3.5 bg-neutral-950/90 border border-indigo-500/30 rounded-xl space-y-3'>
+                                    <div className='text-xs font-bold text-indigo-300 flex items-center justify-between'>
+                                        <span className='flex items-center gap-1.5'>
+                                            <CommandLineIcon className='w-4 h-4 text-blue-400' /> Active SSH Command:
+                                        </span>
+                                        {copiedSsh && <span className='text-emerald-400 flex items-center gap-1 text-xs'><CheckIcon className='w-3 h-3' /> Copied!</span>}
+                                    </div>
+                                    <div className='flex items-center gap-2'>
+                                        <input
+                                            type='text'
+                                            readOnly
+                                            value={sshCmd}
+                                            className='w-full text-xs font-mono bg-neutral-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-blue-300 select-all focus:outline-none'
+                                        />
+                                        <Button
+                                            size='xs'
+                                            className='bg-blue-600 hover:bg-blue-500 text-white shrink-0'
+                                            onClick={() => copySshToClipboard(sshCmd)}
+                                        >
+                                            <ClipboardDocumentIcon className='w-3.5 h-3.5 mr-1' /> Copy SSH
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <Button.Group className='mt-5'>
+                                <Button
+                                    className='grow'
+                                    variant='outline'
+                                    loading={tmateLoading}
+                                    disabled={tmateLoading || secondsLeft > 0}
+                                    onClick={handleFetchTmateSession}
+                                >
+                                    {secondsLeft > 0
+                                        ? `tmate Restricted (${formatTime(secondsLeft)})`
+                                        : (sshCmd ? 'View tmate SSH Command' : 'Fetch tmate SSH Session')}
+                                </Button>
+                                <Button
+                                    variant='outline'
+                                    disabled={tmateLoading || secondsLeft > 0}
+                                    onClick={handleFetchTmateSession}
+                                    title={secondsLeft > 0 ? `Locked during Cloud-Init boot (${formatTime(secondsLeft)})` : 'Fetch tmate session'}
+                                >
+                                    <CommandLineIcon className='w-4 h-4' />
+                                </Button>
+                            </Button.Group>
+                        </div>
+                    </div>
+                ) : (
+                    <div className='grid lg:grid-cols-2 mt-6'>
+                        <div className='flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-accent-200 lg:pr-5 pb-5 lg:py-5'>
+                            <div>
+                                <h6 className='h6'>noVNC</h6>
+                                <p className='description-small mt-1'>
+                                    {t('terminal.novnc_description')}
+                                </p>
+                            </div>
+                            <Button.Group className='mt-6'>
+                                <Button
+                                    className='grow'
+                                    variant='outline'
+                                    onClick={() => launch('novnc')}
+                                >
+                                    {tStrings('launch')}
+                                </Button>
+                                <Button
+                                    variant='outline'
+                                    onClick={() => launch('novnc', true)}
+                                >
+                                    <ArrowTopRightOnSquareIcon className='w-4 h-4' />
+                                </Button>
+                            </Button.Group>
+                        </div>
+                        <div className='flex flex-col justify-between lg:pl-5 pt-5 lg:py-5'>
+                            <div>
+                                <h6 className='h6'>xTerm.js</h6>
+                                <p className='description-small mt-1'>
+                                    {t('terminal.xtermjs_description')}
+                                </p>
+                            </div>
+                            <Button.Group className='mt-6'>
+                                <Button
+                                    variant='outline'
+                                    className='grow'
+                                    onClick={() => launch('xtermjs')}
+                                >
+                                    {tStrings('launch')}
+                                </Button>
+                                <Button
+                                    variant='outline'
+                                    onClick={() => launch('xtermjs', true)}
+                                >
+                                    <ArrowTopRightOnSquareIcon className='w-4 h-4' />
+                                </Button>
+                            </Button.Group>
+                        </div>
+                    </div>
+                )}
+            </Card>
+
+            {/* tmate SSH Session Details Modal */}
+            <Modal
+                opened={modalOpened}
+                onClose={() => setModalOpened(false)}
+                title={
+                    <div className='flex items-center gap-2 font-bold text-white text-base'>
+                        <CommandLineIcon className='w-5 h-5 text-indigo-400' />
+                        <span>tmate SSH Connection</span>
+                    </div>
+                }
+                centered
+                size='md'
+                styles={{
+                    modal: {
+                        backgroundColor: '#121418',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '16px',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                    },
+                    header: {
+                        backgroundColor: 'transparent',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    },
+                }}
+            >
+                {sshCmd && (
+                    <div className='space-y-5 font-sans pt-2'>
+                        <p className='text-xs text-gray-300 leading-relaxed'>
+                            Copy and paste the SSH command below into your terminal application to connect directly to this VPS instance.
                         </p>
 
-                        {/* Notice / cooldown message */}
-                        {tmateData?.notice && !tmateData.ssh_cmd && (
-                            <div className={`text-xs px-3 py-2.5 rounded-lg border font-medium ${
-                                tmateData.restricted
-                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                                    : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                            }`}>
-                                {tmateData.notice}
-                                {tmateData.remaining_seconds && (
-                                    <span className='ml-1 font-bold'> ({tmateData.remaining_seconds}s)</span>
+                        {/* SSH Command Box */}
+                        <div className='bg-neutral-950 p-4 rounded-xl border border-white/10 space-y-2'>
+                            <div className='flex items-center justify-between text-xs font-bold text-gray-200'>
+                                <span className='flex items-center gap-1.5'>
+                                    <CommandLineIcon className='w-4 h-4 text-blue-400' /> SSH Command:
+                                </span>
+                                {copiedSsh && (
+                                    <span className='text-emerald-400 flex items-center gap-1 text-xs'>
+                                        <CheckIcon className='w-3.5 h-3.5' /> Copied!
+                                    </span>
                                 )}
                             </div>
-                        )}
-
-                        {/* SSH command display */}
-                        {tmateData?.ssh_cmd && (
                             <div className='flex items-center gap-2'>
                                 <input
                                     type='text'
                                     readOnly
-                                    value={tmateData.ssh_cmd}
-                                    className='w-full text-xs font-mono bg-neutral-950 border border-white/10 rounded-lg px-3 py-2.5 text-indigo-300 select-all focus:outline-none'
+                                    value={sshCmd}
+                                    className='w-full text-xs font-mono bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-blue-300 select-all focus:outline-none'
                                 />
-                                <button
-                                    type='button'
-                                    className='px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition-colors shrink-0'
-                                    onClick={() => copyTmateToClipboard(tmateData.ssh_cmd!)}
-                                >
-                                    Copy
-                                </button>
-                            </div>
-                        )}
-
-                        <Button
-                            fullWidth
-                            variant='outline'
-                            color='indigo'
-                            loading={tmateLoading}
-                            onClick={requestTmateSession}
-                            leftSection={<BoltIcon className='w-4 h-4' />}
-                        >
-                            {tmateData?.ssh_cmd ? 'Refresh Session' : 'Launch tmate Session'}
-                        </Button>
-                    </div>
-                ) : !modeLoading ? (
-                    <>
-                        {/* noVNC Web Console */}
-                        <div className='p-4 bg-neutral-900/60 border border-white/10 rounded-xl space-y-3'>
-                            <div className='flex items-center gap-2'>
-                                <ComputerDesktopIcon className='w-4 h-4 text-indigo-400' />
-                                <h6 className='h6 !text-sm font-bold text-white'>noVNC Web Console</h6>
-                            </div>
-                            <p className='text-xs text-stone-400 leading-relaxed'>
-                                {t('terminal.novnc_description')}
-                            </p>
-                            <Button.Group className='mt-2'>
                                 <Button
-                                    className='grow'
-                                    variant='outline'
-                                    onClick={() => launch(false)}
+                                    size='sm'
+                                    className='bg-blue-600 hover:bg-blue-500 text-white shrink-0'
+                                    onClick={() => copySshToClipboard(sshCmd)}
                                 >
-                                    {tStrings('launch')}
+                                    <ClipboardDocumentIcon className='w-4 h-4 mr-1.5' /> Copy SSH
                                 </Button>
-                                <Button
-                                    variant='outline'
-                                    onClick={() => launch(false, true)}
-                                    title='Open in popup window'
-                                >
-                                    <ArrowTopRightOnSquareIcon className='w-4 h-4' />
-                                </Button>
-                            </Button.Group>
-                        </div>
-
-                        {/* xterm.js SSH Console */}
-                        <div className='p-4 bg-neutral-900/60 border border-white/10 rounded-xl space-y-3'>
-                            <div className='flex items-center gap-2'>
-                                <CommandLineIcon className='w-4 h-4 text-emerald-400' />
-                                <h6 className='h6 !text-sm font-bold text-white'>xterm.js Console</h6>
                             </div>
-                            <p className='text-xs text-stone-400 leading-relaxed'>
-                                {t('terminal.xtermjs_description')}
-                            </p>
-                            <Button.Group className='mt-2'>
-                                <Button
-                                    className='grow'
-                                    variant='outline'
-                                    onClick={() => launch(true)}
-                                >
-                                    {tStrings('launch')}
-                                </Button>
-                                <Button
-                                    variant='outline'
-                                    onClick={() => launch(true, true)}
-                                    title='Open in popup window'
-                                >
-                                    <ArrowTopRightOnSquareIcon className='w-4 h-4' />
-                                </Button>
-                            </Button.Group>
-                        </div>
-                    </>
-                ) : null}
-
-                {/* SSH Tunnel Access — shown only when coterm is not configured and tunnel is active */}
-                {!hasCotermOrXterm && tunnelData?.status === 'active' && tunnelData.ssh_string && (
-                    <div className='p-4 bg-neutral-900/60 border border-emerald-500/20 rounded-xl space-y-3'>
-                        <div className='flex items-center justify-between'>
-                            <div className='flex items-center gap-2'>
-                                <span className='w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse' />
-                                <h6 className='h6 !text-sm font-bold text-white'>SSH Access</h6>
-                            </div>
-                            {copied && <span className='text-emerald-400 text-xs font-bold'>✓ Copied!</span>}
-                        </div>
-                        <p className='text-xs text-stone-400 leading-relaxed'>
-                            Run this command in your terminal to connect directly to this server via SSH.
-                        </p>
-                        <div className='flex items-center gap-2'>
-                            <input
-                                type='text'
-                                readOnly
-                                value={tunnelData.ssh_string}
-                                className='w-full text-xs font-mono bg-neutral-950 border border-white/10 rounded-lg px-3 py-2.5 text-blue-300 select-all focus:outline-none'
-                            />
-                            <button
-                                type='button'
-                                className='px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors shrink-0'
-                                onClick={() => copyToClipboard(tunnelData.ssh_string!)}
-                            >
-                                Copy
-                            </button>
                         </div>
                     </div>
                 )}
-            </div>
-        </Card>
+            </Modal>
+        </>
     )
 }
 

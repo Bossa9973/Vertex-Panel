@@ -1,1 +1,0 @@
-import{r as e,a as r,cT as o}from"./vendor-react-d66e42fa.js";const c=e.forwardRef(({className:t,...a},s)=>r("button",{ref:s,className:`px-2 bg-transparent ${t}`,...a,children:r(o,{className:"w-5 h-5 min-w-[1rem] text-foreground"})}));export{c as D};
