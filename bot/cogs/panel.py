@@ -125,14 +125,14 @@ class Panel(commands.Cog):
             description=(
                 "Track your community activity and earn **BOLTS** to use in the Vertex Host ecosystem.\n\n"
                 "**🎁 Invites:**\n"
-                "• 15 verified invites → 3,500 BOLTS\n"
+                "• 15 verified invites → 3,000 BOLTS\n"
                 "• 25 verified invites → 5,000 BOLTS\n\n"
                 "**💬 Messages:**\n"
                 "• 200 messages → 3,500 BOLTS\n"
                 "• 300 messages → 5,000 BOLTS\n\n"
                 "**🚀 Boosts:**\n"
-                "• 1× Boost → 4,000 BOLTS\n"
-                "• 2× Boosts → 5,500 BOLTS\n\n"
+                "• 1× Boost → 3,000 BOLTS\n"
+                "• 2× Boosts → 5,000 BOLTS\n\n"
                 "Use `/redeem <code>` to claim a Bolt redemption code."
             ),
             color=0x2B2D31,

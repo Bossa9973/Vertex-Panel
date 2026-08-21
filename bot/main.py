@@ -600,12 +600,7 @@ class AddBoltsInteractiveFlow:
                 flow.selected_amount = 3000
                 await flow.show_reason_selection(i)
 
-            @discord.ui.button(label="⚡ 3,500 BOLTs (15 Invites)", style=discord.ButtonStyle.primary)
-            async def btn_3500(self, i: discord.Interaction, btn: discord.ui.Button):
-                flow.selected_amount = 3500
-                await flow.show_reason_selection(i)
-
-            @discord.ui.button(label="⚡ 5,000 BOLTs (25 Invites)", style=discord.ButtonStyle.primary)
+            @discord.ui.button(label="⚡ 5,000 BOLTs", style=discord.ButtonStyle.primary)
             async def btn_5000(self, i: discord.Interaction, btn: discord.ui.Button):
                 flow.selected_amount = 5000
                 await flow.show_reason_selection(i)
@@ -680,13 +675,15 @@ class AddBoltsInteractiveFlow:
             async def interaction_check(self, i: discord.Interaction) -> bool:
                 return i.user.id == flow.admin.id
 
-            @discord.ui.button(label="15 Verified Invites (3,500 BOLTs)", style=discord.ButtonStyle.success)
+            @discord.ui.button(label="15 Verified Invites (3,000 BOLTs)", style=discord.ButtonStyle.success)
             async def btn_15(self, i: discord.Interaction, btn: discord.ui.Button):
+                flow.selected_amount = 3000
                 flow.selected_reason = "15 Verified Invites Reward"
                 await flow.execute_generation(i)
 
             @discord.ui.button(label="25 Verified Invites (5,000 BOLTs)", style=discord.ButtonStyle.success)
             async def btn_25(self, i: discord.Interaction, btn: discord.ui.Button):
+                flow.selected_amount = 5000
                 flow.selected_reason = "25 Verified Invites Reward"
                 await flow.execute_generation(i)
 
@@ -719,13 +716,15 @@ class AddBoltsInteractiveFlow:
             async def interaction_check(self, i: discord.Interaction) -> bool:
                 return i.user.id == flow.admin.id
 
-            @discord.ui.button(label="1× Server Boost (4,000 BOLTs)", style=discord.ButtonStyle.primary)
+            @discord.ui.button(label="1× Server Boost (3,000 BOLTs)", style=discord.ButtonStyle.primary)
             async def btn_1_boost(self, i: discord.Interaction, btn: discord.ui.Button):
+                flow.selected_amount = 3000
                 flow.selected_reason = "1× Server Boost Reward"
                 await flow.execute_generation(i)
 
-            @discord.ui.button(label="2× Server Boosts (5,500 BOLTs)", style=discord.ButtonStyle.primary)
+            @discord.ui.button(label="2× Server Boosts (5,000 BOLTs)", style=discord.ButtonStyle.primary)
             async def btn_2_boosts(self, i: discord.Interaction, btn: discord.ui.Button):
+                flow.selected_amount = 5000
                 flow.selected_reason = "2× Server Boosts Reward"
                 await flow.execute_generation(i)
 
@@ -743,8 +742,9 @@ class AddBoltsInteractiveFlow:
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
 
-        amount = self.selected_amount or 3500
+        amount = self.selected_amount or 3000
         reason = self.selected_reason or "Admin Gift"
+
 
         try:
             code = await panel_api.generate_promo_code(
