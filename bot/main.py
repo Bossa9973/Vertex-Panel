@@ -125,6 +125,7 @@ async def help_cmd(interaction: discord.Interaction):
         name="🛡️ Admin Commands",
         value=(
             "`/userinfo @user` — View full user balance, spending, owned servers & lifecycle history (Admin Only)\n"
+            "`/txinfo <ref_id>` — Inspect transaction, server creation/expiry date, price & specs (Admin Only)\n"
             "`/add_bolts @user` — Interactive Bolt Promo Code Generator with History & Presets (Admin Only)\n"
             "`/set_log_channel #channel` — Configure the channel for admin action & redemption audit logs (Admin Only)\n"
             "`/add_invites @user amount` — Manually add invites\n"
@@ -182,7 +183,129 @@ async def redeem(interaction: discord.Interaction, code: str):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-# ─── Admin: /userinfo (Interactive Tabbed Panel) ──────────────────────────────
+# ─── Admin: /userinfo & /txinfo (Interactive Tabbed Panel & Tx Inspector) ───
+
+class TransactionLookupModal(discord.ui.Modal, title="Lookup Transaction Info"):
+    tx_input = discord.ui.TextInput(
+        label="Transaction Reference ID",
+        placeholder="e.g. RENEW-5OBDSIRG, DEPLOY-XXXXXXXX, PROMO-...",
+        min_length=3,
+        max_length=64,
+        required=True
+    )
+
+    def __init__(self, callback_func):
+        super().__init__()
+        self.callback_func = callback_func
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await self.callback_func(interaction, self.tx_input.value.strip())
+
+
+def build_transaction_embed(data: dict) -> discord.Embed:
+    tx = data.get("transaction") or {}
+    u = data.get("user") or {}
+    srv = data.get("server") or {}
+    promo = data.get("promo") or {}
+    lifecycle = data.get("lifecycle") or []
+
+    ref_id = tx.get("reference_id") or f"TX#{tx.get('id')}"
+    amt = float(tx.get("amount", 0.0))
+    is_positive = amt > 0
+    color = 0x10B981 if is_positive else (0x8B5CF6 if "RENEW" in ref_id else 0x3B82F6 if "DEPLOY" in ref_id else 0xF59E0B)
+
+    embed = discord.Embed(
+        title=f"🔍 Transaction Inspector // `{ref_id}`",
+        description=f"**Action:** `{str(tx.get('type', 'transaction')).upper()}` — {tx.get('description') or 'System transaction'}",
+        color=color,
+    )
+
+    sign = "+" if is_positive else ""
+    date_str = tx.get("created_at", "N/A")[:19].replace("T", " ") if tx.get("created_at") else "N/A"
+    ts = tx.get("timestamp")
+    time_fmt = f"<t:{int(ts)}:F> (<t:{int(ts)}:R>)" if ts else f"`{date_str}`"
+
+    embed.add_field(
+        name="💳 Transaction Details",
+        value=(
+            f"• **Reference ID:** `{ref_id}`\n"
+            f"• **Amount:** `⚡ {sign}{amt:,.2f} BOLTs`\n"
+            f"• **Timestamp:** {time_fmt}\n"
+            f"• **Type:** `{tx.get('type', 'N/A')}`"
+        ),
+        inline=False
+    )
+
+    if u:
+        user_discord = f"<@{u.get('discord_id')}> (`{u.get('discord_id')}`)" if u.get("discord_id") else "Not Linked"
+        embed.add_field(
+            name="👤 Account Info",
+            value=(
+                f"• **User:** {u.get('name')} (Panel ID `#{u.get('id')}`)\n"
+                f"• **Email:** `{u.get('email')}`\n"
+                f"• **Discord:** {user_discord}\n"
+                f"• **Current Balance:** `⚡ {u.get('credits', 0.0):,.2f} BOLTs` | **Role:** `{'Root Admin' if u.get('root_admin') else 'Client'}`"
+            ),
+            inline=False
+        )
+
+    if srv:
+        exists = srv.get("server_exists", True)
+        status_raw = str(srv.get("status") or "in_use").lower()
+        if not exists or status_raw == "deleted":
+            status_badge = "🗑️ Deleted / Terminated"
+        elif "suspend" in status_raw:
+            status_badge = "🔴 Suspended"
+        elif "expire" in status_raw:
+            status_badge = "⚠️ Expired"
+        elif "install" in status_raw:
+            status_badge = "🟡 Installing"
+        else:
+            status_badge = "🟢 In Use / Active"
+
+        specs_str = f"{srv.get('cpu_cores', 1)} vCPU | {srv.get('memory_mb', 0):,} MB RAM | {srv.get('disk_mb', 0):,} MB Storage"
+        created_str = srv.get("server_created_at", "N/A")[:10] if srv.get("server_created_at") else "N/A"
+        expires_str = srv.get("server_expires_at", "N/A")[:10] if srv.get("server_expires_at") else ("Expired / Deleted" if not exists else "Never")
+
+        price_bought = srv.get("price_when_bought", 0.0)
+
+        srv_val = (
+            f"• **Server Name:** `{srv.get('name') or 'N/A'}`\n"
+            f"• **Status:** {status_badge}\n"
+            f"• **VMID & Hostname:** `{srv.get('vmid') or 'N/A'}` | `{srv.get('hostname') or 'N/A'}`\n"
+            f"• **Node & Location:** `{srv.get('node_name') or 'Primary Node'}` (`{srv.get('node_ip') or srv.get('ip_address') or 'N/A'}`)\n"
+            f"• **Plan & Specs:** **{srv.get('plan_name') or 'Cloud VPS'}** ({specs_str})\n"
+            f"• **Price when Bought / Cost:** `⚡ {price_bought:,.2f} BOLTs`\n"
+            f"• **Server Creation Date:** `{created_str}`\n"
+            f"• **Server Expiry Date:** `{expires_str}`"
+        )
+        embed.add_field(name="🖥️ Linked Server Specifications & Lifecycle", value=srv_val, inline=False)
+
+    if promo:
+        p_status = "✅ Claimed" if promo.get("used") else "⏳ Unclaimed"
+        admin_tag = f"<@{promo.get('created_by_discord_id')}>" if promo.get("created_by_discord_id") else "System"
+        embed.add_field(
+            name="🎁 Promo Code Info",
+            value=(
+                f"• **Code:** `{promo.get('code')}`\n"
+                f"• **Value:** `⚡ {promo.get('amount', 0):,.2f} BOLTs` — {p_status}\n"
+                f"• **Reason:** *{promo.get('reason') or 'Admin Gift'}*\n"
+                f"• **Generated By:** {admin_tag} on `{str(promo.get('created_at', 'N/A'))[:10]}`"
+            ),
+            inline=False
+        )
+
+    if lifecycle:
+        l_lines = []
+        for l in lifecycle[:4]:
+            ev = l.get("event")
+            date_l = l.get("timestamp", "N/A")[:19].replace("T", " ") if l.get("timestamp") else "N/A"
+            l_lines.append(f"• `{ev}` ({date_l}) — {l.get('description')}")
+        embed.add_field(name="📜 Associated Audit Events", value="\n".join(l_lines), inline=False)
+
+    embed.set_footer(text="Vertex Admin Control Panel | Transaction Audit Inspector")
+    return embed
+
 
 class UserInfoView(discord.ui.View):
     def __init__(self, admin_id: int, data: dict, target_label: str):
@@ -266,7 +389,8 @@ class UserInfoView(discord.ui.View):
             description=(
                 f"**Total Spent:** `-{summary.get('total_spent', 0.0):,.2f} BOLTs` | "
                 f"**Total Deposited:** `+{summary.get('total_deposited', 0.0):,.2f} BOLTs` | "
-                f"**Balance:** `{summary.get('current_balance', 0.0):,.2f} BOLTs`"
+                f"**Balance:** `{summary.get('current_balance', 0.0):,.2f} BOLTs`\n"
+                f"*Tip: Use the **🔍 Lookup Transaction** button below to inspect any transaction ID!*"
             )
         )
 
@@ -411,30 +535,47 @@ class UserInfoView(discord.ui.View):
         embed.set_footer(text="Vertex Community Tracker | Anti-Cheat & Activity Module")
         return embed
 
-    @discord.ui.button(label="Overview", style=discord.ButtonStyle.primary, emoji="📊")
+    @discord.ui.button(label="Overview", style=discord.ButtonStyle.primary, emoji="📊", row=0)
     async def btn_overview(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_tab = "overview"
         await interaction.response.edit_message(embed=self.build_overview_embed(), view=self)
 
-    @discord.ui.button(label="Spending & Gains", style=discord.ButtonStyle.secondary, emoji="💳")
+    @discord.ui.button(label="Spending & Gains", style=discord.ButtonStyle.secondary, emoji="💳", row=0)
     async def btn_spending(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_tab = "spending"
         await interaction.response.edit_message(embed=self.build_spending_embed(), view=self)
 
-    @discord.ui.button(label="Promo Codes", style=discord.ButtonStyle.secondary, emoji="🎁")
+    @discord.ui.button(label="Promo Codes", style=discord.ButtonStyle.secondary, emoji="🎁", row=0)
     async def btn_promos(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_tab = "promos"
         await interaction.response.edit_message(embed=self.build_promos_embed(), view=self)
 
-    @discord.ui.button(label="Servers & History", style=discord.ButtonStyle.secondary, emoji="🖥️")
+    @discord.ui.button(label="Servers & History", style=discord.ButtonStyle.secondary, emoji="🖥️", row=0)
     async def btn_servers(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_tab = "servers"
         await interaction.response.edit_message(embed=self.build_servers_embed(), view=self)
 
-    @discord.ui.button(label="Discord Stats", style=discord.ButtonStyle.secondary, emoji="📡")
+    @discord.ui.button(label="Discord Stats", style=discord.ButtonStyle.secondary, emoji="📡", row=0)
     async def btn_discord(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_tab = "discord"
         await interaction.response.edit_message(embed=self.build_discord_embed(), view=self)
+
+    @discord.ui.button(label="Lookup Transaction", style=discord.ButtonStyle.success, emoji="🔍", row=1)
+    async def btn_lookup_tx(self, interaction: discord.Interaction, button: discord.ui.Button):
+        async def on_tx_submit(modal_interaction: discord.Interaction, tx_ref: str):
+            await modal_interaction.response.defer(ephemeral=True)
+            res = await panel_api.get_transaction_details(tx_ref)
+            if not res.get("ok"):
+                err_embed = discord.Embed(
+                    title="❌ Transaction Not Found",
+                    description=res.get("error", f"Could not find any transaction or server records matching `{tx_ref}`."),
+                    color=0xEF4444
+                )
+                return await modal_interaction.followup.send(embed=err_embed, ephemeral=True)
+            tx_embed = build_transaction_embed(res)
+            await modal_interaction.followup.send(embed=tx_embed, ephemeral=True)
+
+        await interaction.response.send_modal(TransactionLookupModal(on_tx_submit))
 
 
 @bot.tree.command(name="userinfo", description="View user balance, spending, owned servers & history (Admin Only)")
@@ -463,6 +604,26 @@ async def userinfo_cmd(
 
     view = UserInfoView(admin_id=interaction.user.id, data=data, target_label=label)
     await interaction.followup.send(embed=view.build_overview_embed(), view=view, ephemeral=True)
+
+
+@bot.tree.command(name="txinfo", description="Inspect detailed server info & price for a transaction ID (Admin Only)")
+async def txinfo_cmd(interaction: discord.Interaction, reference_id: str):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True)
+
+    res = await panel_api.get_transaction_details(reference_id)
+    if not res.get("ok"):
+        err_embed = discord.Embed(
+            title="❌ Transaction Not Found",
+            description=res.get("error", f"Could not find any transaction or server records matching `{reference_id}`."),
+            color=0xEF4444
+        )
+        return await interaction.followup.send(embed=err_embed, ephemeral=True)
+
+    tx_embed = build_transaction_embed(res)
+    await interaction.followup.send(embed=tx_embed, ephemeral=True)
 
 
 # ─── Admin: /add_bolts (Interactive History Preview, Presets & Modals) ────────

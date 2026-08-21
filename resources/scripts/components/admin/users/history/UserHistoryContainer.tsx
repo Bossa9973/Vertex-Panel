@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
     getUserHistory,
+    getTransactionDetails,
     UserHistoryData,
+    TransactionDetailsData,
     SpendingTransaction,
     PromoCodeRecord,
     OwnedServer,
@@ -26,6 +28,9 @@ import {
     ChatBubbleLeftRightIcon,
     SparklesIcon,
     ArrowTopRightOnSquareIcon,
+    CheckCircleIcon,
+    XCircleIcon,
+    ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
 
 interface Props {
@@ -52,6 +57,13 @@ const UserHistoryContainer = ({ userId: propUserId }: Props) => {
     const [description, setDescription] = useState('')
     const [submittingBalance, setSubmittingBalance] = useState(false)
 
+    // Transaction inspection modal state
+    const [txModalOpen, setTxModalOpen] = useState(false)
+    const [txSearchInput, setTxSearchInput] = useState('')
+    const [txLoading, setTxLoading] = useState(false)
+    const [txError, setTxError] = useState<string | null>(null)
+    const [txDetails, setTxDetails] = useState<TransactionDetailsData | null>(null)
+
     const loadData = () => {
         if (!effectiveUserId) return
         setLoading(true)
@@ -63,6 +75,29 @@ const UserHistoryContainer = ({ userId: propUserId }: Props) => {
                 setError(err.response?.data?.error || err.response?.data?.message || 'Failed to load user history.')
             })
             .finally(() => setLoading(false))
+    }
+
+    const handleLookupTx = async (identifier?: string) => {
+        const query = (identifier || txSearchInput).trim()
+        if (!query) return
+        setTxLoading(true)
+        setTxError(null)
+        setTxSearchInput(query)
+        setTxModalOpen(true)
+        try {
+            const data = await getTransactionDetails(query)
+            if (!data.ok) {
+                setTxError('Transaction record not found.')
+                setTxDetails(null)
+            } else {
+                setTxDetails(data)
+            }
+        } catch (e: any) {
+            setTxError(e.response?.data?.error || e.response?.data?.message || 'Failed to fetch transaction details.')
+            setTxDetails(null)
+        } finally {
+            setTxLoading(false)
+        }
     }
 
     useEffect(() => {
@@ -375,15 +410,29 @@ const UserHistoryContainer = ({ userId: propUserId }: Props) => {
                             </button>
                         </div>
 
-                        <div className='relative w-full sm:w-64'>
-                            <MagnifyingGlassIcon className='w-4 h-4 text-gray-400 absolute left-3 top-2.5' />
-                            <input
-                                type='text'
-                                value={txSearch}
-                                onChange={e => setTxSearch(e.target.value)}
-                                placeholder='Search description or ref...'
-                                className='w-full pl-9 pr-3 py-1.5 rounded-xl border border-gray-800 bg-[#1c1e22] text-white text-xs focus:outline-none focus:border-blue-500'
-                            />
+                        <div className='flex items-center gap-2 w-full sm:w-auto'>
+                            <button
+                                onClick={() => {
+                                    setTxSearchInput('')
+                                    setTxDetails(null)
+                                    setTxError(null)
+                                    setTxModalOpen(true)
+                                }}
+                                className='px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-xs font-bold inline-flex items-center gap-1.5 transition cursor-pointer'
+                            >
+                                <MagnifyingGlassIcon className='w-4 h-4' /> Lookup Tx ID
+                            </button>
+
+                            <div className='relative w-full sm:w-64'>
+                                <MagnifyingGlassIcon className='w-4 h-4 text-gray-400 absolute left-3 top-2.5' />
+                                <input
+                                    type='text'
+                                    value={txSearch}
+                                    onChange={e => setTxSearch(e.target.value)}
+                                    placeholder='Filter description or ref...'
+                                    className='w-full pl-9 pr-3 py-1.5 rounded-xl border border-gray-800 bg-[#1c1e22] text-white text-xs focus:outline-none focus:border-blue-500'
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -423,7 +472,17 @@ const UserHistoryContainer = ({ userId: propUserId }: Props) => {
                                                     {tx.description || 'Adjustment'}
                                                 </td>
                                                 <td className='py-3 px-4 font-mono text-[11px] text-gray-400'>
-                                                    {tx.reference_id || 'N/A'}
+                                                    {tx.reference_id ? (
+                                                        <button
+                                                            onClick={() => handleLookupTx(tx.reference_id!)}
+                                                            className='hover:underline text-blue-400 hover:text-blue-300 font-semibold cursor-pointer text-left inline-flex items-center gap-1 group'
+                                                            title='Click to inspect transaction & server details'
+                                                        >
+                                                            <span className='group-hover:scale-110 transition-transform'>🔍</span> {tx.reference_id}
+                                                        </button>
+                                                    ) : (
+                                                        'N/A'
+                                                    )}
                                                 </td>
                                                 <td className={`py-3 px-4 font-mono font-bold text-right ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                     {isPositive ? '+' : ''}{tx.amount.toFixed(2)} BOLTs
@@ -799,6 +858,212 @@ const UserHistoryContainer = ({ userId: propUserId }: Props) => {
                     >
                         Confirm BOLT Adjustment
                     </button>
+                </div>
+            </Modal>
+
+            {/* ─── Transaction Inspector Modal ─────────────────────────────────────── */}
+            <Modal
+                opened={txModalOpen}
+                onClose={() => setTxModalOpen(false)}
+                size='lg'
+                title={
+                    <div className='font-bold text-base text-white flex items-center gap-2'>
+                        <MagnifyingGlassIcon className='w-5 h-5 text-purple-400' />
+                        Transaction & Server Inspector
+                    </div>
+                }
+                centered
+                styles={{
+                    modal: { backgroundColor: '#141619', color: '#fff', border: '1px solid #2a2d34', borderRadius: '20px', maxWidth: '720px' },
+                    header: { backgroundColor: '#141619', color: '#fff', borderBottom: '1px solid #2a2d34' },
+                    close: { color: '#9ca3af', '&:hover': { backgroundColor: '#1c1e22', color: '#fff' } }
+                }}
+            >
+                <div className='relative pt-1 space-y-4'>
+                    <LoadingOverlay visible={txLoading} radius='md' />
+
+                    {/* Lookup Search Input in Modal */}
+                    <div className='flex items-center gap-2'>
+                        <div className='relative flex-1'>
+                            <MagnifyingGlassIcon className='w-4 h-4 text-gray-400 absolute left-3 top-2.5' />
+                            <input
+                                type='text'
+                                value={txSearchInput}
+                                onChange={e => setTxSearchInput(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') handleLookupTx()
+                                }}
+                                placeholder='Enter Reference ID (e.g. RENEW-5OBDSIRG, DEPLOY-XXXX)...'
+                                className='w-full pl-9 pr-3 py-2 rounded-xl border border-gray-800 bg-[#1c1e22] text-white text-xs font-mono focus:outline-none focus:border-purple-500'
+                            />
+                        </div>
+                        <button
+                            onClick={() => handleLookupTx()}
+                            disabled={txLoading || !txSearchInput.trim()}
+                            className='px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition cursor-pointer'
+                        >
+                            Lookup
+                        </button>
+                    </div>
+
+                    {txError && (
+                        <div className='p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2'>
+                            <ExclamationTriangleIcon className='w-4 h-4 shrink-0' />
+                            <span>{txError}</span>
+                        </div>
+                    )}
+
+                    {txDetails && (
+                        <div className='space-y-4 text-xs'>
+                            {/* Transaction Summary Header */}
+                            <div className='p-4 bg-[#181a1f] rounded-2xl border border-gray-800/80 flex flex-wrap items-center justify-between gap-3'>
+                                <div>
+                                    <div className='flex items-center gap-2'>
+                                        <span className='font-mono text-sm font-bold text-purple-400'>
+                                            {txDetails.transaction.reference_id || `TX#${txDetails.transaction.id}`}
+                                        </span>
+                                        <span className='px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-gray-800 border border-gray-700 text-gray-300'>
+                                            {txDetails.transaction.type}
+                                        </span>
+                                    </div>
+                                    <p className='text-gray-300 font-medium mt-1'>{txDetails.transaction.description || 'No description recorded'}</p>
+                                    <span className='text-[11px] text-gray-500 font-mono block mt-0.5'>
+                                        {txDetails.transaction.created_at ? new Date(txDetails.transaction.created_at).toLocaleString() : 'N/A'}
+                                    </span>
+                                </div>
+                                <div className='text-right'>
+                                    <span className='text-[10px] text-gray-400 uppercase font-bold block'>Transaction Value</span>
+                                    <span className={`text-xl font-black font-mono ${txDetails.transaction.amount > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {txDetails.transaction.amount > 0 ? '+' : ''}{txDetails.transaction.amount.toFixed(2)} BOLTs
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* User details card */}
+                            {txDetails.user && (
+                                <div className='p-3.5 bg-[#121418] rounded-xl border border-gray-800/60 grid grid-cols-1 sm:grid-cols-2 gap-3'>
+                                    <div>
+                                        <span className='text-[10px] uppercase font-bold text-gray-500 block'>Associated User</span>
+                                        <span className='font-bold text-white'>{txDetails.user.name}</span>
+                                        <span className='text-gray-400 font-mono text-[11px] block'>{txDetails.user.email}</span>
+                                    </div>
+                                    <div>
+                                        <span className='text-[10px] uppercase font-bold text-gray-500 block'>Discord & Balance</span>
+                                        <span className='text-[#5865F2] font-mono text-[11px] block'>
+                                            {txDetails.user.discord_username ? `@${txDetails.user.discord_username}` : (txDetails.user.discord_id || 'Not linked')}
+                                        </span>
+                                        <span className='text-amber-400 font-mono text-[11px] font-bold block'>
+                                            Current Balance: ⚡ {txDetails.user.credits.toFixed(2)} BOLTs
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Server info card */}
+                            {txDetails.server ? (
+                                <div className='p-4 bg-[#181a1f] rounded-2xl border border-indigo-500/20 space-y-3 shadow-md'>
+                                    <div className='flex items-center justify-between border-b border-gray-800 pb-2.5'>
+                                        <div className='flex items-center gap-2'>
+                                            <ServerIcon className='w-4 h-4 text-indigo-400' />
+                                            <h4 className='font-bold text-white text-sm'>{txDetails.server.name}</h4>
+                                            {txDetails.server.vmid && (
+                                                <span className='font-mono text-[10px] text-gray-400'>VMID #{txDetails.server.vmid}</span>
+                                            )}
+                                        </div>
+                                        <span
+                                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                                !txDetails.server.server_exists || txDetails.server.status === 'deleted'
+                                                    ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                                    : txDetails.server.status === 'suspended'
+                                                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                                    : txDetails.server.status === 'expired'
+                                                    ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30'
+                                                    : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                            }`}
+                                        >
+                                            {!txDetails.server.server_exists || txDetails.server.status === 'deleted' ? '🗑️ Deleted' : txDetails.server.status}
+                                        </span>
+                                    </div>
+
+                                    <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs bg-[#121418] p-3 rounded-xl border border-gray-800/60'>
+                                        <div>
+                                            <span className='text-[10px] text-gray-500 uppercase block font-bold'>Price when Bought / Cost</span>
+                                            <span className='font-mono font-bold text-amber-400 text-sm'>
+                                                ⚡ {(txDetails.server.price_when_bought || Math.abs(txDetails.transaction.amount)).toFixed(2)} BOLTs
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className='text-[10px] text-gray-500 uppercase block font-bold'>Server Creation Date</span>
+                                            <span className='font-mono text-gray-300 font-semibold'>
+                                                {txDetails.server.server_created_at ? new Date(txDetails.server.server_created_at).toLocaleDateString() : 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className='text-[10px] text-gray-500 uppercase block font-bold'>Server Expiry Date</span>
+                                            <span className='font-mono text-gray-300 font-semibold'>
+                                                {txDetails.server.server_expires_at ? new Date(txDetails.server.server_expires_at).toLocaleDateString() : (txDetails.server.server_exists ? 'Never' : 'Expired/Deleted')}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className='text-[10px] text-gray-500 uppercase block font-bold'>Node & IP Address</span>
+                                            <span className='font-mono text-gray-300 truncate block'>
+                                                {txDetails.server.node_name || 'Primary'} ({txDetails.server.ip_address || txDetails.server.node_ip || 'N/A'})
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className='text-[10px] text-gray-500 uppercase block font-bold'>Hardware Specs</span>
+                                            <span className='text-gray-300 font-medium'>
+                                                {txDetails.server.cpu_cores || 1} vCPU | {txDetails.server.memory_mb || 0} MB RAM | {txDetails.server.disk_mb || 0} MB Disk
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className='text-[10px] text-gray-500 uppercase block font-bold'>Plan / Description</span>
+                                            <span className='text-gray-300 truncate block'>
+                                                {txDetails.server.plan_name || txDetails.server.description || 'Cloud VPS'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {/* Promo code details if promo */}
+                            {txDetails.promo && (
+                                <div className='p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5'>
+                                    <div className='flex items-center justify-between'>
+                                        <span className='font-mono font-bold text-amber-400 text-sm'>{txDetails.promo.code}</span>
+                                        <span className='font-mono font-bold text-white'>⚡ {txDetails.promo.amount.toFixed(0)} BOLTs</span>
+                                    </div>
+                                    <p className='text-gray-300 text-xs'>Reason: <em>{txDetails.promo.reason}</em></p>
+                                    <div className='text-[11px] text-gray-400 font-mono flex items-center justify-between'>
+                                        <span>By: {txDetails.promo.created_by_discord_id ? `<@${txDetails.promo.created_by_discord_id}>` : 'System'}</span>
+                                        <span>Issued: {txDetails.promo.created_at ? new Date(txDetails.promo.created_at).toLocaleDateString() : 'N/A'}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Lifecycle audit trail */}
+                            {txDetails.lifecycle && txDetails.lifecycle.length > 0 && (
+                                <div className='space-y-2 pt-1'>
+                                    <span className='text-[11px] font-bold uppercase tracking-wider text-gray-400 block'>
+                                        📜 Related Lifecycle & Audit Trail
+                                    </span>
+                                    <div className='divide-y divide-gray-800/60 bg-[#121418] rounded-xl border border-gray-800/60 overflow-hidden'>
+                                        {txDetails.lifecycle.map((l, i) => (
+                                            <div key={i} className='p-2.5 flex items-center justify-between gap-2 text-[11px]'>
+                                                <div className='flex items-center gap-2'>
+                                                    <span className='font-mono font-bold text-purple-400 uppercase'>{l.event}</span>
+                                                    <span className='text-gray-300'>{l.description}</span>
+                                                </div>
+                                                <span className='text-gray-500 font-mono shrink-0'>
+                                                    {l.timestamp ? new Date(l.timestamp).toLocaleDateString() : ''}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </Modal>
         </div>

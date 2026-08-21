@@ -154,12 +154,20 @@ async def redeem_code(code: str, discord_id: str) -> dict:
     """
     try:
         return await _post("/promo/redeem", {"code": code, "discord_id": discord_id})
-    except httpx.HTTPStatusError as e:
-        try:
-            body = e.response.json()
-            return {"ok": False, "error": body.get("error", str(e))}
-        except Exception:
-            return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+# ─── Transaction Lookup ───────────────────────────────────────────────────────
+
+async def get_transaction_details(identifier: str) -> dict:
+    """
+    Look up detailed metadata for a transaction ID or reference (e.g. RENEW-5OBDSIRG, DEPLOY-XXX).
+    Returns detailed info on server name, price when bought, expiry date, creation date, specs, user, etc.
+    """
+    try:
+        return await _post("/transaction", {"reference_id": identifier.strip()})
+    except Exception as e:
+        print(f"[panel_api] get_transaction_details failed for {identifier}: {e}")
+        return {"ok": False, "error": str(e)}
+
 

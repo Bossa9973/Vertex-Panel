@@ -115,6 +115,62 @@ export interface UserHistoryListItem {
     created_at: string | null
 }
 
+export interface TransactionServerInfo {
+    server_exists: boolean
+    id?: number
+    uuid?: string
+    uuid_short?: string
+    vmid?: number
+    name: string
+    hostname?: string
+    status: string
+    node_name?: string
+    node_ip?: string
+    ip_address?: string
+    cpu_cores?: number
+    memory_mb?: number
+    disk_mb?: number
+    plan_name?: string
+    description?: string | null
+    server_created_at?: string | null
+    server_expires_at?: string | null
+    server_deleted_at?: string | null
+    is_expired?: boolean
+    price_when_bought?: number
+}
+
+export interface TransactionDetailsData {
+    ok: boolean
+    transaction: {
+        id: number
+        reference_id: string
+        amount: number
+        type: string
+        description: string | null
+        created_at: string | null
+        timestamp: number
+    }
+    user: {
+        id: number
+        name: string
+        email: string
+        discord_id: string | null
+        discord_username: string | null
+        credits: number
+        root_admin: boolean
+        created_at: string | null
+    } | null
+    server: TransactionServerInfo | null
+    promo: PromoCodeRecord | null
+    lifecycle: Array<{
+        event: string
+        description: string
+        ip: string
+        properties: Record<string, any>
+        timestamp: string | null
+    }>
+}
+
 export const getUserHistory = async (userId: number): Promise<UserHistoryData> => {
     const { data } = await http.get(`/api/admin/users/${userId}/history`)
     return data
@@ -124,5 +180,10 @@ export const getUserHistoryList = async (search = '', page = 1, perPage = 50): P
     const { data } = await http.get('/api/admin/user-history', {
         params: { search, page, per_page: perPage }
     })
+    return data
+}
+
+export const getTransactionDetails = async (identifier: string): Promise<TransactionDetailsData> => {
+    const { data } = await http.get(`/api/admin/transactions/${encodeURIComponent(identifier)}`)
     return data
 }

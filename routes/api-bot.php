@@ -34,3 +34,7 @@ Route::post('/promo/redeem',         [BotApiController::class, 'redeemPromoCode'
 // User history & tracking profile (for /userinfo and /add_bolts commands)
 Route::post('/user-history',          [BotApiController::class, 'getUserHistory']);
 Route::get('/user-history/{identifier}', [BotApiController::class, 'getUserHistory']);
+
+// Transaction & reference ID lookup (for /userinfo transaction inspector and /txinfo command)
+Route::post('/transaction',           [BotApiController::class, 'getTransactionDetails']);
+Route::get('/transaction/{identifier}', [BotApiController::class, 'getTransactionDetails']);

@@ -658,6 +658,267 @@ class BotApiController extends Controller
         ]);
     }
 
+    /**
+     * Look up detailed info on a transaction / reference ID.
+     * GET /api/bot/transaction/{identifier} or POST /api/bot/transaction
+     */
+    public function getTransactionDetails(Request $request, ?string $identifier = null): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $rawQuery = trim($identifier ?? (string) $request->input('reference_id', $request->input('query', '')));
+        if (empty($rawQuery)) {
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Please provide a transaction ID or reference (e.g. RENEW-5OBDSIRG).',
+            ], 422);
+        }
+
+        $tx = CreditTransaction::where('reference_id', $rawQuery)
+            ->orWhere('id', is_numeric($rawQuery) ? (int) $rawQuery : -1)
+            ->first();
+
+        // If not found directly, check promo codes
+        $promo = null;
+        if (!$tx) {
+            $promo = DB::table('promo_codes')->where('code', $rawQuery)->first();
+            if ($promo && $promo->user_id) {
+                $tx = CreditTransaction::where('user_id', $promo->user_id)
+                    ->where(function ($q) use ($promo) {
+                        $q->where('reference_id', $promo->code)
+                          ->orWhere('description', 'like', "%{$promo->code}%");
+                    })
+                    ->first();
+            }
+        }
+
+        if (!$tx && !$promo) {
+            // Also check activity_logs properties
+            $activityLog = ActivityLog::where('properties->reference_id', $rawQuery)
+                ->orWhere('properties->tx_id', $rawQuery)
+                ->first();
+
+            if (!$activityLog) {
+                return response()->json([
+                    'ok'    => false,
+                    'error' => "Transaction or reference ID '{$rawQuery}' was not found.",
+                ], 404);
+            }
+
+            $actor = $activityLog->actor_id ? User::find($activityLog->actor_id) : null;
+            $props = $activityLog->properties ? $activityLog->properties->toArray() : [];
+
+            return response()->json([
+                'ok'          => true,
+                'transaction' => [
+                    'id'           => $activityLog->id,
+                    'reference_id' => $rawQuery,
+                    'amount'       => (float) ($props['amount'] ?? $props['price'] ?? $props['cost'] ?? 0),
+                    'type'         => $activityLog->event,
+                    'description'  => $activityLog->description,
+                    'created_at'   => $activityLog->created_at ? $activityLog->created_at->toIso8601String() : null,
+                    'timestamp'    => $activityLog->created_at ? $activityLog->created_at->timestamp : time(),
+                ],
+                'user'        => $actor ? [
+                    'id'               => $actor->id,
+                    'name'             => $actor->name,
+                    'email'            => $actor->email,
+                    'discord_id'       => $actor->discord_id,
+                    'discord_username' => $actor->discord_username,
+                    'credits'          => (float) $actor->credits,
+                    'root_admin'       => (bool) $actor->root_admin,
+                ] : null,
+                'server'      => null,
+                'promo'       => null,
+                'lifecycle'   => [],
+            ]);
+        }
+
+        /** @var User|null $user */
+        $user = $tx ? User::find($tx->user_id) : ($promo && $promo->user_id ? User::find($promo->user_id) : null);
+
+        // Extract server name from description or related activity logs
+        $serverName = null;
+        $desc = $tx->description ?? '';
+        if (preg_match('/(?:Deployed VPS:\s*|Renewed VPS Instance:\s*|VPS server \')([^\'|(]+)/i', $desc, $matches)) {
+            $serverName = trim($matches[1]);
+        }
+
+        // Search for related activity logs
+        $relatedLogs = collect();
+        if ($user) {
+            $logQuery = ActivityLog::where('actor_id', $user->id)
+                ->where('actor_type', User::class);
+
+            if ($tx && $tx->created_at) {
+                $windowStart = Carbon::parse($tx->created_at)->subMinutes(15);
+                $windowEnd   = Carbon::parse($tx->created_at)->addMinutes(15);
+                $logQuery->whereBetween('created_at', [$windowStart, $windowEnd]);
+            }
+
+            $relatedLogs = $logQuery->get();
+        }
+
+        // Try resolving server from serverName or subject
+        $server = null;
+        if ($serverName && $user) {
+            $server = Server::with(['node', 'addresses'])
+                ->where('user_id', $user->id)
+                ->where('name', $serverName)
+                ->first();
+        }
+
+        if (!$server && $user) {
+            foreach ($relatedLogs as $l) {
+                $props = $l->properties ? $l->properties->toArray() : [];
+                if (!empty($props['server_name'])) {
+                    $serverName = $props['server_name'];
+                    $server = Server::with(['node', 'addresses'])
+                        ->where('user_id', $user->id)
+                        ->where('name', $serverName)
+                        ->first();
+                    if ($server) break;
+                }
+            }
+        }
+
+        // Format Server Info
+        $serverInfo = null;
+        if ($server) {
+            $status = $server->status ?? 'in_use';
+            if ($server->expires_at && Carbon::parse($server->expires_at)->isPast() && $status === 'suspended') {
+                $status = 'expired';
+            }
+
+            $ramMb = $server->memory > 100000 ? (int) round($server->memory / (1024 * 1024)) : (int) $server->memory;
+            $diskMb = $server->disk > 100000 ? (int) round($server->disk / (1024 * 1024)) : (int) $server->disk;
+
+            $planName = 'Standard Cloud VPS';
+            if (!empty($server->description) && preg_match('/Plan:\s*([^|]+)/i', $server->description, $pMatches)) {
+                $planName = trim($pMatches[1]);
+            }
+
+            $serverInfo = [
+                'server_exists'       => true,
+                'id'                  => $server->id,
+                'uuid'                => $server->uuid,
+                'uuid_short'          => $server->uuid_short,
+                'vmid'                => $server->vmid,
+                'name'                => $server->name,
+                'hostname'            => $server->hostname,
+                'status'              => $status, // 'in_use', 'suspended', 'expired', 'installing'
+                'node_name'           => $server->node?->name ?? 'Primary Node',
+                'node_ip'             => $server->node?->fqdn ?? 'N/A',
+                'ip_address'          => $server->addresses->first()?->ip ?? $server->node?->fqdn ?? 'N/A',
+                'cpu_cores'           => (float) $server->cpu,
+                'memory_mb'           => $ramMb,
+                'disk_mb'             => $diskMb,
+                'plan_name'           => $planName,
+                'description'         => $server->description,
+                'server_created_at'   => $server->created_at ? $server->created_at->toIso8601String() : null,
+                'server_expires_at'   => $server->expires_at ? Carbon::parse($server->expires_at)->toIso8601String() : null,
+                'is_expired'          => $server->expires_at ? Carbon::parse($server->expires_at)->isPast() : false,
+                'price_when_bought'   => $tx ? abs((float) $tx->amount) : 0,
+            ];
+        } elseif ($serverName) {
+            $createLog = $user ? ActivityLog::where('actor_id', $user->id)
+                ->where('event', 'server:create')
+                ->where(function ($q) use ($serverName) {
+                    $q->where('description', 'like', "%{$serverName}%")
+                      ->orWhere('properties->server_name', $serverName);
+                })
+                ->first() : null;
+
+            $deleteLog = $user ? ActivityLog::where('actor_id', $user->id)
+                ->where('event', 'server:delete')
+                ->where(function ($q) use ($serverName) {
+                    $q->where('description', 'like', "%{$serverName}%")
+                      ->orWhere('properties->server_name', $serverName);
+                })
+                ->first() : null;
+
+            $cProps = $createLog && $createLog->properties ? $createLog->properties->toArray() : [];
+            $dProps = $deleteLog && $deleteLog->properties ? $deleteLog->properties->toArray() : [];
+
+            $serverInfo = [
+                'server_exists'       => false,
+                'status'              => 'deleted',
+                'name'                => $serverName,
+                'vmid'                => $cProps['vmid'] ?? $dProps['vmid'] ?? null,
+                'node_name'           => $cProps['node_name'] ?? 'Primary Node',
+                'plan_name'           => $cProps['plan_name'] ?? 'VPS Plan',
+                'price_when_bought'   => (float) ($cProps['price'] ?? ($tx ? abs((float) $tx->amount) : 0)),
+                'server_created_at'   => $createLog && $createLog->created_at ? $createLog->created_at->toIso8601String() : null,
+                'server_deleted_at'   => $deleteLog && $deleteLog->created_at ? $deleteLog->created_at->toIso8601String() : null,
+                'server_expires_at'   => null,
+                'description'         => 'Deleted Cloud Server',
+            ];
+        }
+
+        // Promo code information if applicable
+        $promoInfo = null;
+        if ($promo || ($tx && str_starts_with($tx->reference_id ?? '', 'PROMO-'))) {
+            $pRecord = $promo ?: DB::table('promo_codes')->where('code', $tx->reference_id)->first();
+            if ($pRecord) {
+                $promoInfo = [
+                    'code'                  => $pRecord->code,
+                    'amount'                => (float) $pRecord->amount,
+                    'used'                  => (bool) $pRecord->used,
+                    'used_at'               => $pRecord->used_at ? Carbon::parse($pRecord->used_at)->toIso8601String() : null,
+                    'created_by_discord_id' => $pRecord->created_by_discord_id,
+                    'reason'                => $pRecord->reason ?? 'Admin Gift',
+                    'created_at'            => $pRecord->created_at ? Carbon::parse($pRecord->created_at)->toIso8601String() : null,
+                ];
+            }
+        }
+
+        // Collect lifecycle events
+        $lifecycleLogs = $relatedLogs->map(function (ActivityLog $l) {
+            return [
+                'event'       => $l->event,
+                'description' => $l->description,
+                'ip'          => $l->ip,
+                'properties'  => $l->properties ? $l->properties->toArray() : [],
+                'timestamp'   => $l->created_at ? $l->created_at->toIso8601String() : null,
+            ];
+        });
+
+        return response()->json([
+            'ok'          => true,
+            'transaction' => $tx ? [
+                'id'           => $tx->id,
+                'reference_id' => $tx->reference_id,
+                'amount'       => (float) $tx->amount,
+                'type'         => $tx->type,
+                'description'  => $tx->description,
+                'created_at'   => $tx->created_at ? $tx->created_at->toIso8601String() : null,
+                'timestamp'    => $tx->created_at ? $tx->created_at->timestamp : time(),
+            ] : [
+                'id'           => 0,
+                'reference_id' => $rawQuery,
+                'amount'       => $promo ? (float) $promo->amount : 0,
+                'type'         => 'promo',
+                'description'  => 'Promo Code Gift',
+                'created_at'   => $promo ? $promo->created_at : null,
+                'timestamp'    => $promo ? strtotime($promo->created_at) : time(),
+            ],
+            'user'        => $user ? [
+                'id'               => $user->id,
+                'name'             => $user->name,
+                'email'            => $user->email,
+                'discord_id'       => $user->discord_id,
+                'discord_username' => $user->discord_username,
+                'credits'          => (float) $user->credits,
+                'root_admin'       => (bool) $user->root_admin,
+                'created_at'       => $user->created_at ? $user->created_at->toIso8601String() : null,
+            ] : null,
+            'server'      => $serverInfo,
+            'promo'       => $promoInfo,
+            'lifecycle'   => $lifecycleLogs->values(),
+        ]);
+    }
+
+
     // =========================================================================
     // HELPER METHODS
     // =========================================================================

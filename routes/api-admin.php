@@ -206,6 +206,7 @@ Route::post('/users/{id}/credits', [Admin\AdminUserBalanceController::class, 'up
 
 Route::get('/user-history', [Admin\AdminUserHistoryController::class, 'index']);
 Route::get('/users/{id}/history', [Admin\AdminUserHistoryController::class, 'show']);
+Route::get('/transactions/{identifier}', [Admin\AdminUserHistoryController::class, 'transactionDetails']);
 
 /*
 |--------------------------------------------------------------------------
