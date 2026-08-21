@@ -143,6 +143,14 @@ export const routes: Route[] = [
                 ),
             },
             {
+                path: 'user-history',
+                element: (
+                    <RequireAdminPermission perm='view_users'>
+                        {lazyLoad(lazy(() => import('@/components/admin/users/AdminUserHistoryContainer')))}
+                    </RequireAdminPermission>
+                ),
+            },
+            {
                 path: 'tokens',
                 element: (
                     <RequireAdminPermission perm='view_tokens'>
@@ -216,6 +224,7 @@ const AdminDashboardRouter = () => {
         ...(hasPerm('view_servers') ? [{ name: getLabel('server_other', 'Servers'), path: '/admin/servers' }] : []),
         ...(hasPerm('view_plans') ? [{ name: 'VPS Plans', path: '/admin/plans' }] : []),
         ...(hasPerm('manage_balances') ? [{ name: 'User Balances', path: '/admin/user-balances' }] : []),
+        ...(hasPerm('view_users') ? [{ name: 'User History', path: '/admin/user-history' }] : []),
         { name: 'Resellers & Payouts', path: '/admin/resellers' },
         ...(hasPerm('view_ipam') ? [{ name: getLabel('ipam', 'IPAM'), path: '/admin/ipam' }] : []),
         ...(hasPerm('view_users') ? [{ name: getLabel('user_other', 'Users'), path: '/admin/users' }] : []),
@@ -225,6 +234,7 @@ const AdminDashboardRouter = () => {
         ...(hasPerm('view_maintenance') ? [{ name: 'Maintenance', path: '/admin/maintenance' }] : []),
         { name: 'Roles', path: '/admin/roles' },
     ]
+
 
     useEffect(() => {
         if (Boolean(isDashboardArea) || Boolean(isDashboardArea2)) {

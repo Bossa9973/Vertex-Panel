@@ -43,6 +43,69 @@ class StatsView(discord.ui.View):
         embed.set_footer(text="VERTEX // MONITORING MODULE")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    @discord.ui.button(label="My Account & Servers", style=discord.ButtonStyle.primary, custom_id="stats_history", emoji="📜")
+    async def check_history(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        data = await panel_api.get_user_history(str(interaction.user.id))
+
+        if not data.get("ok"):
+            embed = discord.Embed(
+                title="⚠️ Discord Account Not Linked",
+                description=(
+                    "Your Discord account is not yet linked to a Vertex panel account.\n\n"
+                    "**How to Link:**\n"
+                    "1. Visit [Vertex Account Settings](https://dash.vertexnodes.top/account)\n"
+                    "2. Click **Connect Discord** to link your Discord account\n"
+                    "3. Once linked, you can view your balance, spending, and manage VPS instances right here!"
+                ),
+                color=0xEF4444
+            )
+            return await interaction.followup.send(embed=embed, ephemeral=True)
+
+        u = data.get("user") or {}
+        summary = data.get("summary") or {}
+        servers = data.get("owned_servers") or []
+        txs = data.get("spending_history") or []
+
+        embed = discord.Embed(
+            title=f"⚡ {interaction.user.display_name} // Account & Cloud Servers",
+            color=0x6366F1,
+            description=f"**Current Balance:** `⚡ {summary.get('current_balance', 0.0):,.2f} BOLTs` | **Active Servers:** `{len(servers)}`"
+        )
+        embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+
+        embed.add_field(
+            name="📊 Financial Overview",
+            value=(
+                f"• **Balance:** `{summary.get('current_balance', 0.0):,.2f} BOLTs`\n"
+                f"• **Total Spent:** `-{summary.get('total_spent', 0.0):,.2f} BOLTs`\n"
+                f"• **Promo Codes Claimed:** `+{summary.get('total_promo_claimed', 0.0):,.2f} BOLTs`"
+            ),
+            inline=True
+        )
+
+        embed.add_field(
+            name="🖥️ Active VPS Instances",
+            value=f"**{len(servers)} server{'s' if len(servers) != 1 else ''}** deployed on Vertex Cloud.",
+            inline=True
+        )
+
+        if servers:
+            s_lines = []
+            for s in servers[:4]:
+                s_lines.append(f"• **{s.get('name')}** (`{s.get('node_name')}`): {s.get('status', 'in_use').capitalize()} | Expires: `{s.get('expires_at', 'N/A')[:10]}`")
+            embed.add_field(name="Cloud Servers", value="\n".join(s_lines), inline=False)
+
+        if txs:
+            t_lines = []
+            for t in txs[:5]:
+                sign = "+" if t.get("amount", 0) > 0 else ""
+                t_lines.append(f"• **{sign}{t.get('amount', 0):,.2f} BOLTs** — {t.get('description', 'Credit adjustment')}")
+            embed.add_field(name="Recent Transactions", value="\n".join(t_lines), inline=False)
+
+        embed.set_footer(text="VERTEX // CLOUD & BILLING MODULE")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
 
 class Panel(commands.Cog):
     def __init__(self, bot: commands.Bot):

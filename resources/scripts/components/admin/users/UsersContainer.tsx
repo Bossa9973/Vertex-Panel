@@ -113,6 +113,19 @@ const columns: ColumnArray<User> = [
             </Link>
         ),
     },
+    {
+        accessor: 'id',
+        header: 'History',
+        align: 'center',
+        cell: ({ value }) => (
+            <Link
+                to={`/admin/users/${value}/history`}
+                className='px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-bold inline-flex items-center gap-1 transition'
+            >
+                View &rarr;
+            </Link>
+        ),
+    },
 ]
 
 const UsersContainer = () => {

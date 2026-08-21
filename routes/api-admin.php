@@ -204,6 +204,9 @@ Route::delete('/plans/{id}', [Admin\AdminVpsPlansController::class, 'destroy']);
 Route::get('/users-balances', [Admin\AdminUserBalanceController::class, 'index']);
 Route::post('/users/{id}/credits', [Admin\AdminUserBalanceController::class, 'updateCredits']);
 
+Route::get('/user-history', [Admin\AdminUserHistoryController::class, 'index']);
+Route::get('/users/{id}/history', [Admin\AdminUserHistoryController::class, 'show']);
+
 /*
 |--------------------------------------------------------------------------
 | Coterm Controller Routes

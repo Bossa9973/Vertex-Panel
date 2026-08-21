@@ -30,3 +30,7 @@ Route::post('/admin/reset-all',      [BotApiController::class, 'adminResetAll'])
 
 // Promo code redemption
 Route::post('/promo/redeem',         [BotApiController::class, 'redeemPromoCode']);
+
+// User history & tracking profile (for /userinfo and /add_bolts commands)
+Route::post('/user-history',          [BotApiController::class, 'getUserHistory']);
+Route::get('/user-history/{identifier}', [BotApiController::class, 'getUserHistory']);

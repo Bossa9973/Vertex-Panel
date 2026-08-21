@@ -134,6 +134,12 @@ const AdminUserBalanceContainer = () => {
                                         </td>
                                         <td className='py-3.5 px-4 text-right'>
                                             <div className='flex items-center justify-end gap-1.5'>
+                                                <a
+                                                    href={`/admin/users/${user.id}/history`}
+                                                    className='px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-bold inline-flex items-center gap-1 transition cursor-pointer'
+                                                >
+                                                    History
+                                                </a>
                                                 <button
                                                     onClick={() => handleOpenModal(user, 'add')}
                                                     className='px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold inline-flex items-center gap-1 transition cursor-pointer'

@@ -178,7 +178,7 @@ class BotApiController extends Controller
 
     /**
      * Admin: generate a promo code for a Discord user.
-     * POST /api/bot/admin/generate-code   { discord_id, amount, admin_discord_id }
+     * POST /api/bot/admin/generate-code   { discord_id, amount, admin_discord_id, reason }
      * Returns: { code }
      */
     public function generatePromoCode(Request $request): JsonResponse
@@ -187,6 +187,7 @@ class BotApiController extends Controller
             'discord_id'       => 'required|string|max:32',
             'amount'           => 'required|numeric|min:1',
             'admin_discord_id' => 'required|string|max:32',
+            'reason'           => 'nullable|string|max:255',
         ]);
 
         $this->ensureTablesExist();
@@ -196,17 +197,38 @@ class BotApiController extends Controller
             . '-'
             . strtoupper(Str::random(4));
 
+        $reason = $request->input('reason') ?: 'Admin Gift';
+        $discordId = (string) $request->input('discord_id');
+        $adminDiscordId = (string) $request->input('admin_discord_id');
+        $amount = (float) $request->input('amount');
+
         try {
             DB::table('promo_codes')->insert([
                 'code'                  => $code,
-                'discord_id'            => (string) $request->input('discord_id'),
+                'discord_id'            => $discordId,
                 'user_id'               => null,
-                'amount'                => (float) $request->input('amount'),
+                'amount'                => $amount,
                 'used'                  => false,
-                'created_by_discord_id' => (string) $request->input('admin_discord_id'),
+                'created_by_discord_id' => $adminDiscordId,
+                'reason'                => $reason,
                 'used_at'               => null,
                 'created_at'            => now(),
             ]);
+
+            try {
+                \Convoy\Facades\Activity::event('admin:promo-code-generate')
+                    ->description("Admin <@{$adminDiscordId}> generated {$amount} BOLT promo code ({$code}) for <@{$discordId}> with reason: '{$reason}'")
+                    ->property([
+                        'code'                   => $code,
+                        'amount'                 => $amount,
+                        'target_discord_id'      => $discordId,
+                        'admin_discord_id'       => $adminDiscordId,
+                        'reason'                 => $reason,
+                    ])
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $t) {}
+
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Failed to generate promo code: " . $e->getMessage(), ['exception' => $e]);
             return response()->json([
@@ -215,7 +237,12 @@ class BotApiController extends Controller
             ], 500);
         }
 
-        return response()->json(['ok' => true, 'code' => $code]);
+        return response()->json([
+            'ok'     => true,
+            'code'   => $code,
+            'amount' => $amount,
+            'reason' => $reason,
+        ]);
     }
 
     /**
@@ -342,6 +369,296 @@ class BotApiController extends Controller
     }
 
     // =========================================================================
+    // USER HISTORY — for Discord Bot /userinfo and /add_bolts commands
+    // =========================================================================
+
+    /**
+     * Get comprehensive user balance, spending history, promo history, owned servers,
+     * server lifecycle history, and Discord tracking stats.
+     * POST /api/bot/user-history   { identifier }
+     * GET  /api/bot/user-history/{identifier}
+     */
+    public function getUserHistory(Request $request, ?string $identifier = null): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $rawQuery = $identifier ?? $request->input('identifier') ?? $request->input('discord_id') ?? $request->input('query') ?? '';
+        $query = trim((string) $rawQuery);
+
+        if (empty($query)) {
+            return response()->json(['ok' => false, 'error' => 'No user identifier provided.'], 400);
+        }
+
+        // Clean Discord mention format <@!123456> or <@123456>
+        if (preg_match('/<@!?(\d+)>/', $query, $matches)) {
+            $query = $matches[1];
+        }
+
+        $user = null;
+        $discordId = null;
+
+        if (is_numeric($query) && strlen($query) >= 15) {
+            // Discord snowflake ID
+            $discordId = $query;
+            $user = User::where('discord_id', $discordId)->first();
+        } elseif (is_numeric($query)) {
+            // Numeric Panel ID or Discord ID
+            $user = User::find((int) $query);
+            if (!$user) {
+                $user = User::where('discord_id', $query)->first();
+                $discordId = $query;
+            } else {
+                $discordId = $user->discord_id;
+            }
+        } elseif (str_contains($query, '@')) {
+            // Email search
+            $user = User::where('email', $query)->first();
+            if ($user && $user->discord_id) {
+                $discordId = $user->discord_id;
+            }
+        } else {
+            // Username or Discord Username search
+            $user = User::where('name', 'like', "%{$query}%")
+                ->orWhere('discord_username', 'like', "%{$query}%")
+                ->first();
+            if ($user && $user->discord_id) {
+                $discordId = $user->discord_id;
+            }
+        }
+
+        // Check discord stats and promo codes even if no panel user is linked yet
+        $discordStats = null;
+        $joined = 0;
+        $left = 0;
+        $fake = 0;
+        $valid = 0;
+
+        if ($discordId) {
+            $statsRow = DB::table('discord_stats')->where('discord_id', $discordId)->first();
+            if ($statsRow) {
+                $discordStats = [
+                    'messages' => (int) ($statsRow->messages ?? 0),
+                    'boosts'   => (int) ($statsRow->boosts ?? 0),
+                ];
+            }
+
+            $invited = DB::table('discord_invited_users')->where('inviter_discord_id', $discordId)->get();
+            $joined = $invited->count();
+            $left   = $invited->where('status', 'left')->count();
+            $fake   = $invited->where('is_fake', true)->count();
+            $valid  = $invited->where('status', 'joined')->where('is_fake', false)->count();
+        }
+
+        // Fetch promo codes issued to this discord ID or redeemed by this user
+        $promoQuery = DB::table('promo_codes')->orderBy('created_at', 'desc');
+        if ($user && $discordId) {
+            $promoQuery->where(function ($q) use ($discordId, $user) {
+                $q->where('discord_id', $discordId)->orWhere('user_id', $user->id);
+            });
+        } elseif ($discordId) {
+            $promoQuery->where('discord_id', $discordId);
+        } elseif ($user) {
+            $promoQuery->where('user_id', $user->id);
+        } else {
+            $promoQuery->whereRaw('0 = 1');
+        }
+        $promoCodes = $promoQuery->take(50)->get();
+
+        if (!$user && !$discordStats && $promoCodes->isEmpty()) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "No account or activity found for '{$rawQuery}'. Make sure the Discord account is linked or enter a valid email/ID.",
+            ], 404);
+        }
+
+        // Spending History & Transactions
+        $transactions = collect();
+        $totalSpent = 0.0;
+        $totalDeposited = 0.0;
+        $totalBonus = 0.0;
+        $totalPromoClaimed = 0.0;
+
+        if ($user) {
+            $allTx = DB::table('credit_transactions')
+                ->where('user_id', $user->id)
+                ->orderBy('id', 'desc')
+                ->get();
+
+            foreach ($allTx as $tx) {
+                $amt = (float) $tx->amount;
+                if ($amt < 0) {
+                    $totalSpent += abs($amt);
+                } elseif (in_array($tx->type, ['topup', 'deposit', 'admin_deposit'])) {
+                    $totalDeposited += $amt;
+                } elseif (in_array($tx->type, ['bonus', 'promo'])) {
+                    $totalBonus += $amt;
+                    if (str_contains(strtolower($tx->description ?? ''), 'promo')) {
+                        $totalPromoClaimed += $amt;
+                    }
+                } else {
+                    $totalDeposited += $amt;
+                }
+            }
+
+            $transactions = $allTx->take(30)->map(function ($tx) {
+                return [
+                    'id'           => $tx->id,
+                    'amount'       => (float) $tx->amount,
+                    'type'         => $tx->type,
+                    'description'  => $tx->description,
+                    'reference_id' => $tx->reference_id,
+                    'created_at'   => $tx->created_at ? Carbon::parse($tx->created_at)->toIso8601String() : null,
+                    'timestamp'    => $tx->created_at ? Carbon::parse($tx->created_at)->timestamp : time(),
+                ];
+            });
+        }
+
+        // Owned Active Servers
+        $ownedServers = collect();
+        if ($user) {
+            $servers = \Convoy\Models\Server::with('node')
+                ->where('user_id', $user->id)
+                ->orderBy('id', 'desc')
+                ->get();
+
+            $ownedServers = $servers->map(function ($srv) {
+                $status = $srv->status ?? 'in_use';
+                if ($srv->expires_at && Carbon::parse($srv->expires_at)->isPast() && $status === 'suspended') {
+                    $status = 'expired';
+                }
+
+                $ramMb = $srv->memory > 100000 ? (int) round($srv->memory / (1024 * 1024)) : (int) $srv->memory;
+                $diskMb = $srv->disk > 100000 ? (int) round($srv->disk / (1024 * 1024)) : (int) $srv->disk;
+
+                return [
+                    'id'          => $srv->id,
+                    'uuid_short'  => $srv->uuid_short,
+                    'vmid'        => $srv->vmid,
+                    'name'        => $srv->name,
+                    'hostname'    => $srv->hostname,
+                    'status'      => $status, // 'in_use', 'installing', 'suspended', 'expired', 'deleting'
+                    'node_name'   => $srv->node?->name ?? 'Primary Node',
+                    'ip'          => $srv->node?->fqdn ?? 'N/A',
+                    'memory_mb'   => $ramMb,
+                    'cpu_cores'   => (float) $srv->cpu,
+                    'disk_mb'     => $diskMb,
+                    'description' => $srv->description,
+                    'expires_at'  => $srv->expires_at ? Carbon::parse($srv->expires_at)->toIso8601String() : null,
+                    'created_at'  => $srv->created_at ? Carbon::parse($srv->created_at)->toIso8601String() : null,
+                ];
+            });
+        }
+
+        // Server Lifecycle History from Activity Logs
+        $serverHistory = collect();
+        if ($user) {
+            $logs = \Convoy\Models\ActivityLog::where('actor_id', $user->id)
+                ->where('actor_type', User::class)
+                ->where(function ($q) {
+                    $q->where('event', 'like', 'server:%')
+                      ->orWhere('event', 'like', 'vps:%')
+                      ->orWhere('event', 'like', 'bolts:spend%');
+                })
+                ->orderBy('id', 'desc')
+                ->take(40)
+                ->get();
+
+            $serverHistory = $logs->map(function ($log) {
+                $props = $log->properties ? $log->properties->toArray() : [];
+                $event = $log->event;
+
+                $statusBadge = 'In Use';
+                if (str_contains($event, 'delete')) {
+                    $statusBadge = 'Deleted';
+                } elseif (str_contains($event, 'suspend')) {
+                    $statusBadge = 'Suspended';
+                } elseif (str_contains($event, 'renew')) {
+                    $statusBadge = 'Renewed';
+                } elseif (str_contains($event, 'create') || str_contains($event, 'deploy')) {
+                    $statusBadge = 'Deployed';
+                } elseif (str_contains($event, 'power') || str_contains($event, 'reboot')) {
+                    $statusBadge = 'Rebooted';
+                }
+
+                return [
+                    'id'           => $log->id,
+                    'event'        => $event,
+                    'description'  => $log->description ?: $event,
+                    'status_badge' => $statusBadge,
+                    'server_name'  => $props['server_name'] ?? null,
+                    'vmid'         => $props['vmid'] ?? null,
+                    'plan_name'    => $props['plan_name'] ?? null,
+                    'node_name'    => $props['node_name'] ?? null,
+                    'cost'         => $props['cost'] ?? $props['price'] ?? $props['amount'] ?? null,
+                    'properties'   => $props,
+                    'created_at'   => $log->created_at ? Carbon::parse($log->created_at)->toIso8601String() : null,
+                    'timestamp'    => $log->created_at ? Carbon::parse($log->created_at)->timestamp : time(),
+                ];
+            });
+        }
+
+        // Formatted Promo Codes list
+        $promoList = $promoCodes->map(function ($p) {
+            return [
+                'code'                  => $p->code,
+                'amount'                => (float) $p->amount,
+                'used'                  => (bool) $p->used,
+                'used_at'               => $p->used_at ? Carbon::parse($p->used_at)->toIso8601String() : null,
+                'created_by_discord_id' => $p->created_by_discord_id,
+                'reason'                => $p->reason ?? 'Admin Gift',
+                'created_at'            => $p->created_at ? Carbon::parse($p->created_at)->toIso8601String() : null,
+                'timestamp'             => $p->created_at ? Carbon::parse($p->created_at)->timestamp : time(),
+            ];
+        });
+
+        $totalPromoGeneratedBolts = $promoCodes->sum('amount');
+        $totalPromoClaimedBolts = $promoCodes->where('used', true)->sum('amount');
+
+        return response()->json([
+            'ok'      => true,
+            'user'    => $user ? [
+                'id'               => $user->id,
+                'name'             => $user->name,
+                'email'            => $user->email,
+                'discord_id'       => $user->discord_id,
+                'discord_username' => $user->discord_username,
+                'google_email'     => $user->google_email,
+                'credits'          => (float) ($user->credits ?? 0),
+                'root_admin'       => (bool) ($user->root_admin ?? false),
+                'created_at'       => $user->created_at ? $user->created_at->toIso8601String() : null,
+                'timestamp'        => $user->created_at ? $user->created_at->timestamp : null,
+            ] : null,
+            'discord' => [
+                'discord_id' => $discordId,
+                'stats'      => $discordStats,
+                'invites'    => [
+                    'joined' => $joined,
+                    'left'   => $left,
+                    'fake'   => $fake,
+                    'valid'  => $valid,
+                ],
+            ],
+            'balance' => (float) ($user?->credits ?? 0),
+            'summary' => [
+                'current_balance'          => (float) ($user?->credits ?? 0),
+                'total_spent'              => round($totalSpent, 2),
+                'total_deposited'          => round($totalDeposited, 2),
+                'total_bonus'              => round($totalBonus, 2),
+                'total_promo_claimed'      => round($totalPromoClaimed > 0 ? $totalPromoClaimed : $totalPromoClaimedBolts, 2),
+                'total_promo_generated'    => round($totalPromoGeneratedBolts, 2),
+                'active_servers'           => $ownedServers->count(),
+                'total_servers_lifetime'   => $ownedServers->count() + $serverHistory->where('status_badge', 'Deleted')->count(),
+                'total_transactions'       => $transactions->count(),
+                'total_promo_codes_issued' => $promoCodes->count(),
+            ],
+            'spending_history' => $transactions->values(),
+            'promo_history'    => $promoList->values(),
+            'owned_servers'    => $ownedServers->values(),
+            'server_history'   => $serverHistory->values(),
+        ]);
+    }
+
+    // =========================================================================
     // HELPER METHODS
     // =========================================================================
 
@@ -399,12 +716,19 @@ class BotApiController extends Controller
                     $table->decimal('amount', 16, 2);
                     $table->boolean('used')->default(false)->index();
                     $table->string('created_by_discord_id', 32);
+                    $table->string('reason', 255)->nullable();
                     $table->timestamp('used_at')->nullable();
                     $table->timestamp('created_at')->useCurrent();
                 });
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error("Failed creating promo_codes table: " . $e->getMessage());
             }
+        } elseif (!\Illuminate\Support\Facades\Schema::hasColumn('promo_codes', 'reason')) {
+            try {
+                \Illuminate\Support\Facades\Schema::table('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->string('reason', 255)->nullable()->after('created_by_discord_id');
+                });
+            } catch (\Throwable $e) {}
         }
 
         if (!\Illuminate\Support\Facades\Schema::hasTable('discord_stats')) {

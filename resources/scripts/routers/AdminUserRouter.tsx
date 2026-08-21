@@ -69,6 +69,17 @@ export const routes: Route[] = [
                             )
                         ),
                     },
+                    {
+                        path: 'history',
+                        element: lazyLoad(
+                            lazy(
+                                () =>
+                                    import(
+                                        '@/components/admin/users/history/UserHistoryContainer'
+                                    )
+                            )
+                        ),
+                    },
                 ],
             },
         ],
@@ -83,6 +94,10 @@ const visibleRoutes = [
     {
         name: 'Servers',
         path: '/admin/users/:id/servers',
+    },
+    {
+        name: 'User History',
+        path: '/admin/users/:id/history',
     },
 ]
 

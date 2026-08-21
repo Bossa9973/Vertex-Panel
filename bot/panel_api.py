@@ -118,17 +118,31 @@ async def admin_reset_user(discord_id: str) -> None:
 async def admin_reset_all() -> None:
     await _post("/admin/reset-all", {})
 
-async def generate_promo_code(discord_id: str, amount: int, admin_discord_id: str) -> str:
+async def generate_promo_code(discord_id: str, amount: int, admin_discord_id: str, reason: str = "Admin Gift") -> str:
     """
-    Ask the panel to create a promo code for discord_id.
+    Ask the panel to create a promo code for discord_id with reason and admin logging.
     Returns the generated code string, e.g. 'LMN-AB12-CD34'.
     """
     data = await _post("/admin/generate-code", {
         "discord_id":       discord_id,
         "amount":           amount,
         "admin_discord_id": admin_discord_id,
+        "reason":           reason,
     })
     return data["code"]
+
+# ─── User History & Tracking ──────────────────────────────────────────────────
+
+async def get_user_history(identifier: str) -> dict:
+    """
+    Fetch comprehensive user history including balance, spending, promo codes,
+    owned servers, lifecycle events, and Discord stats.
+    """
+    try:
+        return await _post("/user-history", {"identifier": identifier})
+    except Exception as e:
+        print(f"[panel_api] get_user_history failed for {identifier}: {e}")
+        return {"ok": False, "error": str(e)}
 
 # ─── Promo code redemption ────────────────────────────────────────────────────
 
@@ -148,3 +162,4 @@ async def redeem_code(code: str, discord_id: str) -> dict:
             return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
