@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import deleteNode from '@/api/admin/nodes/deleteNode'
+import updateNode from '@/api/admin/nodes/updateNode'
 import { Node, NodeResponse } from '@/api/admin/nodes/getNodes'
 import useNodesSWR from '@/api/admin/nodes/useNodesSWR'
 
@@ -42,12 +43,19 @@ const NodesContainer = () => {
             accessor: 'name',
             header: tStrings('node'),
             cell: ({ value, row }) => (
-                <Link
-                    to={`/admin/nodes/${row.id}`}
-                    className='link text-foreground'
-                >
-                    {value}
-                </Link>
+                <div className='flex items-center gap-2'>
+                    <Link
+                        to={`/admin/nodes/${row.id}`}
+                        className='link text-foreground font-medium'
+                    >
+                        {value}
+                    </Link>
+                    {row.hidden && (
+                        <span className='px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20'>
+                            Hidden
+                        </span>
+                    )}
+                </div>
             ),
         },
         {
@@ -72,6 +80,42 @@ const NodesContainer = () => {
     ]
 
     const rowActions = ({ row: node }: RowActionsProps<Node>) => {
+        const handleToggleHidden = async () => {
+            clearFlashes()
+            try {
+                const updated = await updateNode(node.id, {
+                    locationId: node.locationId,
+                    name: node.name,
+                    cluster: node.cluster,
+                    verifyTls: node.verifyTls,
+                    hidden: !node.hidden,
+                    fqdn: node.fqdn,
+                    port: node.port,
+                    memory: node.memory,
+                    memoryOverallocate: node.memoryOverallocate,
+                    disk: node.disk,
+                    diskOverallocate: node.diskOverallocate,
+                    vmStorage: node.vmStorage,
+                    backupStorage: node.backupStorage,
+                    isoStorage: node.isoStorage,
+                    network: node.network,
+                })
+
+                mutate(
+                    mutateData =>
+                        ({
+                            ...mutateData,
+                            items: mutateData!.items.map(n =>
+                                n.id === node.id ? updated : n
+                            ),
+                        }) as NodeResponse,
+                    false
+                )
+            } catch (error) {
+                clearAndAddHttpError(error as Error)
+            }
+        }
+
         const handleDelete = async () => {
             clearFlashes()
 
@@ -104,6 +148,9 @@ const NodesContainer = () => {
                     onClick={() => setPasswordResetNode(node)}
                 >
                     Reset PVE Password
+                </Menu.Item>
+                <Menu.Item onClick={handleToggleHidden}>
+                    {node.hidden ? 'Show in Deploy Menu' : 'Hide from Deploy Menu'}
                 </Menu.Item>
                 <Menu.Divider />
                 <Menu.Item

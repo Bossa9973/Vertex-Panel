@@ -158,6 +158,14 @@ class ResellerController extends Controller
         $user = $request->user();
         $vpsPlan = VpsPlan::findOrFail($validated['vps_plan_id']);
 
+        /** @var Node $node */
+        $node = Node::findOrFail($validated['node_id']);
+        if ($node->hidden) {
+            return response()->json([
+                'message' => 'The selected datacenter node is currently disabled or hidden from deployments.',
+            ], 422);
+        }
+
         $template = !empty($validated['template_uuid']) 
             ? Template::where('uuid', $validated['template_uuid'])->first()
             : null;

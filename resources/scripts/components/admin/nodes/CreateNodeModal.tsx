@@ -35,6 +35,7 @@ const CreateNodeModal = ({ open, onClose }: Props) => {
         locationId: z.preprocess(Number, z.number()),
         cluster: z.string().min(1).max(191),
         verifyTls: z.boolean(),
+        hidden: z.boolean(),
         tokenId: z.string().min(1).max(191),
         secret: z.string().min(1).max(191),
         fqdn: hostname().min(1).max(191),
@@ -56,6 +57,7 @@ const CreateNodeModal = ({ open, onClose }: Props) => {
             locationId: '0',
             cluster: '',
             verifyTls: true,
+            hidden: false,
             tokenId: '',
             secret: '',
             fqdn: '',
@@ -136,11 +138,18 @@ const CreateNodeModal = ({ open, onClose }: Props) => {
                             <TextInputForm name='secret' label={t('secret')} />
                         </div>
                         <TextInputForm name='fqdn' label={tStrings('fqdn')} />
-                        <CheckboxForm
-                            name={'verifyTls'}
-                            label='Verify TLS Certificate'
-                            className={'mt-3 relative'}
-                        />
+                        <div className='grid gap-3 grid-cols-2 mt-3'>
+                            <CheckboxForm
+                                name={'verifyTls'}
+                                label='Verify TLS'
+                                className={'relative'}
+                            />
+                            <CheckboxForm
+                                name={'hidden'}
+                                label='Hide from Deploy Menu'
+                                className={'relative'}
+                            />
+                        </div>
                         <TextInputForm name='port' label={tStrings('port')} />
                         <div className='grid gap-3 grid-cols-2'>
                             <TextInputForm

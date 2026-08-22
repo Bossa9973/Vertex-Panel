@@ -26,6 +26,7 @@ class Node extends Model
      */
     protected $casts = [
         'verify_tls' => 'boolean',
+        'hidden' => 'boolean',
         'memory' => MebibytesToAndFromBytes::class,
         'disk' => MebibytesToAndFromBytes::class,
         'secret' => 'encrypted',
@@ -41,6 +42,7 @@ class Node extends Model
         'name' => 'required|string|max:191',
         'cluster' => 'required|string|max:191',
         'verify_tls' => 'sometimes|boolean',
+        'hidden' => 'sometimes|boolean',
         'fqdn' => 'required|string|max:191',
         'token_id' => 'required|string|max:191',
         'secret' => 'required|string|max:191',

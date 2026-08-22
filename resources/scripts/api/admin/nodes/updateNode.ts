@@ -6,6 +6,7 @@ interface UpdateNodeParameters {
     name: string
     cluster: string
     verifyTls: boolean
+    hidden?: boolean
     fqdn: string
     port: number
     tokenId?: string | null
@@ -28,6 +29,7 @@ const updateNode = async (nodeId: number, payload: UpdateNodeParameters) => {
         name: payload.name,
         cluster: payload.cluster,
         verify_tls: payload.verifyTls,
+        hidden: payload.hidden,
         fqdn: payload.fqdn,
         port: payload.port,
         token_id: payload.tokenId ? payload.tokenId : undefined,

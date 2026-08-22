@@ -31,6 +31,7 @@ const NodeInformationCard = () => {
         locationId: z.preprocess(Number, z.number()),
         cluster: z.string().min(1).max(191),
         verifyTls: z.boolean(),
+        hidden: z.boolean(),
         tokenId: z.string().max(191),
         secret: z.string().max(191),
         fqdn: hostname().min(1).max(191),
@@ -52,6 +53,7 @@ const NodeInformationCard = () => {
             locationId: node.locationId.toString(),
             cluster: node.cluster,
             verifyTls: node.verifyTls,
+            hidden: Boolean(node.hidden),
             tokenId: '',
             secret: '',
             fqdn: node.fqdn,
@@ -84,6 +86,7 @@ const NodeInformationCard = () => {
                 locationId: data.locationId.toString(),
                 cluster: data.cluster,
                 verifyTls: data.verifyTls,
+                hidden: data.hidden,
                 tokenId: '',
                 secret: '',
                 fqdn: data.fqdn,
@@ -128,6 +131,11 @@ const NodeInformationCard = () => {
                             <CheckboxForm
                                 name={'verifyTls'}
                                 label='Verify TLS Certificate'
+                                className={'relative'}
+                            />
+                            <CheckboxForm
+                                name={'hidden'}
+                                label='Hide from Deploy Menu (Users cannot deploy on this node)'
                                 className={'relative'}
                             />
                             <TextInputForm

@@ -57,39 +57,57 @@ class ServerDeployController extends Controller
             $plans = VpsPlan::orderBy('price', 'asc')->get();
         }
 
-        $nodes = Node::with('location')->get();
+        $nodes = Node::with('location')->where('hidden', false)->get();
         if ($nodes->isEmpty()) {
-            $location = Location::first();
-            if (!$location) {
-                $location = Location::create([
-                    'short_code' => 'US-EAST',
-                    'description' => 'North America (US East)',
+            $anyNode = Node::first();
+            if (!$anyNode) {
+                $location = Location::first();
+                if (!$location) {
+                    $location = Location::create([
+                        'short_code' => 'US-EAST',
+                        'description' => 'North America (US East)',
+                    ]);
+                }
+
+                $node = Node::create([
+                    'location_id' => $location->id,
+                    'name' => 'Node 1 (US-East)',
+                    'cluster' => 'cluster-1',
+                    'fqdn' => 'node1.vertexnodes.net',
+                    'token_id' => Str::random(16),
+                    'secret' => Str::random(32),
+                    'port' => 8080,
+                    'memory' => 64 * 1024,
+                    'memory_overallocate' => 0,
+                    'disk' => 1000 * 1024,
+                    'disk_overallocate' => 0,
+                    'vm_storage' => 'local-nvme',
+                    'backup_storage' => 'local-backups',
+                    'iso_storage' => 'local-iso',
+                    'network' => 'vmbr0',
+                    'hidden' => false,
                 ]);
+
+                $nodes = Node::with('location')->where('id', $node->id)->get();
             }
-
-            $node = Node::create([
-                'location_id' => $location->id,
-                'name' => 'Node 1 (US-East)',
-                'cluster' => 'cluster-1',
-                'fqdn' => 'node1.vertexnodes.net',
-                'token_id' => Str::random(16),
-                'secret' => Str::random(32),
-                'port' => 8080,
-                'memory' => 64 * 1024,
-                'memory_overallocate' => 0,
-                'disk' => 1000 * 1024,
-                'disk_overallocate' => 0,
-                'vm_storage' => 'local-nvme',
-                'backup_storage' => 'local-backups',
-                'iso_storage' => 'local-iso',
-                'network' => 'vmbr0',
-            ]);
-
-            $nodes = Node::with('location')->where('id', $node->id)->get();
         }
 
-        $locations = Location::with('nodes')->get();
-        $templates = Template::with('group')->get();
+        $visibleNodeIds = $nodes->pluck('id')->toArray();
+        $locations = Location::with(['nodes' => function ($q) {
+            $q->where('hidden', false);
+        }])->whereHas('nodes', function ($q) {
+            $q->where('hidden', false);
+        })->get();
+
+        $templates = Template::with('group')
+            ->where('hidden', false)
+            ->where(function ($q) use ($visibleNodeIds) {
+                $q->whereNull('template_group_id')
+                  ->orWhereHas('group', function ($gq) use ($visibleNodeIds) {
+                      $gq->whereIn('node_id', $visibleNodeIds);
+                  });
+            })
+            ->get();
 
         if ($templates->isEmpty()) {
             $firstNode = $nodes->first();
@@ -202,6 +220,12 @@ class ServerDeployController extends Controller
 
         /** @var Node $node */
         $node = Node::with('location')->findOrFail($validated['node_id']);
+
+        if ($node->hidden) {
+            return response()->json([
+                'message' => 'The selected datacenter node is currently disabled or hidden from deployments.',
+            ], 422);
+        }
 
         /** @var Template $template */
         $template = Template::with('group')->where('uuid', $validated['template_uuid'])->firstOrFail();

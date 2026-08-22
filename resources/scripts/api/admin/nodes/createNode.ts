@@ -6,6 +6,7 @@ interface CreateNodeParameters {
     name: string
     cluster: string
     verifyTls: boolean
+    hidden?: boolean
     fqdn: string
     tokenId: string
     secret: string
@@ -28,6 +29,7 @@ const createNode = async (data: CreateNodeParameters): Promise<Node> => {
         name: data.name,
         cluster: data.cluster,
         verify_tls: data.verifyTls,
+        hidden: data.hidden ?? false,
         fqdn: data.fqdn,
         token_id: data.tokenId,
         secret: data.secret,
