@@ -867,8 +867,8 @@ def generate_deletion_transcript_html(
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vertex Cloud — VM Deletion Audit Certificate #{doc_ref}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vertex Cloud — Instance Deprovisioning Log #{doc_ref}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
@@ -904,7 +904,7 @@ def generate_deletion_transcript_html(
             font-family: 'Geist', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.5;
             min-height: 100vh;
-            padding: 40px 20px;
+            padding: 40px 16px;
             background-image: 
                 radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
                 radial-gradient(circle at 100% 100%, rgba(239, 68, 68, 0.04) 0%, transparent 40%);
@@ -912,8 +912,15 @@ def generate_deletion_transcript_html(
         }}
 
         .layout-container {{
-            max-width: 900px;
+            max-width: 880px;
             margin: 0 auto;
+        }}
+
+        /* ─── SVG Icons Helper ─────────────────────────────────────────────────── */
+        .icon {{
+            display: inline-block;
+            vertical-align: middle;
+            flex-shrink: 0;
         }}
 
         /* ─── Top Navbar ────────────────────────────────────────────────────────── */
@@ -922,12 +929,12 @@ def generate_deletion_transcript_html(
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--border-subtle);
-            border-radius: 20px;
-            padding: 14px 24px;
+            border-radius: 18px;
+            padding: 14px 22px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
         }}
 
@@ -938,14 +945,14 @@ def generate_deletion_transcript_html(
         }}
 
         .logo-icon {{
-            width: 28px;
-            height: 28px;
+            width: 24px;
+            height: 24px;
             color: #FFFFFF;
             fill: currentColor;
         }}
 
         .brand-title {{
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 800;
             color: var(--text-primary);
             letter-spacing: 0.5px;
@@ -983,31 +990,31 @@ def generate_deletion_transcript_html(
         .hero-banner {{
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
-            border-radius: 24px;
-            padding: 28px;
-            margin-bottom: 20px;
+            border-radius: 20px;
+            padding: 24px 26px;
+            margin-bottom: 18px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
             display: flex;
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
-            gap: 20px;
+            gap: 18px;
         }}
 
         .user-meta-group {{
             display: flex;
             align-items: center;
-            gap: 18px;
+            gap: 16px;
         }}
 
         .avatar-initial {{
-            width: 56px;
-            height: 56px;
-            border-radius: 18px;
+            width: 52px;
+            height: 52px;
+            border-radius: 16px;
             background: linear-gradient(135deg, #3B82F6 0%, #6366F1 50%, #4F46E5 100%);
             color: #FFFFFF;
             font-weight: 800;
-            font-size: 22px;
+            font-size: 20px;
             display: grid;
             place-items: center;
             box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
@@ -1015,12 +1022,12 @@ def generate_deletion_transcript_html(
         }}
 
         .user-details h1 {{
-            font-size: 20px;
+            font-size: 19px;
             font-weight: 800;
             color: var(--text-primary);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
         }}
 
@@ -1035,7 +1042,7 @@ def generate_deletion_transcript_html(
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-top: 6px;
+            margin-top: 5px;
             flex-wrap: wrap;
             font-size: 12px;
         }}
@@ -1047,8 +1054,8 @@ def generate_deletion_transcript_html(
             background: rgba(88, 101, 242, 0.12);
             border: 1px solid rgba(88, 101, 242, 0.25);
             color: #A5B4FC;
-            padding: 3px 9px;
-            border-radius: 8px;
+            padding: 3px 8px;
+            border-radius: 6px;
             font-size: 11px;
             font-weight: 600;
             font-family: 'Geist Mono', monospace;
@@ -1061,15 +1068,15 @@ def generate_deletion_transcript_html(
         }}
 
         .status-pill {{
-            padding: 8px 16px;
-            border-radius: 12px;
-            font-size: 12px;
+            padding: 6px 14px;
+            border-radius: 10px;
+            font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 7px;
             box-shadow: 0 4px 14px rgba(0,0,0,0.2);
         }}
 
@@ -1081,38 +1088,46 @@ def generate_deletion_transcript_html(
 
         /* ─── Callout Notice ────────────────────────────────────────────────────── */
         .notice-banner {{
-            background: rgba(239, 68, 68, 0.08);
+            background: rgba(239, 68, 68, 0.07);
             border: 1px solid rgba(239, 68, 68, 0.2);
             border-left: 4px solid var(--accent-rose);
-            border-radius: 14px;
-            padding: 16px 20px;
-            margin-bottom: 24px;
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
             font-size: 13px;
             color: #FECACA;
             line-height: 1.6;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
         }}
 
-        .notice-banner strong {{
+        .notice-icon {{
+            color: var(--accent-rose);
+            margin-top: 2px;
+        }}
+
+        .notice-body strong {{
             color: #FFFFFF;
             font-weight: 700;
             display: block;
-            margin-bottom: 4px;
-            font-size: 14px;
+            margin-bottom: 2px;
+            font-size: 13px;
         }}
 
         /* ─── Metric & Spec Cards Grid ──────────────────────────────────────────── */
         .grid-2 {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-            gap: 20px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 18px;
+            margin-bottom: 20px;
         }}
 
         .panel-card {{
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
-            border-radius: 20px;
-            padding: 22px;
+            border-radius: 18px;
+            padding: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }}
 
@@ -1121,12 +1136,12 @@ def generate_deletion_transcript_html(
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid var(--border-subtle);
-            padding-bottom: 14px;
-            margin-bottom: 16px;
+            padding-bottom: 12px;
+            margin-bottom: 14px;
         }}
 
         .panel-card-title {{
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.8px;
@@ -1139,7 +1154,7 @@ def generate_deletion_transcript_html(
         .meta-list {{
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
         }}
 
         .meta-item {{
@@ -1147,12 +1162,16 @@ def generate_deletion_transcript_html(
             justify-content: space-between;
             align-items: center;
             font-size: 13px;
-            padding: 4px 0;
+            padding: 3px 0;
+            gap: 12px;
         }}
 
         .meta-label {{
             color: var(--text-muted);
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }}
 
         .meta-value {{
@@ -1165,8 +1184,8 @@ def generate_deletion_transcript_html(
             font-family: 'Geist Mono', 'JetBrains Mono', monospace;
             background: var(--bg-card-inner);
             border: 1px solid var(--border-subtle);
-            padding: 3px 8px;
-            border-radius: 6px;
+            padding: 2px 7px;
+            border-radius: 5px;
             color: #38BDF8;
             font-size: 12px;
         }}
@@ -1175,46 +1194,60 @@ def generate_deletion_transcript_html(
             background: rgba(16, 185, 129, 0.12);
             border: 1px solid rgba(16, 185, 129, 0.25);
             color: #34D399;
-            padding: 3px 9px;
+            padding: 2px 8px;
             border-radius: 6px;
             font-size: 11px;
             font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
         }}
 
         .badge-amber {{
             background: rgba(245, 158, 11, 0.12);
             border: 1px solid rgba(245, 158, 11, 0.25);
             color: #FBBF24;
-            padding: 3px 9px;
+            padding: 2px 8px;
             border-radius: 6px;
             font-size: 11px;
             font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
         }}
 
         /* ─── Audit Trail & Timeline ────────────────────────────────────────────── */
         .timeline-section {{
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
-            border-radius: 20px;
-            padding: 26px;
+            border-radius: 18px;
+            padding: 22px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }}
 
         .timeline-title {{
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             color: var(--text-primary);
-            margin-bottom: 22px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }}
+
+        .timeline-title-left {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }}
 
         .timeline-step {{
             position: relative;
-            padding-left: 36px;
-            margin-bottom: 24px;
+            padding-left: 34px;
+            margin-bottom: 22px;
         }}
 
         .timeline-step:last-child {{
@@ -1224,13 +1257,13 @@ def generate_deletion_transcript_html(
         .timeline-node {{
             position: absolute;
             left: 0;
-            top: 3px;
+            top: 2px;
             width: 18px;
             height: 18px;
             border-radius: 50%;
             background: var(--bg-base);
             border: 2px solid var(--brand-primary);
-            box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
             display: grid;
             place-items: center;
         }}
@@ -1247,8 +1280,8 @@ def generate_deletion_transcript_html(
             content: '';
             position: absolute;
             left: 8px;
-            top: 24px;
-            bottom: -18px;
+            top: 22px;
+            bottom: -16px;
             width: 2px;
             background: var(--border-subtle);
         }}
@@ -1261,31 +1294,34 @@ def generate_deletion_transcript_html(
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 6px;
+            gap: 10px;
+            margin-bottom: 5px;
             flex-wrap: wrap;
         }}
 
         .step-title-text {{
             font-weight: 700;
             color: var(--text-primary);
-            font-size: 14px;
+            font-size: 13px;
         }}
 
         .step-timestamp {{
             font-family: 'Geist Mono', monospace;
             font-size: 11px;
             color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }}
 
         .step-box {{
             background: var(--bg-card-inner);
             border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            padding: 12px 16px;
+            border-radius: 10px;
+            padding: 10px 14px;
             font-size: 13px;
             color: var(--text-secondary);
-            margin-top: 8px;
+            margin-top: 6px;
             line-height: 1.6;
         }}
 
@@ -1293,24 +1329,26 @@ def generate_deletion_transcript_html(
             background: #090A0D;
             border: 1px solid rgba(245, 158, 11, 0.3);
             border-left: 3px solid var(--accent-amber);
-            border-radius: 8px;
-            padding: 8px 12px;
+            border-radius: 6px;
+            padding: 7px 12px;
             font-family: 'Geist Mono', 'JetBrains Mono', monospace;
             color: #FCD34D;
-            font-size: 13px;
+            font-size: 12px;
             margin-top: 8px;
             display: inline-block;
+            max-width: 100%;
+            word-break: break-word;
         }}
 
         /* ─── Footer ────────────────────────────────────────────────────────────── */
         .page-footer {{
             border-top: 1px solid var(--border-subtle);
-            padding-top: 20px;
+            padding-top: 18px;
             display: flex;
             flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
-            gap: 14px;
+            gap: 12px;
             font-size: 12px;
             color: var(--text-muted);
         }}
@@ -1322,11 +1360,84 @@ def generate_deletion_transcript_html(
             background: rgba(16, 185, 129, 0.1);
             border: 1px solid rgba(16, 185, 129, 0.25);
             color: #34D399;
-            padding: 4px 10px;
-            border-radius: 8px;
+            padding: 4px 9px;
+            border-radius: 6px;
             font-weight: 700;
             font-size: 11px;
             text-transform: uppercase;
+        }}
+
+        /* ─── Responsive Adjustments (Mobile & Desktop) ─────────────────────────── */
+        @media (max-width: 680px) {{
+            body {{
+                padding: 16px 12px;
+            }}
+            .navbar {{
+                padding: 12px 16px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+                border-radius: 14px;
+            }}
+            .breadcrumb {{
+                font-size: 11px;
+            }}
+            .hero-banner {{
+                padding: 18px 16px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 14px;
+                border-radius: 16px;
+            }}
+            .avatar-initial {{
+                width: 44px;
+                height: 44px;
+                font-size: 17px;
+                border-radius: 12px;
+            }}
+            .user-details h1 {{
+                font-size: 17px;
+            }}
+            .grid-2 {{
+                grid-template-columns: 1fr;
+                gap: 14px;
+            }}
+            .panel-card {{
+                padding: 16px;
+                border-radius: 16px;
+            }}
+            .meta-item {{
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 3px;
+            }}
+            .meta-value {{
+                text-align: left;
+                word-break: break-all;
+            }}
+            .timeline-section {{
+                padding: 18px 14px;
+                border-radius: 16px;
+            }}
+            .timeline-step {{
+                padding-left: 28px;
+            }}
+            .timeline-node {{
+                left: -1px;
+            }}
+            .timeline-step::before {{
+                left: 7px;
+            }}
+            .step-heading {{
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 3px;
+            }}
+            .page-footer {{
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }}
         }}
     </style>
 </head>
@@ -1338,10 +1449,10 @@ def generate_deletion_transcript_html(
                 <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 245.25 214.5">
                     <path fill="currentColor" d="m9.164 19.504 41.027-.035c5.563-.008 16.586-.36 21.66.191 2.993 4.883 8.012 16.746 10.778 22.567l25.086 53.34 8.629 18.25c1.562 3.351 4.015 9.035 5.773 12.07 8.57.164 18.934.62 27.29-.508 4.398-.598 9.769-15.317 11.566-19.258l13.425-29.246c1.942-4.184 3.895-9.008 6.036-13.023 6.039-.473 15.566-.145 21.918-.137l36.91.027c-7.653 16.188-14.82 32.664-22.446 48.785-1.152 2.778-4.566 10.387-6.207 12.653-4.093.492-11.168.261-15.445.246l-26.574-.114c-5.285-.019-14.778-1.41-17.598 3.782-2.734 5.031-5.066 10.754-7.36 16.054l-15.058 34.008c-1.765 3.95-5.816 13.711-7.887 17.035-1.425.133-2.878.18-4.308.172-9.137-.05-18.363.153-27.488-.074-3.106-5.809-5.79-12.16-8.48-18.2l-11.122-24.683-43.676-95.96c-1.547-3.368-16.988-37.067-16.968-37.65Zm0 0"/>
                 </svg>
-                <span class="brand-title">VERTEX CLOUD <span class="brand-badge">Audit Certificate</span></span>
+                <span class="brand-title">VERTEX CLOUD <span class="brand-badge">Audit Log</span></span>
             </div>
             <div class="breadcrumb">
-                <span>Admin</span> / <span>Servers</span> / <span>Decommission Certificate</span>
+                <span>Infrastructure</span> / <span>Deprovisioning</span> / <span>Receipt</span>
             </div>
         </header>
 
@@ -1353,22 +1464,28 @@ def generate_deletion_transcript_html(
                     <h1>{html.escape(user_name)} <span class="user-id-tag">#{html.escape(user_id)}</span></h1>
                     <div class="user-chips">
                         <span class="chip-email">{html.escape(user_email)}</span>
-                        <span class="chip-discord">Discord: {html.escape(user_name)}</span>
+                        <span class="chip-discord">
+                            <svg class="icon" style="width:13px;height:13px;fill:currentColor;" viewBox="0 0 24 24"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
+                            {html.escape(user_name)}
+                        </span>
                     </div>
                 </div>
             </div>
             <div>
                 <div class="status-pill status-pill-red">
-                    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#EF4444;"></span>
+                    <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     Permanently Decommissioned
                 </div>
             </div>
         </div>
 
-        <!-- Official Notice Banner -->
+        <!-- Clean Notice Banner -->
         <div class="notice-banner">
-            <strong>⚠️ Virtual Machine Deletion & Multi-Step Authorization Record</strong>
-            This cryptographic audit certificate confirms that virtual machine <strong>{html.escape(server_name)}</strong> (VMID: {html.escape(str(vmid))}) was permanently decommissioned and purged following explicit multi-step owner verification, staff error liability disclaimer, and exact phrase confirmation.
+            <svg class="icon notice-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="notice-body">
+                <strong>Resource Deprovisioning Log</strong>
+                This instance was permanently deleted from the hypervisor. Disk volumes, snapshots, and IP allocations have been purged according to the confirmed authorization steps below.
+            </div>
         </div>
 
         <!-- Grid: Target VM Details & Responsible Parties -->
@@ -1376,7 +1493,10 @@ def generate_deletion_transcript_html(
             <!-- Card 1: Virtual Machine Details -->
             <div class="panel-card">
                 <div class="panel-card-header">
-                    <span class="panel-card-title">🖥️ Decommissioned Instance</span>
+                    <span class="panel-card-title">
+                        <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                        Target Instance
+                    </span>
                     <span class="code-pill">VMID #{html.escape(str(vmid))}</span>
                 </div>
                 <div class="meta-list">
@@ -1389,16 +1509,21 @@ def generate_deletion_transcript_html(
                         <span class="meta-value">{html.escape(node_name)}</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Node Host / IP:</span>
+                        <span class="meta-label">Allocated IP:</span>
                         <span class="meta-value"><span class="code-pill">{html.escape(node_ip)}</span></span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Hardware Allocation:</span>
+                        <span class="meta-label">Hardware Specs:</span>
                         <span class="meta-value">{html.escape(specs_str)}</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Destruction Method:</span>
-                        <span class="meta-value"><span class="{method_badge_class}">{method_label}</span></span>
+                        <span class="meta-label">Decommission Mode:</span>
+                        <span class="meta-value">
+                            <span class="{method_badge_class}">
+                                <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                {method_label}
+                            </span>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -1406,12 +1531,15 @@ def generate_deletion_transcript_html(
             <!-- Card 2: Responsible Parties -->
             <div class="panel-card">
                 <div class="panel-card-header">
-                    <span class="panel-card-title">👤 Responsible Parties & Context</span>
-                    <span class="code-pill">Ref: {doc_ref}</span>
+                    <span class="panel-card-title">
+                        <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        Authorization & Context
+                    </span>
+                    <span class="code-pill">{doc_ref}</span>
                 </div>
                 <div class="meta-list">
                     <div class="meta-item">
-                        <span class="meta-label">Verified Owner:</span>
+                        <span class="meta-label">Instance Owner:</span>
                         <span class="meta-value">{html.escape(user_name)} (<span class="code-pill">{html.escape(user_id)}</span>)</span>
                     </div>
                     <div class="meta-item">
@@ -1419,7 +1547,7 @@ def generate_deletion_transcript_html(
                         <span class="meta-value">{html.escape(admin_name)} (<span class="code-pill">{html.escape(admin_id)}</span>)</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Discord Guild:</span>
+                        <span class="meta-label">Guild Context:</span>
                         <span class="meta-value">{html.escape(guild_name)}</span>
                     </div>
                     <div class="meta-item">
@@ -1427,7 +1555,7 @@ def generate_deletion_transcript_html(
                         <span class="meta-value">#{html.escape(channel_name)}</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">Execution Time:</span>
+                        <span class="meta-label">Executed At:</span>
                         <span class="meta-value" style="font-family: 'Geist Mono', monospace; font-size: 12px;">{html.escape(completed_time)}</span>
                     </div>
                 </div>
@@ -1437,19 +1565,25 @@ def generate_deletion_transcript_html(
         <!-- Audit Timeline / Agreement History -->
         <div class="timeline-section">
             <div class="timeline-title">
-                <span>📜 Multi-Step Authorization & User Agreement Transcript</span>
-                <span class="code-pill">4 Verification Steps Completed</span>
+                <div class="timeline-title-left">
+                    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span>Authorization Sequence & Audit Trail</span>
+                </div>
+                <span class="code-pill">4 Steps Confirmed</span>
             </div>
 
             <!-- Step 1 -->
             <div class="timeline-step">
                 <div class="timeline-node"></div>
                 <div class="step-heading">
-                    <span class="step-title-text">Step 1: Initial Deletion Warning & Data Loss Acknowledgment</span>
-                    <span class="step-timestamp">{html.escape(step1_time)}</span>
+                    <span class="step-title-text">1. Initial Deletion Warning & Data Loss Notice</span>
+                    <span class="step-timestamp">
+                        <svg class="icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        {html.escape(step1_time)}
+                    </span>
                 </div>
                 <div class="step-box">
-                    User received explicit notification that all operating system disks, persistent storage volumes, and server backups associated with <strong>{html.escape(server_name)}</strong> (VMID: <code>{html.escape(str(vmid))}</code>) will be permanently destroyed without recovery.
+                    Owner was notified that all persistent storage volumes, operating system data, and backups associated with <strong>{html.escape(server_name)}</strong> (VMID: <code>{html.escape(str(vmid))}</code>) will be permanently destroyed.
                 </div>
             </div>
 
@@ -1457,11 +1591,14 @@ def generate_deletion_transcript_html(
             <div class="timeline-step">
                 <div class="timeline-node"></div>
                 <div class="step-heading">
-                    <span class="step-title-text">Step 2: Staff Error Disclaimer & Owner Responsibility Clause</span>
-                    <span class="step-timestamp">{html.escape(step2_time)}</span>
+                    <span class="step-title-text">2. Staff Error & Owner Responsibility Agreement</span>
+                    <span class="step-timestamp">
+                        <svg class="icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        {html.escape(step2_time)}
+                    </span>
                 </div>
                 <div class="step-box">
-                    <strong>Agreed Declaration:</strong> <em>"Administrators and staff members can make mistakes. As the verified server owner, I am solely responsible for the deletion of this virtual machine, as staff members only dispatch deletion requests that I requested. Vertex Host and administrators are discharged from all liability."</em>
+                    <strong>Agreed Terms:</strong> <em>"Administrators and staff members can make mistakes. As the verified server owner, I am solely responsible for the deletion of this virtual machine, as staff members only dispatch deletion requests that I requested. Vertex Host and administrators are discharged from all liability."</em>
                 </div>
             </div>
 
@@ -1469,11 +1606,14 @@ def generate_deletion_transcript_html(
             <div class="timeline-step">
                 <div class="timeline-node"></div>
                 <div class="step-heading">
-                    <span class="step-title-text">Step 3: Exact Written Verification String Submission</span>
-                    <span class="step-timestamp">{html.escape(step3_time)}</span>
+                    <span class="step-title-text">3. Explicit Written Verification String Submission</span>
+                    <span class="step-timestamp">
+                        <svg class="icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        {html.escape(step3_time)}
+                    </span>
                 </div>
                 <div class="step-box">
-                    User manually typed and submitted the exact required confirmation phrase:<br>
+                    Owner typed and confirmed the exact authorization phrase:
                     <div class="user-quote-box">"{html.escape(written_message)}"</div>
                 </div>
             </div>
