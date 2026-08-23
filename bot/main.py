@@ -856,141 +856,650 @@ def generate_deletion_transcript_html(
     step3_time: str,
     completed_time: str,
 ) -> str:
-    method_badge = (
-        '<span style="background:#10B981;color:#fff;padding:4px 10px;border-radius:4px;font-weight:700;font-size:12px;">Standard Hypervisor Uninstall</span>'
-        if "standard" in deletion_method.lower()
-        else '<span style="background:#F59E0B;color:#000;padding:4px 10px;border-radius:4px;font-weight:700;font-size:12px;">Automatic Database Wipe Fallback</span>'
-    )
+    is_standard = "standard" in deletion_method.lower()
+    method_badge_class = "badge-emerald" if is_standard else "badge-amber"
+    method_label = "Standard Hypervisor Uninstall" if is_standard else "Automatic Database Wipe Fallback"
 
     doc_ref = f"DEL-VM{vmid}-{int(time.time())}"
+    avatar_char = (user_name[:1] if user_name else "U").upper()
 
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vertex Cloud - VM Deletion Audit Certificate #{doc_ref}</title>
+    <title>Vertex Cloud — VM Deletion Audit Certificate #{doc_ref}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
     <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }}
-        body {{ background-color: #0F172A; color: #E2E8F0; padding: 40px 20px; line-height: 1.6; }}
-        .container {{ max-width: 850px; margin: 0 auto; background: #1E293B; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden; }}
-        .header {{ background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); padding: 30px; border-bottom: 2px solid #4F46E5; display: flex; justify-content: space-between; align-items: center; }}
-        .brand {{ font-size: 24px; font-weight: 800; color: #818CF8; letter-spacing: 1px; }}
-        .brand span {{ color: #F43F5E; }}
-        .cert-badge {{ background: rgba(239, 68, 68, 0.2); border: 1px solid #EF4444; color: #FCA5A5; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }}
-        .content {{ padding: 30px; }}
-        .alert-box {{ background: #450A0A; border-left: 4px solid #EF4444; padding: 15px 20px; border-radius: 6px; margin-bottom: 25px; color: #FECACA; }}
-        .alert-box strong {{ color: #FFFFFF; font-size: 15px; }}
-        .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }}
-        .card {{ background: #0F172A; border: 1px solid #334155; border-radius: 8px; padding: 18px; }}
-        .card h3 {{ font-size: 14px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; border-bottom: 1px solid #1E293B; padding-bottom: 6px; }}
-        .info-row {{ display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }}
-        .info-row:last-child {{ margin-bottom: 0; }}
-        .info-label {{ color: #64748B; }}
-        .info-val {{ color: #F1F5F9; font-weight: 600; }}
-        .code {{ font-family: 'Courier New', Courier, monospace; background: #1E293B; padding: 2px 6px; border-radius: 4px; color: #38BDF8; font-size: 12px; }}
-        .timeline {{ margin-top: 30px; border-top: 1px solid #334155; padding-top: 25px; }}
-        .timeline h3 {{ font-size: 16px; color: #F8FAFC; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }}
-        .timeline-step {{ position: relative; padding-left: 30px; margin-bottom: 22px; }}
-        .timeline-step::before {{ content: ''; position: absolute; left: 0; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: #10B981; border: 3px solid #064E3B; }}
-        .timeline-step::after {{ content: ''; position: absolute; left: 6px; top: 20px; width: 2px; height: calc(100% + 4px); background: #334155; }}
-        .timeline-step:last-child::after {{ display: none; }}
-        .step-header {{ display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }}
-        .step-title {{ font-weight: 700; color: #E2E8F0; }}
-        .step-time {{ color: #64748B; font-size: 12px; }}
-        .step-desc {{ font-size: 13px; color: #94A3B8; background: #0F172A; padding: 10px 14px; border-radius: 6px; border: 1px solid #1E293B; margin-top: 6px; }}
-        .written-quote {{ font-family: monospace; color: #FACC15; background: #262626; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 4px; }}
-        .footer {{ background: #0F172A; padding: 20px 30px; border-top: 1px solid #334155; font-size: 12px; color: #64748B; text-align: center; }}
-        .seal {{ display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; color: #34D399; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 10px; }}
+        :root {{
+            --bg-base: #0B0D11;
+            --bg-surface: #121418;
+            --bg-card: #16181D;
+            --bg-card-inner: #0E1014;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-light: rgba(255, 255, 255, 0.12);
+            --text-primary: #FFFFFF;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            --brand-primary: #6366F1;
+            --brand-indigo: #4F46E5;
+            --brand-blue: #3B82F6;
+            --accent-emerald: #10B981;
+            --accent-rose: #EF4444;
+            --accent-amber: #F59E0B;
+            --accent-discord: #5865F2;
+        }}
+
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
+        body {{
+            background-color: var(--bg-base);
+            color: var(--text-secondary);
+            font-family: 'Geist', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.5;
+            min-height: 100vh;
+            padding: 40px 20px;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+                radial-gradient(circle at 100% 100%, rgba(239, 68, 68, 0.04) 0%, transparent 40%);
+            background-attachment: fixed;
+        }}
+
+        .layout-container {{
+            max-width: 900px;
+            margin: 0 auto;
+        }}
+
+        /* ─── Top Navbar ────────────────────────────────────────────────────────── */
+        .navbar {{
+            background: rgba(18, 20, 24, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }}
+
+        .brand-group {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }}
+
+        .logo-icon {{
+            width: 28px;
+            height: 28px;
+            color: #FFFFFF;
+            fill: currentColor;
+        }}
+
+        .brand-title {{
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+
+        .brand-badge {{
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #A5B4FC;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+
+        .breadcrumb {{
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }}
+
+        .breadcrumb span {{
+            color: var(--text-secondary);
+        }}
+
+        /* ─── Profile & Status Hero ─────────────────────────────────────────────── */
+        .hero-banner {{
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 24px;
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }}
+
+        .user-meta-group {{
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }}
+
+        .avatar-initial {{
+            width: 56px;
+            height: 56px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #3B82F6 0%, #6366F1 50%, #4F46E5 100%);
+            color: #FFFFFF;
+            font-weight: 800;
+            font-size: 22px;
+            display: grid;
+            place-items: center;
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+            flex-shrink: 0;
+        }}
+
+        .user-details h1 {{
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }}
+
+        .user-id-tag {{
+            font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }}
+
+        .user-chips {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+            font-size: 12px;
+        }}
+
+        .chip-discord {{
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(88, 101, 242, 0.12);
+            border: 1px solid rgba(88, 101, 242, 0.25);
+            color: #A5B4FC;
+            padding: 3px 9px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            font-family: 'Geist Mono', monospace;
+        }}
+
+        .chip-email {{
+            color: var(--text-muted);
+            font-family: 'Geist Mono', monospace;
+            font-size: 12px;
+        }}
+
+        .status-pill {{
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+        }}
+
+        .status-pill-red {{
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #F87171;
+        }}
+
+        /* ─── Callout Notice ────────────────────────────────────────────────────── */
+        .notice-banner {{
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-left: 4px solid var(--accent-rose);
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            font-size: 13px;
+            color: #FECACA;
+            line-height: 1.6;
+        }}
+
+        .notice-banner strong {{
+            color: #FFFFFF;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }}
+
+        /* ─── Metric & Spec Cards Grid ──────────────────────────────────────────── */
+        .grid-2 {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }}
+
+        .panel-card {{
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 22px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }}
+
+        .panel-card-header {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 14px;
+            margin-bottom: 16px;
+        }}
+
+        .panel-card-title {{
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+
+        .meta-list {{
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }}
+
+        .meta-item {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            padding: 4px 0;
+        }}
+
+        .meta-label {{
+            color: var(--text-muted);
+            font-weight: 500;
+        }}
+
+        .meta-value {{
+            color: var(--text-primary);
+            font-weight: 600;
+            text-align: right;
+        }}
+
+        .code-pill {{
+            font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+            background: var(--bg-card-inner);
+            border: 1px solid var(--border-subtle);
+            padding: 3px 8px;
+            border-radius: 6px;
+            color: #38BDF8;
+            font-size: 12px;
+        }}
+
+        .badge-emerald {{
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #34D399;
+            padding: 3px 9px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }}
+
+        .badge-amber {{
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            color: #FBBF24;
+            padding: 3px 9px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }}
+
+        /* ─── Audit Trail & Timeline ────────────────────────────────────────────── */
+        .timeline-section {{
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 26px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin-bottom: 24px;
+        }}
+
+        .timeline-title {{
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }}
+
+        .timeline-step {{
+            position: relative;
+            padding-left: 36px;
+            margin-bottom: 24px;
+        }}
+
+        .timeline-step:last-child {{
+            margin-bottom: 0;
+        }}
+
+        .timeline-node {{
+            position: absolute;
+            left: 0;
+            top: 3px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--bg-base);
+            border: 2px solid var(--brand-primary);
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+            display: grid;
+            place-items: center;
+        }}
+
+        .timeline-node::after {{
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--brand-primary);
+        }}
+
+        .timeline-step::before {{
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 24px;
+            bottom: -18px;
+            width: 2px;
+            background: var(--border-subtle);
+        }}
+
+        .timeline-step:last-child::before {{
+            display: none;
+        }}
+
+        .step-heading {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+        }}
+
+        .step-title-text {{
+            font-weight: 700;
+            color: var(--text-primary);
+            font-size: 14px;
+        }}
+
+        .step-timestamp {{
+            font-family: 'Geist Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+        }}
+
+        .step-box {{
+            background: var(--bg-card-inner);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            line-height: 1.6;
+        }}
+
+        .user-quote-box {{
+            background: #090A0D;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-left: 3px solid var(--accent-amber);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+            color: #FCD34D;
+            font-size: 13px;
+            margin-top: 8px;
+            display: inline-block;
+        }}
+
+        /* ─── Footer ────────────────────────────────────────────────────────────── */
+        .page-footer {{
+            border-top: 1px solid var(--border-subtle);
+            padding-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }}
+
+        .security-seal {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #34D399;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 11px;
+            text-transform: uppercase;
+        }}
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
+    <div class="layout-container">
+        <!-- Top Navigation -->
+        <header class="navbar">
+            <div class="brand-group">
+                <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 245.25 214.5">
+                    <path fill="currentColor" d="m9.164 19.504 41.027-.035c5.563-.008 16.586-.36 21.66.191 2.993 4.883 8.012 16.746 10.778 22.567l25.086 53.34 8.629 18.25c1.562 3.351 4.015 9.035 5.773 12.07 8.57.164 18.934.62 27.29-.508 4.398-.598 9.769-15.317 11.566-19.258l13.425-29.246c1.942-4.184 3.895-9.008 6.036-13.023 6.039-.473 15.566-.145 21.918-.137l36.91.027c-7.653 16.188-14.82 32.664-22.446 48.785-1.152 2.778-4.566 10.387-6.207 12.653-4.093.492-11.168.261-15.445.246l-26.574-.114c-5.285-.019-14.778-1.41-17.598 3.782-2.734 5.031-5.066 10.754-7.36 16.054l-15.058 34.008c-1.765 3.95-5.816 13.711-7.887 17.035-1.425.133-2.878.18-4.308.172-9.137-.05-18.363.153-27.488-.074-3.106-5.809-5.79-12.16-8.48-18.2l-11.122-24.683-43.676-95.96c-1.547-3.368-16.988-37.067-16.968-37.65Zm0 0"/>
+                </svg>
+                <span class="brand-title">VERTEX CLOUD <span class="brand-badge">Audit Certificate</span></span>
+            </div>
+            <div class="breadcrumb">
+                <span>Admin</span> / <span>Servers</span> / <span>Decommission Certificate</span>
+            </div>
+        </header>
+
+        <!-- Profile & Status Hero Header -->
+        <div class="hero-banner">
+            <div class="user-meta-group">
+                <div class="avatar-initial">{avatar_char}</div>
+                <div class="user-details">
+                    <h1>{html.escape(user_name)} <span class="user-id-tag">#{html.escape(user_id)}</span></h1>
+                    <div class="user-chips">
+                        <span class="chip-email">{html.escape(user_email)}</span>
+                        <span class="chip-discord">Discord: {html.escape(user_name)}</span>
+                    </div>
+                </div>
+            </div>
             <div>
-                <div class="brand">VERTEX<span>HOST</span> // CLOUD AUDIT</div>
-                <div style="font-size: 12px; color: #94A3B8; margin-top: 4px;">Cryptographic Certificate & User Agreement Record</div>
-            </div>
-            <div class="cert-badge">PERMANENTLY DESTROYED</div>
-        </div>
-
-        <div class="content">
-            <div class="alert-box">
-                <strong>⚠️ Official VM Deletion & Liability Discharge Certificate</strong><br>
-                This document certifies that virtual machine instance <strong>{html.escape(server_name)}</strong> (VMID: {html.escape(str(vmid))}) was permanently destroyed following explicit multi-step authorization and user responsibility confirmation.
-            </div>
-
-            <div class="grid">
-                <div class="card">
-                    <h3>🖥️ Destroyed Virtual Machine</h3>
-                    <div class="info-row"><span class="info-label">Instance Name:</span><span class="info-val">{html.escape(server_name)}</span></div>
-                    <div class="info-row"><span class="info-label">Virtual Machine ID:</span><span class="info-val code">VMID #{html.escape(str(vmid))}</span></div>
-                    <div class="info-row"><span class="info-label">Host Node & IP:</span><span class="info-val">{html.escape(node_name)} ({html.escape(node_ip)})</span></div>
-                    <div class="info-row"><span class="info-label">Hardware Specs:</span><span class="info-val">{html.escape(specs_str)}</span></div>
-                    <div class="info-row"><span class="info-label">Destruction Method:</span><span class="info-val">{method_badge}</span></div>
-                </div>
-
-                <div class="card">
-                    <h3>👤 Responsible Parties & Location</h3>
-                    <div class="info-row"><span class="info-label">Verified Owner:</span><span class="info-val">{html.escape(user_name)} (<span class="code">{html.escape(user_id)}</span>)</span></div>
-                    <div class="info-row"><span class="info-label">Owner Email:</span><span class="info-val">{html.escape(user_email)}</span></div>
-                    <div class="info-row"><span class="info-label">Initiating Staff:</span><span class="info-val">{html.escape(admin_name)} (<span class="code">{html.escape(admin_id)}</span>)</span></div>
-                    <div class="info-row"><span class="info-label">Discord Guild:</span><span class="info-val">{html.escape(guild_name)}</span></div>
-                    <div class="info-row"><span class="info-label">Channel Context:</span><span class="info-val">#{html.escape(channel_name)}</span></div>
-                </div>
-            </div>
-
-            <div class="timeline">
-                <h3>📜 Audit Log & Agreement Transcription</h3>
-
-                <div class="timeline-step">
-                    <div class="step-header">
-                        <span class="step-title">1. Initial Deletion Warning & Data Loss Acknowledgment</span>
-                        <span class="step-time">{html.escape(step1_time)}</span>
-                    </div>
-                    <div class="step-desc">
-                        User acknowledged that all virtual disks, operating system files, and backups associated with VMID {html.escape(str(vmid))} would be permanently destroyed with no recovery option.
-                    </div>
-                </div>
-
-                <div class="timeline-step">
-                    <div class="step-header">
-                        <span class="step-title">2. Administrator Liability Disclaimer & Owner Responsibility Clause</span>
-                        <span class="step-time">{html.escape(step2_time)}</span>
-                    </div>
-                    <div class="step-desc">
-                        <strong>Agreed Clause:</strong> <em>"Administrators and staff members can make mistakes. As the verified server owner, I am solely responsible for the deletion of this virtual machine, as staff members only dispatch deletion requests that I requested. Vertex Host and administrators are discharged from all liability."</em>
-                    </div>
-                </div>
-
-                <div class="timeline-step">
-                    <div class="step-header">
-                        <span class="step-title">3. Exact Written Verification & Modal Submission</span>
-                        <span class="step-time">{html.escape(step3_time)}</span>
-                    </div>
-                    <div class="step-desc">
-                        User manually typed and submitted the required authorization phrase:<br>
-                        <span class="written-quote">"{html.escape(written_message)}"</span>
-                    </div>
-                </div>
-
-                <div class="timeline-step">
-                    <div class="step-header">
-                        <span class="step-title">4. Hypervisor Execution & Database Purge</span>
-                        <span class="step-time">{html.escape(completed_time)}</span>
-                    </div>
-                    <div class="step-desc">
-                        VM instance was decommissioned. Execution method: <strong>{html.escape(deletion_method)}</strong>. IP address bindings were released and server row removed from the database.
-                    </div>
+                <div class="status-pill status-pill-red">
+                    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#EF4444;"></span>
+                    Permanently Decommissioned
                 </div>
             </div>
         </div>
 
-        <div class="footer">
-            <div class="seal">🔒 Cryptographic Audit Log Verified</div><br>
-            Certificate Reference: <code>{doc_ref}</code> • Completed at: {html.escape(completed_time)}<br>
-            Generated automatically by Vertex Admin Bot • Preserved for security and compliance purposes.
+        <!-- Official Notice Banner -->
+        <div class="notice-banner">
+            <strong>⚠️ Virtual Machine Deletion & Multi-Step Authorization Record</strong>
+            This cryptographic audit certificate confirms that virtual machine <strong>{html.escape(server_name)}</strong> (VMID: {html.escape(str(vmid))}) was permanently decommissioned and purged following explicit multi-step owner verification, staff error liability disclaimer, and exact phrase confirmation.
         </div>
+
+        <!-- Grid: Target VM Details & Responsible Parties -->
+        <div class="grid-2">
+            <!-- Card 1: Virtual Machine Details -->
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <span class="panel-card-title">🖥️ Decommissioned Instance</span>
+                    <span class="code-pill">VMID #{html.escape(str(vmid))}</span>
+                </div>
+                <div class="meta-list">
+                    <div class="meta-item">
+                        <span class="meta-label">Instance Name:</span>
+                        <span class="meta-value">{html.escape(server_name)}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Node / Cluster:</span>
+                        <span class="meta-value">{html.escape(node_name)}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Node Host / IP:</span>
+                        <span class="meta-value"><span class="code-pill">{html.escape(node_ip)}</span></span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Hardware Allocation:</span>
+                        <span class="meta-value">{html.escape(specs_str)}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Destruction Method:</span>
+                        <span class="meta-value"><span class="{method_badge_class}">{method_label}</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Responsible Parties -->
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <span class="panel-card-title">👤 Responsible Parties & Context</span>
+                    <span class="code-pill">Ref: {doc_ref}</span>
+                </div>
+                <div class="meta-list">
+                    <div class="meta-item">
+                        <span class="meta-label">Verified Owner:</span>
+                        <span class="meta-value">{html.escape(user_name)} (<span class="code-pill">{html.escape(user_id)}</span>)</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Initiating Staff:</span>
+                        <span class="meta-value">{html.escape(admin_name)} (<span class="code-pill">{html.escape(admin_id)}</span>)</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Discord Guild:</span>
+                        <span class="meta-value">{html.escape(guild_name)}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Channel Context:</span>
+                        <span class="meta-value">#{html.escape(channel_name)}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Execution Time:</span>
+                        <span class="meta-value" style="font-family: 'Geist Mono', monospace; font-size: 12px;">{html.escape(completed_time)}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audit Timeline / Agreement History -->
+        <div class="timeline-section">
+            <div class="timeline-title">
+                <span>📜 Multi-Step Authorization & User Agreement Transcript</span>
+                <span class="code-pill">4 Verification Steps Completed</span>
+            </div>
+
+            <!-- Step 1 -->
+            <div class="timeline-step">
+                <div class="timeline-node"></div>
+                <div class="step-heading">
+                    <span class="step-title-text">Step 1: Initial Deletion Warning & Data Loss Acknowledgment</span>
+                    <span class="step-timestamp">{html.escape(step1_time)}</span>
+                </div>
+                <div class="step-box">
+                    User received explicit notification that all operating system disks, persistent storage volumes, and server backups associated with <strong>{html.escape(server_name)}</strong> (VMID: <code>{html.escape(str(vmid))}</code>) will be permanently destroyed without recovery.
+                </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="timeline-step">
+                <div class="timeline-node"></div>
+                <div class="step-heading">
+                    <span class="step-title-text">Step 2: Staff Error Disclaimer & Owner Responsibility Clause</span>
+                    <span class="step-timestamp">{html.escape(step2_time)}</span>
+                </div>
+                <div class="step-box">
+                    <strong>Agreed Declaration:</strong> <em>"Administrators and staff members can make mistakes. As the verified server owner, I am solely responsible for the deletion of this virtual machine, as staff members only dispatch deletion requests that I requested. Vertex Host and administrators are discharged from all liability."</em>
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="timeline-step">
+                <div class="timeline-node"></div>
+                <div class="step-heading">
+                    <span class="step-title-text">Step 3: Exact Written Verification String Submission</span>
+                    <span class="step-timestamp">{html.escape(step3_time)}</span>
+                </div>
+                <div class="step-box">
+                    User manually typed and submitted the exact required confirmation phrase:<br>
+                    <div class="user-quote-box">"{html.escape(written_message)}"</div>
+                </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="timeline-step">
+                <div class="timeline-node"></div>
+                <div class="step-heading">
+                    <span class="step-title-text">Step 4: Hypervisor Destruction & Database Purge Complete</span>
+                    <span class="step-timestamp">{html.escape(completed_time)}</span>
+                </div>
+                <div class="step-box">
+                    Instance decommission executed via <strong>{method_label}</strong>. Hypervisor compute resources purged, IPv4 address bindings released, and server database records removed.
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="page-footer">
+            <div class="security-seal">
+                🔒 Cryptographic Audit Record Verified
+            </div>
+            <div>
+                &copy; 2020 - 2026 <strong style="color:var(--text-primary)">Vertex Cloud</strong>. Preserved for compliance & security.
+            </div>
+        </footer>
     </div>
 </body>
 </html>
