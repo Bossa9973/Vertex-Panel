@@ -3,6 +3,34 @@ from discord.ext import commands
 import panel_api
 
 
+def safe_float(v, default: float = 0.0) -> float:
+    if v is None:
+        return default
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return default
+
+def safe_int(v, default: int = 0) -> int:
+    if v is None:
+        return default
+    try:
+        return int(float(v))
+    except (ValueError, TypeError):
+        return default
+
+def safe_str(v, default: str = "") -> str:
+    if v is None:
+        return default
+    return str(v)
+
+def format_date(dt_val, default: str = "N/A") -> str:
+    if not dt_val:
+        return default
+    s = str(dt_val).strip()
+    return s[:10] if len(s) >= 10 else (s or default)
+
+
 class StatsView(discord.ui.View):
     """Persistent stats panel — survives bot restarts via custom_id."""
 
@@ -12,24 +40,32 @@ class StatsView(discord.ui.View):
     @discord.ui.button(label="Analytics", style=discord.ButtonStyle.secondary, custom_id="stats_invites", emoji="📡")
     async def check_invites(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
-        stats = await panel_api.get_stats(str(interaction.user.id))
+        stats = await panel_api.get_stats(str(interaction.user.id)) or {}
+
+        joined = safe_int(stats.get('joined'))
+        valid = safe_int(stats.get('valid'))
+        left = safe_int(stats.get('left'))
+        fake = safe_int(stats.get('fake'))
 
         embed = discord.Embed(color=0x6366F1)
         embed.set_author(
             name=f"{interaction.user.display_name} // NETWORK DATA",
             icon_url=interaction.user.display_avatar.url,
         )
-        embed.add_field(name="RECRUITS",           value=f"```\n{stats['joined']}\n```", inline=True)
-        embed.add_field(name="VERIFIED",           value=f"```\n{stats['valid']}\n```",  inline=True)
-        embed.add_field(name="DEPARTED",           value=f"```\n{stats['left']}\n```",   inline=True)
-        embed.add_field(name="ANOMALIES (FAKE)",   value=f"```\n{stats['fake']}\n```",   inline=False)
+        embed.add_field(name="RECRUITS",           value=f"```\n{joined}\n```", inline=True)
+        embed.add_field(name="VERIFIED",           value=f"```\n{valid}\n```",  inline=True)
+        embed.add_field(name="DEPARTED",           value=f"```\n{left}\n```",   inline=True)
+        embed.add_field(name="ANOMALIES (FAKE)",   value=f"```\n{fake}\n```",   inline=False)
         embed.set_footer(text="VERTEX // ANALYTICS MODULE")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="Activity", style=discord.ButtonStyle.secondary, custom_id="stats_activity", emoji="⚡")
     async def check_activity(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
-        stats = await panel_api.get_stats(str(interaction.user.id))
+        stats = await panel_api.get_stats(str(interaction.user.id)) or {}
+
+        messages = safe_int(stats.get('messages'))
+        boosts = safe_int(stats.get('boosts'))
 
         embed = discord.Embed(color=0x3FFF75)
         embed.set_author(
@@ -37,8 +73,8 @@ class StatsView(discord.ui.View):
             icon_url=interaction.user.display_avatar.url,
         )
         embed.description = (
-            f"**MESSAGES:**\n```\n{stats['messages']}\n```\n"
-            f"**SERVER BOOSTS:**\n```\n{stats['boosts']}\n```"
+            f"**MESSAGES:**\n```\n{messages:,}\n```\n"
+            f"**SERVER BOOSTS:**\n```\n{boosts}\n```"
         )
         embed.set_footer(text="VERTEX // MONITORING MODULE")
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -46,7 +82,7 @@ class StatsView(discord.ui.View):
     @discord.ui.button(label="My Account & Servers", style=discord.ButtonStyle.primary, custom_id="stats_history", emoji="📜")
     async def check_history(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
-        data = await panel_api.get_user_history(str(interaction.user.id))
+        data = await panel_api.get_user_history(str(interaction.user.id)) or {}
 
         if not data.get("ok"):
             embed = discord.Embed(
@@ -67,19 +103,23 @@ class StatsView(discord.ui.View):
         servers = data.get("owned_servers") or []
         txs = data.get("spending_history") or []
 
+        current_balance = safe_float(summary.get('current_balance', data.get('balance', 0.0)))
+        total_spent = safe_float(summary.get('total_spent'))
+        total_promo_claimed = safe_float(summary.get('total_promo_claimed'))
+
         embed = discord.Embed(
             title=f"⚡ {interaction.user.display_name} // Account & Cloud Servers",
             color=0x6366F1,
-            description=f"**Current Balance:** `⚡ {summary.get('current_balance', 0.0):,.2f} BOLTs` | **Active Servers:** `{len(servers)}`"
+            description=f"**Current Balance:** `⚡ {current_balance:,.2f} BOLTs` | **Active Servers:** `{len(servers)}`"
         )
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
 
         embed.add_field(
             name="📊 Financial Overview",
             value=(
-                f"• **Balance:** `{summary.get('current_balance', 0.0):,.2f} BOLTs`\n"
-                f"• **Total Spent:** `-{summary.get('total_spent', 0.0):,.2f} BOLTs`\n"
-                f"• **Promo Codes Claimed:** `+{summary.get('total_promo_claimed', 0.0):,.2f} BOLTs`"
+                f"• **Balance:** `{current_balance:,.2f} BOLTs`\n"
+                f"• **Total Spent:** `-{total_spent:,.2f} BOLTs`\n"
+                f"• **Promo Codes Claimed:** `+{total_promo_claimed:,.2f} BOLTs`"
             ),
             inline=True
         )
@@ -93,14 +133,20 @@ class StatsView(discord.ui.View):
         if servers:
             s_lines = []
             for s in servers[:4]:
-                s_lines.append(f"• **{s.get('name')}** (`{s.get('node_name')}`): {s.get('status', 'in_use').capitalize()} | Expires: `{s.get('expires_at', 'N/A')[:10]}`")
+                s_name = safe_str(s.get('name') or 'VPS Instance')
+                s_node = safe_str(s.get('node_name') or 'Node')
+                s_status = safe_str(s.get('status', 'in_use')).capitalize()
+                s_exp = format_date(s.get('expires_at'))
+                s_lines.append(f"• **{s_name}** (`{s_node}`): {s_status} | Expires: `{s_exp}`")
             embed.add_field(name="Cloud Servers", value="\n".join(s_lines), inline=False)
 
         if txs:
             t_lines = []
             for t in txs[:5]:
-                sign = "+" if t.get("amount", 0) > 0 else ""
-                t_lines.append(f"• **{sign}{t.get('amount', 0):,.2f} BOLTs** — {t.get('description', 'Credit adjustment')}")
+                amt = safe_float(t.get("amount"))
+                sign = "+" if amt > 0 else ""
+                t_desc = safe_str(t.get('description') or t.get('type') or 'Credit adjustment')
+                t_lines.append(f"• **{sign}{amt:,.2f} BOLTs** — {t_desc}")
             embed.add_field(name="Recent Transactions", value="\n".join(t_lines), inline=False)
 
         embed.set_footer(text="VERTEX // CLOUD & BILLING MODULE")

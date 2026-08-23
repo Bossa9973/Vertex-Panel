@@ -171,3 +171,23 @@ async def get_transaction_details(identifier: str) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+# ─── VM Deletion ─────────────────────────────────────────────────────────────
+
+async def delete_vm(server_id: str, admin_discord_id: str, user_discord_id: str, force: bool = False) -> dict:
+    """
+    Request the panel to delete a VM instance for a user.
+    If standard hypervisor uninstall fails, the panel automatically falls back to database wipe.
+    """
+    try:
+        return await _post("/admin/delete-vm", {
+            "server_id": str(server_id).strip(),
+            "admin_discord_id": str(admin_discord_id).strip(),
+            "user_discord_id": str(user_discord_id).strip(),
+            "force": force,
+        })
+    except Exception as e:
+        print(f"[panel_api] delete_vm failed for server {server_id}: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+

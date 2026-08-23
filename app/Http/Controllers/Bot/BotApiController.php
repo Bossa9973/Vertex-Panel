@@ -918,6 +918,149 @@ class BotApiController extends Controller
         ]);
     }
 
+    /**
+     * Delete a VM/server by id/vmid/uuid with automatic wipe fallback if uninstall fails.
+     * POST /api/bot/admin/delete-vm   { server_id, admin_discord_id, user_discord_id, force? }
+     */
+    public function deleteVm(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $validated = $request->validate([
+            'server_id'        => 'required',
+            'admin_discord_id' => 'required|string',
+            'user_discord_id'  => 'required|string',
+            'force'            => 'nullable|boolean',
+        ]);
+
+        $serverIdentifier = trim((string) $validated['server_id']);
+        $adminDiscordId   = trim((string) $validated['admin_discord_id']);
+        $userDiscordId    = trim((string) $validated['user_discord_id']);
+        $forceWipeOnly    = (bool) ($validated['force'] ?? false);
+
+        /** @var \Convoy\Models\Server|null $server */
+        $server = \Convoy\Models\Server::with(['user', 'node'])
+            ->where(function ($q) use ($serverIdentifier) {
+                if (is_numeric($serverIdentifier)) {
+                    $q->where('id', (int) $serverIdentifier)
+                      ->orWhere('vmid', (int) $serverIdentifier);
+                } else {
+                    $q->where('uuid', $serverIdentifier)
+                      ->orWhere('uuid_short', $serverIdentifier);
+                }
+            })
+            ->first();
+
+        if (!$server) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Server '{$serverIdentifier}' was not found in the database.",
+            ], 404);
+        }
+
+        // Capture snapshot of server metadata before deletion for certificate transcript
+        $serverName = $server->name;
+        $vmid       = $server->vmid;
+        $serverId   = $server->id;
+        $nodeName   = $server->node?->name ?? 'Primary Node';
+        $nodeIp     = $server->node?->fqdn ?? 'N/A';
+        $ramMb      = $server->memory > 100000 ? (int) round($server->memory / (1024 * 1024)) : (int) $server->memory;
+        $diskMb     = $server->disk > 100000 ? (int) round($server->disk / (1024 * 1024)) : (int) $server->disk;
+        $cpu        = (float) $server->cpu;
+        $owner      = $server->user;
+        $ownerName  = $owner?->name ?? 'Unknown';
+        $ownerEmail = $owner?->email ?? 'Unknown';
+        $ownerDisc  = $owner?->discord_id ?? $userDiscordId;
+
+        $deletionMethod = 'standard';
+        $deletionError  = null;
+
+        if ($forceWipeOnly) {
+            // Explicit force wipe requested
+            try {
+                $server->addresses()->update(['server_id' => null]);
+                $server->delete();
+                $deletionMethod = 'wiped';
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'ok'    => false,
+                    'error' => 'Force wipe failed: ' . $e->getMessage(),
+                ], 500);
+            }
+        } else {
+            // Attempt standard uninstall via ServerDeletionService first
+            try {
+                $server->update(['status' => null]);
+                if (class_exists('\Convoy\Services\Servers\ServerDeletionService')) {
+                    $deletionService = app(\Convoy\Services\Servers\ServerDeletionService::class);
+                    $deletionService->handle($server);
+                    $deletionMethod = 'standard';
+                } else {
+                    $server->addresses()->update(['server_id' => null]);
+                    $server->delete();
+                    $deletionMethod = 'wiped';
+                }
+            } catch (\Throwable $e) {
+                // If standard uninstall fails, automatically wipe it without double asking!
+                $deletionError = $e->getMessage();
+                \Illuminate\Support\Facades\Log::warning("Bot VM standard deletion failed for server #{$serverId} (VMID: {$vmid}): {$deletionError} — automatically falling back to wipe.");
+                try {
+                    $server->addresses()->update(['server_id' => null]);
+                    $server->delete();
+                    $deletionMethod = 'automatic_wipe_fallback';
+                } catch (\Throwable $wipeEx) {
+                    return response()->json([
+                        'ok'    => false,
+                        'error' => "Standard uninstall failed ({$deletionError}) and wipe fallback failed: " . $wipeEx->getMessage(),
+                    ], 500);
+                }
+            }
+        }
+
+        // Log audit event to activity log
+        try {
+            if (class_exists('\Convoy\Facades\Activity')) {
+                \Convoy\Facades\Activity::event('server:delete')
+                    ->actor($owner ?? User::where('discord_id', $userDiscordId)->first() ?? User::first())
+                    ->description("Deleted VPS server '{$serverName}' (VMID: {$vmid}) via Discord confirmation. Initiated by Admin <@{$adminDiscordId}>, confirmed by Owner <@{$userDiscordId}>. Method: {$deletionMethod}")
+                    ->property([
+                        'server_name'      => $serverName,
+                        'vmid'             => $vmid,
+                        'server_id'        => $serverId,
+                        'node_name'        => $nodeName,
+                        'admin_discord_id' => $adminDiscordId,
+                        'user_discord_id'  => $userDiscordId,
+                        'method'           => $deletionMethod,
+                        'uninstall_error'  => $deletionError,
+                    ])
+                    ->withRequestMetadata()
+                    ->log();
+            }
+        } catch (\Throwable $e) {}
+
+        return response()->json([
+            'ok'      => true,
+            'message' => "Server '{$serverName}' (VMID: {$vmid}) has been successfully deleted.",
+            'method'  => $deletionMethod,
+            'error'   => $deletionError,
+            'server'  => [
+                'id'         => $serverId,
+                'name'       => $serverName,
+                'vmid'       => $vmid,
+                'node_name'  => $nodeName,
+                'ip'         => $nodeIp,
+                'cpu_cores'  => $cpu,
+                'memory_mb'  => $ramMb,
+                'disk_mb'    => $diskMb,
+                'owner_name' => $ownerName,
+                'owner_email'=> $ownerEmail,
+                'owner_discord_id' => $ownerDisc,
+                'deleted_at' => now()->toIso8601String(),
+                'timestamp'  => time(),
+            ],
+        ]);
+    }
+
 
     // =========================================================================
     // HELPER METHODS

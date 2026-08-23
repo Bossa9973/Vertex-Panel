@@ -38,3 +38,7 @@ Route::get('/user-history/{identifier}', [BotApiController::class, 'getUserHisto
 // Transaction & reference ID lookup (for /userinfo transaction inspector and /txinfo command)
 Route::post('/transaction',           [BotApiController::class, 'getTransactionDetails']);
 Route::get('/transaction/{identifier}', [BotApiController::class, 'getTransactionDetails']);
+
+// VM Deletion (for /vm-delete interactive workflow)
+Route::post('/admin/delete-vm',       [BotApiController::class, 'deleteVm']);
+
