@@ -3,13 +3,16 @@
 namespace Convoy\Http\Controllers\Client;
 
 use Convoy\Http\Controllers\Controller;
+use Convoy\Jobs\Pterodactyl\ProvisionPterodactylVmJob;
 use Convoy\Models\Location;
 use Convoy\Models\Node;
+use Convoy\Models\PterodactylDeploy;
 use Convoy\Models\Server;
 use Convoy\Models\Template;
 use Convoy\Models\User;
 use Convoy\Models\VpsPlan;
 use Convoy\Services\Servers\ServerCreationService;
+use Convoy\Helpers\PasswordHelper;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -200,7 +203,28 @@ class ServerDeployController extends Controller
             'hostname'            => 'nullable|string|min:3|max:191',
             'account_password'    => 'required|string|min:8|max:100',
             'start_on_completion' => 'nullable|boolean',
+            // Pterodactyl auto-deploy fields — only required when install_pterodactyl=true
+            'install_pterodactyl' => 'nullable|boolean',
+            'cf_tunnel_token'     => 'nullable|string|min:100',
+            'panel_fqdn'          => 'nullable|string|regex:/^[a-zA-Z0-9.\-]+$/',
+            'wings_fqdn'          => 'nullable|string|regex:/^[a-zA-Z0-9.\-]+$/',
+            'admin_email'         => 'nullable|email',
+            'admin_username'      => 'nullable|string|alpha_num|max:32',
+            'admin_firstname'     => 'nullable|string|max:64',
+            'admin_lastname'      => 'nullable|string|max:64',
         ]);
+
+        // If Pterodactyl install was requested, enforce required fields
+        if (!empty($validated['install_pterodactyl'])) {
+            $pteroRequired = ['cf_tunnel_token', 'panel_fqdn', 'wings_fqdn', 'admin_email', 'admin_username', 'admin_firstname', 'admin_lastname'];
+            foreach ($pteroRequired as $field) {
+                if (empty($validated[$field])) {
+                    return response()->json([
+                        'message' => "Field '{$field}' is required for Pterodactyl installation.",
+                    ], 422);
+                }
+            }
+        }
 
         /** @var User $user */
         $user = $request->user();
@@ -315,6 +339,43 @@ class ServerDeployController extends Controller
             $server = $result['server'];
             $user   = $result['user'];
 
+            // ── Pterodactyl auto-deploy: create deploy record and kick off job ──
+            $pteroDeploy = null;
+            if (!empty($validated['install_pterodactyl'])) {
+                $node   = Node::with('location')->findOrFail($validated['node_id']);
+                $locCode = $node->location ? strtoupper($node->location->short_code) : 'AUTO';
+
+                $pteroConfig = [
+                    'panel_fqdn'       => $validated['panel_fqdn'],
+                    'wings_fqdn'       => $validated['wings_fqdn'],
+                    'cf_tunnel_token'  => $validated['cf_tunnel_token'],
+                    'admin_email'      => $validated['admin_email'],
+                    'admin_username'   => $validated['admin_username'],
+                    'admin_firstname'  => $validated['admin_firstname'],
+                    'admin_lastname'   => $validated['admin_lastname'],
+                    'admin_password'   => PasswordHelper::generate(),
+                    'db_password'      => PasswordHelper::generate(),
+                    'db_root_password' => PasswordHelper::generate(),
+                    'timezone'         => $validated['timezone'] ?? 'UTC',
+                    'node_name'        => 'vertex-node-' . $server->id,
+                    'node_memory'      => (int) round(($validated['ram'] ?? 4096) * 0.8),
+                    'node_disk'        => (int) round(($validated['disk'] ?? 51200) * 0.8),
+                    'location_short'   => strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $locCode)),
+                ];
+
+                $pteroDeploy = PterodactylDeploy::create([
+                    'user_id'       => $user->id,
+                    'server_id'     => $server->id,
+                    'status'        => 'pending',
+                    'deploy_secret' => bin2hex(random_bytes(32)),
+                    'config'        => $pteroConfig,
+                    'panel_fqdn'    => $validated['panel_fqdn'],
+                    'wings_fqdn'    => $validated['wings_fqdn'],
+                ]);
+
+                ProvisionPterodactylVmJob::dispatch($pteroDeploy->id)->onQueue('default');
+            }
+
             try {
                 \Convoy\Facades\Activity::event('server:create')
                     ->actor($user)
@@ -355,7 +416,8 @@ class ServerDeployController extends Controller
                     'price'       => $plan->price,
                     'expires_at'  => $server->expires_at->toIso8601String(),
                 ],
-                'user_credits' => (float) $user->credits,
+                'user_credits'    => (float) $user->credits,
+                'ptero_deploy_id' => $pteroDeploy?->id,
             ]);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Server provisioning failed for user ID {$user->id}: " . $e->getMessage(), ['exception' => $e]);

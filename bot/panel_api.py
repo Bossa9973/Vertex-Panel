@@ -190,4 +190,25 @@ async def delete_vm(server_id: str, admin_discord_id: str, user_discord_id: str,
         return {"ok": False, "error": str(e)}
 
 
+# ─── Pterodactyl Deploy DM Queue ──────────────────────────────────────────────
 
+async def poll_pterodactyl_dm_queue() -> list:
+    """
+    Fetch pending Pterodactyl deploy completion DMs from the panel.
+    The panel queues them in pterodactyl_dm_queue when a VM finishes installing.
+    Returns a list of pending DM payloads (or empty list if none / error).
+    """
+    try:
+        result = await _get("/ptero-dm-queue")
+        return result.get("pending", [])
+    except Exception as e:
+        print(f"[panel_api] poll_pterodactyl_dm_queue failed: {e}")
+        return []
+
+
+async def mark_pterodactyl_dm_sent(queue_id: int) -> None:
+    """Mark a queued Pterodactyl DM as sent so it isn't re-delivered."""
+    try:
+        await _post("/ptero-dm-queue/mark-sent", {"id": queue_id})
+    except Exception as e:
+        print(f"[panel_api] mark_pterodactyl_dm_sent failed for id {queue_id}: {e}")

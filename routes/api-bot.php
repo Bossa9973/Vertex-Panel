@@ -42,3 +42,12 @@ Route::get('/transaction/{identifier}', [BotApiController::class, 'getTransactio
 // VM Deletion (for /vm-delete interactive workflow)
 Route::post('/admin/delete-vm',       [BotApiController::class, 'deleteVm']);
 
+// Pterodactyl deploy completion — panel calls this, bot sends a DM to the user
+Route::post('/ptero-complete',             [BotApiController::class, 'pterodactylComplete']);
+
+// Pterodactyl DM queue polling — bot reads pending DMs and marks them sent
+Route::get('/ptero-dm-queue',              [BotApiController::class, 'pterodactylDmQueue']);
+Route::post('/ptero-dm-queue/mark-sent',   [BotApiController::class, 'pterodactylDmMarkSent']);
+
+
+

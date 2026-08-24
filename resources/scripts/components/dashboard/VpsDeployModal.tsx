@@ -410,6 +410,14 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
             })
 
             if (res.data.user_credits !== undefined) updateCredits(res.data.user_credits)
+
+            // If Pterodactyl was requested, navigate to the install status tracker
+            if (installPterodactyl && res.data.ptero_deploy_id) {
+                onClose()
+                navigate(`/deploy/pterodactyl/${res.data.ptero_deploy_id}`)
+                return
+            }
+
             if (res.data.server) {
                 setCreatedServer({
                     id: res.data.server.id,

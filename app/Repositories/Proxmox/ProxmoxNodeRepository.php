@@ -116,27 +116,26 @@ class ProxmoxNodeRepository
     }
 
     /**
-     * Deletes a snippet file from Proxmox storage.
+     * Regenerate the cloud-init drive for a VM.
      *
-     * Called after EnsureGuestAgentJob confirms the agent is up — the snippet
-     * has been consumed by cloud-init and is no longer needed.
+     * CRITICAL for cloned VMs: Proxmox carries the template's cloud-init state
+     * forward when cloning. Simply setting cicustom via the config API does NOT
+     * cause the new snippet to be used — you MUST explicitly regenerate the
+     * cloud-init ISO after updating cicustom, otherwise the VM boots with the
+     * template's old (or empty) cloud-init configuration.
      *
-     * @param  string  $filename  Snippet filename, e.g. "vertex-cloudinit-204.yaml"
-     * @param  string  $storage   Proxmox storage name (default: "local")
+     * Proxmox API: PUT /api2/json/nodes/{node}/qemu/{vmid}/cloudinit
+     *
+     * @param  string  $nodeName  The Proxmox node cluster name (e.g. "pve")
+     * @param  int     $vmid      The VM ID to regenerate cloud-init for
      */
-    public function deleteSnippet(string $filename, string $storage = 'local'): void
+    public function regenerateCloudInit(string $nodeName, int $vmid): void
     {
         Assert::isInstanceOf($this->node, Node::class);
 
-        // Volume ID format for snippets: local:snippets/filename.yaml
-        $volumeId = "{$storage}:snippets/{$filename}";
-
         $this->getHttpClient()
-            ->withUrlParameters([
-                'node'     => $this->node->cluster,
-                'storage'  => $storage,
-                'volume'   => $volumeId,
-            ])
-            ->delete('/api2/json/nodes/{node}/storage/{storage}/content/{volume}');
+            ->put("/api2/json/nodes/{$nodeName}/qemu/{$vmid}/cloudinit")
+            ->json();
     }
 }
+

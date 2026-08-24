@@ -1168,4 +1168,99 @@ class BotApiController extends Controller
             } catch (\Throwable $e) {}
         }
     }
+
+    // =========================================================================
+    // PTERODACTYL DEPLOY COMPLETION — called by the panel after install
+    // =========================================================================
+
+    /**
+     * Receive Pterodactyl deploy completion from the panel webhook controller.
+     * Panel POSTs here → we queue a Discord DM so the bot sends credentials.
+     *
+     * POST /api/bot/ptero-complete
+     * Body: { discord_id, deploy_id, status, panel_url, admin_email,
+     *         admin_password, panel_fqdn, wings_fqdn, error? }
+     */
+    public function pterodactylComplete(Request $request): JsonResponse
+    {
+        $request->validate([
+            'discord_id' => 'required|string|max:32',
+            'deploy_id'  => 'required|integer',
+            'status'     => 'required|string|in:complete,failed',
+        ]);
+
+        $this->ensurePteroDmQueueTable();
+
+        DB::table('pterodactyl_dm_queue')->insert([
+            'discord_id'     => $request->input('discord_id'),
+            'deploy_id'      => $request->input('deploy_id'),
+            'status'         => $request->input('status'),
+            'panel_url'      => $request->input('panel_url'),
+            'admin_email'    => $request->input('admin_email'),
+            'admin_password' => $request->input('admin_password'),
+            'panel_fqdn'     => $request->input('panel_fqdn'),
+            'wings_fqdn'     => $request->input('wings_fqdn'),
+            'error'          => $request->input('error'),
+            'sent'           => false,
+            'created_at'     => now(),
+        ]);
+
+        return response()->json(['ok' => true, 'queued' => true]);
+    }
+
+    private function ensurePteroDmQueueTable(): void
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('pterodactyl_dm_queue')) {
+            try {
+                \Illuminate\Support\Facades\Schema::create('pterodactyl_dm_queue', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->id();
+                    $table->string('discord_id', 32)->index();
+                    $table->unsignedInteger('deploy_id');
+                    $table->string('status', 16);
+                    $table->string('panel_url', 255)->nullable();
+                    $table->string('admin_email', 255)->nullable();
+                    $table->string('admin_password', 255)->nullable();
+                    $table->string('panel_fqdn', 255)->nullable();
+                    $table->string('wings_fqdn', 255)->nullable();
+                    $table->text('error')->nullable();
+                    $table->boolean('sent')->default(false);
+                    $table->timestamp('created_at')->useCurrent();
+                });
+            } catch (\Throwable $e) {}
+        }
+    }
+
+    /**
+     * Return pending (unsent) Pterodactyl DM queue entries.
+     * The bot polls this endpoint to know who to DM.
+     * GET /api/bot/ptero-dm-queue
+     */
+    public function pterodactylDmQueue(Request $request): JsonResponse
+    {
+        $this->ensurePteroDmQueueTable();
+
+        $pending = DB::table('pterodactyl_dm_queue')
+            ->where('sent', false)
+            ->orderBy('created_at', 'asc')
+            ->limit(50)
+            ->get()
+            ->toArray();
+
+        return response()->json(['pending' => $pending]);
+    }
+
+    /**
+     * Mark a DM queue entry as sent so it isn't re-delivered.
+     * POST /api/bot/ptero-dm-queue/mark-sent   { id }
+     */
+    public function pterodactylDmMarkSent(Request $request): JsonResponse
+    {
+        $request->validate(['id' => 'required|integer']);
+
+        DB::table('pterodactyl_dm_queue')
+            ->where('id', $request->input('id'))
+            ->update(['sent' => true]);
+
+        return response()->json(['ok' => true]);
+    }
 }

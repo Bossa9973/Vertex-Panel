@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.app_commands import AppCommandError, TransformerError
 from typing import Union, Optional
 import os
@@ -49,6 +49,7 @@ class LumenHelper(commands.Bot):
         await self.load_extension("cogs.tracker")
         await self.load_extension("cogs.panel")
         self.add_view(StatsView())  # Restore persistent views on restart
+        pterodactyl_dm_task.start()  # Start Pterodactyl DM delivery loop
         print("Cogs loaded.")
 
     async def on_ready(self):
@@ -68,6 +69,107 @@ class LumenHelper(commands.Bot):
             print(f"Command sync error: {e}")
 
 bot = LumenHelper()
+
+# ─── Pterodactyl Deploy DM Task ───────────────────────────────────────────────
+
+@tasks.loop(seconds=60)
+async def pterodactyl_dm_task():
+    """
+    Background task: polls the panel every 60 s for pending Pterodactyl deploy
+    DMs and sends a Discord DM embed to each user with their panel credentials.
+    """
+    try:
+        pending = await panel_api.poll_pterodactyl_dm_queue()
+    except Exception as e:
+        print(f"[ptero_dm] poll failed: {e}")
+        return
+
+    for item in pending:
+        discord_id = str(item.get("discord_id", ""))
+        queue_id   = item.get("id")
+        status     = item.get("status", "complete")
+
+        if not discord_id or not queue_id:
+            continue
+
+        try:
+            user = await bot.fetch_user(int(discord_id))
+        except Exception:
+            print(f"[ptero_dm] Could not fetch Discord user {discord_id}")
+            await panel_api.mark_pterodactyl_dm_sent(queue_id)
+            continue
+
+        try:
+            if status == "complete":
+                embed = discord.Embed(
+                    title="🎉 Your Pterodactyl Panel is Ready!",
+                    description="Your Pterodactyl Panel + Wings installation has completed successfully.",
+                    color=0x5865F2,
+                )
+                embed.add_field(
+                    name="🔗 Panel URL",
+                    value=f"https://{item.get('panel_fqdn', 'your-panel.example.com')}",
+                    inline=False,
+                )
+                embed.add_field(
+                    name="📧 Admin Email",
+                    value=f"`{item.get('admin_email', 'N/A')}`",
+                    inline=True,
+                )
+                embed.add_field(
+                    name="🔑 Admin Password",
+                    value=f"`{item.get('admin_password', 'N/A')}`",
+                    inline=True,
+                )
+                embed.add_field(
+                    name="🌐 Wings FQDN",
+                    value=f"`{item.get('wings_fqdn', 'N/A')}`",
+                    inline=False,
+                )
+                embed.add_field(
+                    name="⚠️ Next Steps",
+                    value=(
+                        "1. Log in to your panel with the credentials above.\n"
+                        "2. In Cloudflare Zero Trust → Tunnels, add **public hostnames** "
+                        f"for `{item.get('panel_fqdn', '')}` (port 80) "
+                        f"and `{item.get('wings_fqdn', '')}` (port 8080).\n"
+                        "3. Your Wings node should connect automatically within 2 minutes."
+                    ),
+                    inline=False,
+                )
+                embed.set_footer(text="Vertex Panel • Pterodactyl Auto-Deploy")
+                embed.timestamp = datetime.datetime.utcnow()
+            else:
+                error_msg = item.get("error") or "Unknown installation error."
+                embed = discord.Embed(
+                    title="❌ Pterodactyl Installation Failed",
+                    description=(
+                        f"The installation encountered an error:\n```{error_msg[:500]}```\n"
+                        "Please contact support with your deploy ID."
+                    ),
+                    color=0xEF4444,
+                )
+                embed.add_field(
+                    name="Deploy ID",
+                    value=str(item.get("deploy_id", "N/A")),
+                    inline=True,
+                )
+                embed.set_footer(text="Vertex Panel • Pterodactyl Auto-Deploy")
+                embed.timestamp = datetime.datetime.utcnow()
+
+            await user.send(embed=embed)
+            print(f"[ptero_dm] DM sent to {discord_id} (deploy #{item.get('deploy_id')}, status={status})")
+        except discord.Forbidden:
+            print(f"[ptero_dm] Cannot DM {discord_id} — DMs disabled")
+        except Exception as e:
+            print(f"[ptero_dm] Error sending DM to {discord_id}: {e}")
+
+        # Always mark as sent to avoid re-delivery (even if DM failed)
+        await panel_api.mark_pterodactyl_dm_sent(queue_id)
+
+@pterodactyl_dm_task.before_loop
+async def before_ptero_dm_task():
+    await bot.wait_until_ready()
 
 @bot.tree.error
 async def on_tree_error(interaction: discord.Interaction, error: AppCommandError):
