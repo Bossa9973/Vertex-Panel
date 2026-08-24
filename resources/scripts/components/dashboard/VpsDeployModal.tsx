@@ -121,14 +121,31 @@ const stepVariants = {
 const StepPillSwitch = ({
     currentStep,
     onSelectStep,
+    appInstallEnabled = true,
 }: {
     currentStep: number
     onSelectStep: (step: number) => void
+    appInstallEnabled?: boolean
 }) => {
+    const titles = appInstallEnabled
+        ? [
+            { num: 1, label: '1. Plan & Billing' },
+            { num: 2, label: '2. OS & Node' },
+            { num: 3, label: '3. Apps' },
+            { num: 4, label: '4. Credentials' },
+            { num: 5, label: '5. Review & Launch' },
+        ]
+        : [
+            { num: 1, label: '1. Plan & Billing' },
+            { num: 2, label: '2. OS & Node' },
+            { num: 4, label: '3. Credentials' },
+            { num: 5, label: '4. Review & Launch' },
+        ]
+
     return (
         <div className='flex justify-center my-3'>
             <div className='relative z-10 mx-auto flex w-fit rounded-full bg-neutral-900/90 border border-gray-700/80 p-1 backdrop-blur-md'>
-                {stepTitles.map(s => {
+                {titles.map(s => {
                     const isActive = currentStep === s.num
                     return (
                         <button
@@ -236,6 +253,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
     const [isProvisioned, setIsProvisioned] = useState<boolean>(false)
 
     // ── Pterodactyl app installer state ──────────────────────────────────────
+    const [appInstallEnabled, setAppInstallEnabled] = useState<boolean>(true)
     const [installPterodactyl, setInstallPterodactyl] = useState(false)
     const [pteroOsWarningAccepted, setPteroOsWarningAccepted] = useState(false)
     const [pteroCfToken, setPteroCfToken] = useState('')
@@ -291,6 +309,10 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
 
                     setTemplates(fetchedTemplates)
                     if (fetchedTemplates.length > 0) setSelectedTemplateId(fetchedTemplates[0].id)
+
+                    if (data.app_installation_enabled !== undefined) {
+                        setAppInstallEnabled(Boolean(data.app_installation_enabled))
+                    }
                 })
                 .catch(err => {
                     console.error('Failed to load deployment options:', err)
@@ -397,7 +419,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                 hostname: computedFullHostname,
                 account_password: rootPassword,
                 start_on_completion: startOnCompletion,
-                ...(installPterodactyl ? {
+                ...(installPterodactyl && appInstallEnabled ? {
                     install_pterodactyl: true,
                     cf_tunnel_token: pteroCfToken.trim(),
                     panel_fqdn: pteroPanelFqdn.trim().replace(/^https?:\/\//, ''),
@@ -412,7 +434,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
             if (res.data.user_credits !== undefined) updateCredits(res.data.user_credits)
 
             // If Pterodactyl was requested, navigate to the install status tracker
-            if (installPterodactyl && res.data.ptero_deploy_id) {
+            if (installPterodactyl && appInstallEnabled && res.data.ptero_deploy_id) {
                 onClose()
                 navigate(`/deploy/pterodactyl/${res.data.ptero_deploy_id}`)
                 return
@@ -560,7 +582,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                             </p>
                         </div>
 
-                        <StepPillSwitch currentStep={step} onSelectStep={goToStep} />
+                        <StepPillSwitch currentStep={step} onSelectStep={goToStep} appInstallEnabled={appInstallEnabled} />
                     </div>
 
                     <AnimatePresence>
@@ -857,10 +879,10 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             </button>
                                             <button
                                                 type='button'
-                                                onClick={() => goToStep(3)}
+                                                onClick={() => goToStep(appInstallEnabled ? 3 : 4)}
                                                 className='py-2.5 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 transition cursor-pointer active:scale-95'
                                             >
-                                                Next: Apps <ArrowRightIcon className='w-4 h-4' />
+                                                {appInstallEnabled ? 'Next: Apps' : 'Next: Credentials'} <ArrowRightIcon className='w-4 h-4' />
                                             </button>
                                         </div>
                                     </div>
@@ -1133,7 +1155,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                         <div className='flex justify-between items-center pt-3 border-t border-neutral-800'>
                                             <button
                                                 type='button'
-                                                onClick={() => goToStep(3)}
+                                                onClick={() => goToStep(appInstallEnabled ? 3 : 2)}
                                                 className='py-2.5 px-5 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition'
                                             >
                                                 <ArrowLeftIcon className='w-4 h-4' /> Back
@@ -1170,7 +1192,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                     <span className='px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30'>
                                                         {selectedTemplate?.name}
                                                     </span>
-                                                    {installPterodactyl && (
+                                                    {installPterodactyl && appInstallEnabled && (
                                                         <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1'>
                                                             <ServerStackIcon className='w-3 h-3' /> Pterodactyl
                                                         </span>
@@ -1191,6 +1213,15 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                     </div>
                                                 ))}
                                             </div>
+                                            {installPterodactyl && appInstallEnabled && (
+                                                <div className='flex items-center justify-between border-t border-neutral-800/80 pt-2 text-violet-400'>
+                                                    <span className='text-xs flex items-center gap-1.5 font-semibold'>
+                                                        <CubeTransparentIcon className='w-4 h-4' />
+                                                        Pterodactyl Panel + Wings
+                                                    </span>
+                                                    <span className='text-xs font-mono font-bold text-violet-300'>Included</span>
+                                                </div>
+                                            )}
 
                                             <div className='flex items-center justify-between bg-black/50 border border-neutral-800 rounded-xl p-3 text-xs'>
                                                 <span className='text-gray-400 font-medium'>Calculated Cost</span>

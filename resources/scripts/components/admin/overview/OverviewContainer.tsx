@@ -22,6 +22,7 @@ import MessageBox from '@/components/elements/MessageBox'
 import PageContentBlock from '@/components/elements/PageContentBlock'
 import AdminAnnouncementToggle from '@/components/admin/overview/AdminAnnouncementToggle'
 import AdminTerminalToggle from '@/components/admin/overview/AdminTerminalToggle'
+import AdminAppInstallToggle from '@/components/admin/overview/AdminAppInstallToggle'
 
 interface IconProps {
     className?: string
@@ -225,6 +226,7 @@ const OverviewContainer = () => {
 
                     <AdminAnnouncementToggle />
                     <AdminTerminalToggle />
+                    <AdminAppInstallToggle />
 
                     <div className='col-span-12 bg-neutral-900/70 border border-white/10 rounded-2xl p-6 shadow-xl shadow-blue-950/20 backdrop-blur-xl hover:border-white/20 transition-all font-sans'>
                         <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-4'>

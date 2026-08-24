@@ -93,4 +93,18 @@ class IndexController extends ApiController
             'data' => array_merge($defaults, $data),
         ]);
     }
+
+    public function appInstallStatus()
+    {
+        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'app_installation_enabled')->first();
+        $enabled = $setting ? ($setting->value === 'true' || $setting->value === '1') : true;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'enabled' => $enabled,
+            ],
+        ]);
+    }
 }
+

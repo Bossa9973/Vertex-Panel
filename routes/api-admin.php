@@ -21,6 +21,9 @@ Route::get('/settings/maintenance', [Admin\AdminSettingsController::class, 'getM
 Route::post('/settings/maintenance', [Admin\AdminSettingsController::class, 'updateMaintenanceSettings']);
 Route::get('/settings/credits', [Admin\AdminSettingsController::class, 'getCreditsSettings']);
 Route::post('/settings/credits', [Admin\AdminSettingsController::class, 'updateCreditsSettings']);
+Route::get('/settings/app-install', [Admin\AdminSettingsController::class, 'getAppInstallSetting']);
+Route::post('/settings/app-install', [Admin\AdminSettingsController::class, 'updateAppInstallSetting']);
+
 
 /*
 |--------------------------------------------------------------------------

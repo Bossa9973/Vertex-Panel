@@ -25,6 +25,14 @@ class PterodactylDeployController extends Controller
      */
     public function store(StorePterodactylDeployRequest $request): JsonResponse
     {
+        $appInstallSetting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'app_installation_enabled')->first();
+        $appInstallEnabled = $appInstallSetting ? ($appInstallSetting->value === 'true' || $appInstallSetting->value === '1') : true;
+        if (!$appInstallEnabled) {
+            return response()->json([
+                'message' => 'Application auto-installation is currently disabled by the administrator.',
+            ], 403);
+        }
+
         $validated = $request->validated();
 
         // ── Generate any passwords the client left blank ──────────────────

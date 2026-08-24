@@ -236,4 +236,52 @@ class AdminSettingsController extends ApiController
             ],
         ]);
     }
+
+    public function getAppInstallSetting()
+    {
+        $setting = DB::table('settings')->where('key', 'app_installation_enabled')->first();
+        $enabled = $setting ? ($setting->value === 'true' || $setting->value === '1') : true;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'enabled' => $enabled,
+            ],
+        ]);
+    }
+
+    public function updateAppInstallSetting(Request $request)
+    {
+        $request->validate([
+            'enabled' => 'required|boolean',
+        ]);
+
+        $enabled = (bool) $request->input('enabled');
+
+        DB::table('settings')->updateOrInsert(
+            ['key' => 'app_installation_enabled'],
+            [
+                'value' => $enabled ? 'true' : 'false',
+                'updated_at' => now(),
+            ]
+        );
+
+        try {
+            \Convoy\Facades\Activity::event('admin:app-install-toggle')
+                ->actor($request->user())
+                ->description("Admin " . ($enabled ? 'enabled' : 'disabled') . " 1-click app auto-installation")
+                ->property(['enabled' => $enabled])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
+        return response()->json([
+            'success' => true,
+            'message' => 'App auto-installation setting updated.',
+            'data' => [
+                'enabled' => $enabled,
+            ],
+        ]);
+    }
 }
+

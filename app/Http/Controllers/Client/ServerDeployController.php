@@ -185,11 +185,15 @@ class ServerDeployController extends Controller
             ];
         });
 
+        $appInstallSetting = DB::table('settings')->where('key', 'app_installation_enabled')->first();
+        $appInstallEnabled = $appInstallSetting ? ($appInstallSetting->value === 'true' || $appInstallSetting->value === '1') : true;
+
         return response()->json([
-            'plans'     => $plans,
-            'nodes'     => $formattedNodes,
-            'locations' => $locations,
-            'templates' => $formattedTemplates,
+            'plans'                    => $plans,
+            'nodes'                    => $formattedNodes,
+            'locations'                => $locations,
+            'templates'                => $formattedTemplates,
+            'app_installation_enabled' => $appInstallEnabled,
         ]);
     }
 
@@ -216,6 +220,14 @@ class ServerDeployController extends Controller
 
         // If Pterodactyl install was requested, enforce required fields
         if (!empty($validated['install_pterodactyl'])) {
+            $appInstallSetting = DB::table('settings')->where('key', 'app_installation_enabled')->first();
+            $appInstallEnabled = $appInstallSetting ? ($appInstallSetting->value === 'true' || $appInstallSetting->value === '1') : true;
+            if (!$appInstallEnabled) {
+                return response()->json([
+                    'message' => 'Application auto-installation is currently disabled by the administrator.',
+                ], 403);
+            }
+
             $pteroRequired = ['cf_tunnel_token', 'panel_fqdn', 'wings_fqdn', 'admin_email', 'admin_username', 'admin_firstname', 'admin_lastname'];
             foreach ($pteroRequired as $field) {
                 if (empty($validated[$field])) {
@@ -225,6 +237,7 @@ class ServerDeployController extends Controller
                 }
             }
         }
+
 
         /** @var User $user */
         $user = $request->user();

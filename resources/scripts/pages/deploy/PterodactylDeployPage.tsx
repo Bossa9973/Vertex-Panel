@@ -161,6 +161,19 @@ export default function PterodactylDeployPage() {
     const [deployId, setDeployId] = useState<number | null>(null)
     const [status, setStatus] = useState<PterodactylDeployStatus | null>(null)
     const [showAdvanced, setShowAdvanced] = useState(false)
+    const [appInstallEnabled, setAppInstallEnabled] = useState<boolean | null>(null)
+
+    useEffect(() => {
+        http.get('/api/client/app-install-status')
+            .then(res => {
+                if (res.data?.data?.enabled !== undefined) {
+                    setAppInstallEnabled(Boolean(res.data.data.enabled))
+                } else {
+                    setAppInstallEnabled(true)
+                }
+            })
+            .catch(() => setAppInstallEnabled(true))
+    }, [])
 
     // Poller
     const pollerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -243,8 +256,33 @@ export default function PterodactylDeployPage() {
                     </p>
                 </motion.div>
 
+                {/* ── App Installation Disabled Notice ── */}
+                {appInstallEnabled === false && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className='rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 sm:p-8 text-center space-y-4'
+                    >
+                        <div className='w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto'>
+                            <ExclamationTriangleIcon className='w-6 h-6' />
+                        </div>
+                        <h2 className='text-xl font-bold text-white'>1-Click App Auto-Installation Disabled</h2>
+                        <p className='text-sm text-slate-300 max-w-md mx-auto'>
+                            Application auto-installations are currently disabled by the system administrator. You can still deploy standard Linux VPS instances from the main dashboard.
+                        </p>
+                        <div className='pt-2'>
+                            <a
+                                href='/'
+                                className='inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition'
+                            >
+                                Back to Dashboard &rarr;
+                            </a>
+                        </div>
+                    </motion.div>
+                )}
+
                 {/* ── Deploy Form ── */}
-                {!deployId && (
+                {!deployId && appInstallEnabled !== false && (
                     <motion.form
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}

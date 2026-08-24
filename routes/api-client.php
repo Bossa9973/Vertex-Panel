@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/servers', [Client\IndexController::class, 'index']);
 Route::get('/announcement-status', [Client\IndexController::class, 'announcementStatus']);
 Route::get('/terminal-mode', [Client\IndexController::class, 'terminalMode']);
+Route::get('/app-install-status', [Client\IndexController::class, 'appInstallStatus']);
+
 
 Route::prefix('/credits')->group(function () {
     Route::get('/', [Client\CreditsController::class, 'index']);
