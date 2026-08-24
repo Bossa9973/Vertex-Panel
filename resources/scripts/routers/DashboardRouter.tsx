@@ -39,6 +39,11 @@ export const routes: Route[] = [
         path: 'deploy/pterodactyl',
         element: lazyLoad(lazy(() => import('@/pages/deploy/PterodactylDeployPage'))),
     },
+    // Pterodactyl deploy status tracker (redirected here after order is placed)
+    {
+        path: 'deploy/pterodactyl/:deployId',
+        element: lazyLoad(lazy(() => import('@/pages/deploy/PterodactylStatusPage'))),
+    },
     ...serverRoutes,
 ]
 
