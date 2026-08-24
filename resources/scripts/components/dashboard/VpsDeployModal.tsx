@@ -22,6 +22,8 @@ import {
     ServerStackIcon,
     RocketLaunchIcon,
     XMarkIcon,
+    ExclamationTriangleIcon,
+    CubeTransparentIcon,
 } from '@heroicons/react/24/outline'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import { Sparkles as SparklesComp } from '@/components/ui/sparkles'
@@ -85,8 +87,9 @@ const generateSecurePassword = () => {
 const stepTitles = [
     { num: 1, label: '1. Plan & Billing' },
     { num: 2, label: '2. OS & Node' },
-    { num: 3, label: '3. Credentials' },
-    { num: 4, label: '4. Review & Launch' },
+    { num: 3, label: '3. Apps' },
+    { num: 4, label: '4. Credentials' },
+    { num: 5, label: '5. Review & Launch' },
 ]
 
 const stepVariants = {
@@ -232,6 +235,38 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
     const [provisionStep, setProvisionStep] = useState<number>(0)
     const [isProvisioned, setIsProvisioned] = useState<boolean>(false)
 
+    // ── Pterodactyl app installer state ──────────────────────────────────────
+    const [installPterodactyl, setInstallPterodactyl] = useState(false)
+    const [pteroOsWarningAccepted, setPteroOsWarningAccepted] = useState(false)
+    const [pteroCfToken, setPteroCfToken] = useState('')
+    const [pteroPanelFqdn, setPteroPanelFqdn] = useState('')
+    const [pteroWingsFqdn, setPteroWingsFqdn] = useState('')
+    const [pteroAdminEmail, setPteroAdminEmail] = useState('')
+    const [pteroAdminUsername, setPteroAdminUsername] = useState('')
+    const [pteroAdminFirstname, setPteroAdminFirstname] = useState('')
+    const [pteroAdminLastname, setPteroAdminLastname] = useState('')
+    const [pteroShowToken, setPteroShowToken] = useState(false)
+
+    // Node-filtered templates & Ubuntu 22.04 template detection for selected node
+    const nodeTemplates = templates.filter(t => t.node_id === null || t.node_id === selectedNodeId)
+    const selectedTemplate = nodeTemplates.find(t => t.id === selectedTemplateId) || nodeTemplates[0] || templates[0]
+
+    const isUbuntu2204Name = (name: string) => /(ubuntu|ubutnu).?22.?04|22\.04|ubuntu-22/i.test(name || '')
+    const ubuntu2204Template = nodeTemplates.find(t => isUbuntu2204Name(t.name)) || nodeTemplates[0] || templates[0]
+    const selectedTemplateIsUbuntu2204 = selectedTemplate ? isUbuntu2204Name(selectedTemplate.name) : false
+    const pteroNeedsOsSwitch = installPterodactyl && !selectedTemplateIsUbuntu2204
+
+    const pterodactylFormComplete = !installPterodactyl || (
+        pteroCfToken.trim().length >= 20 &&
+        pteroPanelFqdn.trim().length > 0 &&
+        pteroWingsFqdn.trim().length > 0 &&
+        pteroAdminEmail.trim().length > 0 &&
+        pteroAdminUsername.trim().length > 0 &&
+        pteroAdminFirstname.trim().length > 0 &&
+        pteroAdminLastname.trim().length > 0 &&
+        (!pteroNeedsOsSwitch || pteroOsWarningAccepted)
+    )
+
     const navigate = useNavigate()
     const modalRef = useRef<HTMLDivElement>(null)
 
@@ -270,14 +305,12 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
         setStep(next)
     }
 
-    // Real backend Horizon job polling with steady step progression
     useEffect(() => {
         if (!submitting || !createdServer?.id || isProvisioned) return
 
         let currentStepIdx = 0
         let backendReady = false
 
-        // Ticks steps smoothly every 3.2 seconds so progress is unhurried and clear
         const stepTimer = setInterval(() => {
             currentStepIdx += 1
             if (currentStepIdx <= 5) {
@@ -290,7 +323,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
             }
         }, 3200)
 
-        // Polls backend status to confirm hypervisor completion
         const pollInterval = setInterval(async () => {
             try {
                 const res = await http.get(`/api/client/servers/${createdServer.id}`)
@@ -312,7 +344,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                     setSubmitting(false)
                 }
             } catch (e) {
-                // Ignore transient network poll errors
             }
         }, 2000)
 
@@ -322,25 +353,19 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
         }
     }, [submitting, createdServer?.id, isProvisioned])
 
-    const handleServerNameChange = (val: string) => {
-        setServerName(val)
-    }
-
     const computedServerName = serverName.trim() || 'vps-instance-1'
     const rawPrefix = (hostnamePrefix.trim() || serverName.trim() || 'vps-instance-1').toLowerCase().replace(/[^a-z0-9-]/g, '-')
     const computedFullHostname = `${rawPrefix}.vertex-vms.host`
 
     const selectedPlan = plans.find(p => p.id === selectedPlanId)
     const selectedNode = nodes.find(n => n.id === selectedNodeId) || nodes[0]
-    const selectedTemplate = templates.find(t => t.id === selectedTemplateId) || templates[0]
     const userCredits = user?.credits ?? 0
     const rawPrice = selectedPlan?.price ?? 0
     const finalPrice = isYearly ? Math.round(rawPrice * 12 * 0.85) : rawPrice
-    const nodeTemplates = templates.filter(t => t.node_id === null || t.node_id === selectedNodeId)
 
     const handleDeploy = async () => {
-        if (!selectedPlan || !selectedNode || !selectedTemplate) {
-            setError('Please select a hardware plan, target node, and OS template.')
+        if (!selectedPlan || !selectedNode) {
+            setError('Please select a hardware plan and target node.')
             return
         }
         if (userCredits < finalPrice) {
@@ -349,6 +374,12 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
         }
         if (!rootPassword || rootPassword.length < 8) {
             setError('Root password must be at least 8 characters.')
+            return
+        }
+
+        const effectiveTemplate = installPterodactyl && ubuntu2204Template ? ubuntu2204Template : selectedTemplate
+        if (!effectiveTemplate) {
+            setError('No suitable OS template found. Please select an OS or contact support.')
             return
         }
 
@@ -361,11 +392,21 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
             const res = await http.post('/api/client/deploy', {
                 plan_id: selectedPlan.id,
                 node_id: selectedNode.id,
-                template_uuid: selectedTemplate.uuid,
+                template_uuid: effectiveTemplate.uuid,
                 name: computedServerName,
                 hostname: computedFullHostname,
                 account_password: rootPassword,
                 start_on_completion: startOnCompletion,
+                ...(installPterodactyl ? {
+                    install_pterodactyl: true,
+                    cf_tunnel_token: pteroCfToken.trim(),
+                    panel_fqdn: pteroPanelFqdn.trim().replace(/^https?:\/\//, ''),
+                    wings_fqdn: pteroWingsFqdn.trim().replace(/^https?:\/\//, ''),
+                    admin_email: pteroAdminEmail.trim(),
+                    admin_username: pteroAdminUsername.trim(),
+                    admin_firstname: pteroAdminFirstname.trim(),
+                    admin_lastname: pteroAdminLastname.trim(),
+                } : {}),
             })
 
             if (res.data.user_credits !== undefined) updateCredits(res.data.user_credits)
@@ -413,7 +454,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                 },
             }}
         >
-            {/* ── Outer wrapper with 100% pricing-section-4 background & atmospheric elements ── */}
             <div className='relative bg-black min-h-[620px] overflow-hidden text-white rounded-[24px]' ref={modalRef}>
                 <style>{`
                     .custom-vps-scrollbar::-webkit-scrollbar {
@@ -433,7 +473,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                     }
                 `}</style>
 
-                {/* 1. Sparkles Top Layer */}
                 <div className='absolute top-0 left-0 right-0 h-96 w-full overflow-hidden [mask-image:radial-gradient(50%_50%,white,transparent)] pointer-events-none z-0'>
                     <SparklesComp
                         id='vps-modal-sparkles'
@@ -445,7 +484,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                     />
                 </div>
 
-                {/* 2. Framer Dual Ellipses Background Glow Layer */}
                 <div className='absolute left-0 top-[-114px] w-full h-full flex flex-col items-start justify-start overflow-hidden p-0 z-0 pointer-events-none'>
                     <div className='framer-1i5axl2 w-full'>
                         <div
@@ -469,7 +507,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                     </div>
                 </div>
 
-                {/* 3. Radial Gradient Multiply Background Layer */}
                 <div
                     className='absolute top-0 left-[10%] right-[10%] w-[80%] h-full z-0 pointer-events-none'
                     style={{
@@ -479,10 +516,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                     }}
                 />
 
-                {/* ── Content Container (z-10) ── */}
                 <div className='relative z-10 px-5 pt-3 pb-6 sm:px-7 sm:pt-4 sm:pb-6 flex flex-col justify-between min-h-[620px]'>
-
-                    {/* Modal Close Button & Title Section */}
                     <div>
                         <div className='flex items-center justify-end mb-1'>
                             <button
@@ -495,7 +529,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                             </button>
                         </div>
 
-                        {/* Title using VerticalCutReveal */}
                         <div className='text-center max-w-xl mx-auto mt-0 mb-2 space-y-1'>
                             <h2 className='text-2xl sm:text-3xl font-medium text-white flex justify-center'>
                                 <VerticalCutReveal
@@ -519,11 +552,9 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                             </p>
                         </div>
 
-                        {/* Step Pill Switcher */}
                         <StepPillSwitch currentStep={step} onSelectStep={goToStep} />
                     </div>
 
-                    {/* Error Banner */}
                     <AnimatePresence>
                         {error && (
                             <motion.div
@@ -537,7 +568,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                         )}
                     </AnimatePresence>
 
-                    {/* Step Body */}
                     <div className='relative mt-2 mb-3 flex-1 flex flex-col justify-center'>
                         <LoadingOverlay visible={loading} radius='lg' />
 
@@ -634,8 +664,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                 exit='exit'
                                 className='w-full'
                             >
-
-                                {/* ── STEP 1: Hardware Plans ── */}
                                 {step === 1 && (
                                     <div className='space-y-4 max-w-4xl mx-auto'>
                                         <div>
@@ -736,10 +764,8 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                     </div>
                                 )}
 
-                                {/* ── STEP 2: OS & Node selection ── */}
                                 {step === 2 && (
                                     <div className='space-y-5 max-w-3xl mx-auto'>
-                                        {/* OS Images */}
                                         <div>
                                             <h3 className='text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2'>
                                                 <ComputerDesktopIcon className='w-4 h-4 text-blue-400' />
@@ -771,7 +797,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             </div>
                                         </div>
 
-                                        {/* Hypervisor Node */}
                                         <div>
                                             <h3 className='text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2'>
                                                 <ServerStackIcon className='w-4 h-4 text-blue-400' />
@@ -783,7 +808,14 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                     return (
                                                         <Card
                                                             key={node.id}
-                                                            onClick={() => setSelectedNodeId(node.id)}
+                                                            onClick={() => {
+                                                                setSelectedNodeId(node.id)
+                                                                // Switch to valid template for new node if current selection belongs elsewhere
+                                                                const validForNode = templates.filter(t => t.node_id === null || t.node_id === node.id)
+                                                                if (validForNode.length > 0 && !validForNode.some(t => t.id === selectedTemplateId)) {
+                                                                    setSelectedTemplateId(validForNode[0].id)
+                                                                }
+                                                            }}
                                                             className={cn(
                                                                 'p-4 cursor-pointer transition-all duration-200 text-white border-neutral-800 flex items-center justify-between',
                                                                 isSelected
@@ -820,14 +852,196 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                 onClick={() => goToStep(3)}
                                                 className='py-2.5 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 transition cursor-pointer active:scale-95'
                                             >
+                                                Next: Apps <ArrowRightIcon className='w-4 h-4' />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {step === 3 && (
+                                    <div className='space-y-5 max-w-3xl mx-auto'>
+                                        <h3 className='text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2'>
+                                            <CubeTransparentIcon className='w-4 h-4 text-violet-400' />
+                                            Optional Apps to Install
+                                        </h3>
+
+                                        <div
+                                            onClick={() => {
+                                                setInstallPterodactyl(v => !v)
+                                                setPteroOsWarningAccepted(false)
+                                            }}
+                                            className={cn(
+                                                'relative cursor-pointer rounded-2xl border p-4 transition-all duration-200 flex items-start gap-4',
+                                                installPterodactyl
+                                                    ? 'bg-violet-900/20 border-violet-500/60 shadow-[0px_0px_20px_0px_rgba(139,92,246,0.25)] ring-1 ring-violet-500/40'
+                                                    : 'bg-neutral-900/60 border-neutral-800 hover:border-neutral-600'
+                                            )}
+                                        >
+                                            <div className='w-10 h-10 rounded-xl bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0'>
+                                                <svg viewBox='0 0 40 40' className='w-6 h-6 text-violet-400' fill='currentColor'>
+                                                    <path d='M20 4C11.163 4 4 11.163 4 20s7.163 16 16 16 16-7.163 16-16S28.837 4 20 4zm0 6c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4 1.79-4 4-4zm0 22.4c-3.333 0-6.293-1.627-8.133-4.133C11.907 25.973 15.787 24 20 24s8.093 1.973 8.133 4.267C26.293 30.773 23.333 32.4 20 32.4z'/>
+                                                </svg>
+                                            </div>
+                                            <div className='flex-1 min-w-0'>
+                                                <div className='flex items-center justify-between gap-2'>
+                                                    <span className='text-sm font-bold text-white'>Pterodactyl Panel + Wings</span>
+                                                    <div className={cn(
+                                                        'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
+                                                        installPterodactyl ? 'bg-violet-500 border-violet-500' : 'border-neutral-600 bg-transparent'
+                                                    )}>
+                                                        {installPterodactyl && <CheckCircleIcon className='w-3.5 h-3.5 text-white' />}
+                                                    </div>
+                                                </div>
+                                                <p className='text-xs text-gray-400 mt-1 leading-relaxed'>
+                                                    Full auto-install of Pterodactyl Panel, Wings daemon, Docker, MariaDB, PHP 8.3 and cloudflared.
+                                                    Requires a Cloudflare Tunnel token. No IPv4 needed.
+                                                </p>
+                                                <div className='flex items-center gap-2 mt-2'>
+                                                    <span className='text-[10px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full border border-violet-500/30 font-semibold'>Free</span>
+                                                    <span className='text-[10px] bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full border border-orange-500/30 font-semibold'>Requires Ubuntu 22.04</span>
+                                                    <span className='text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30 font-semibold'>~15 min setup</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <AnimatePresence>
+                                            {installPterodactyl && pteroNeedsOsSwitch && !pteroOsWarningAccepted && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: -8 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, y: -8 }}
+                                                    className='flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4'
+                                                >
+                                                    <ExclamationTriangleIcon className='w-5 h-5 text-amber-400 shrink-0 mt-0.5' />
+                                                    <div className='flex-1 min-w-0'>
+                                                        <p className='text-xs font-bold text-amber-300 mb-1'>OS will be switched to Ubuntu 22.04</p>
+                                                        <p className='text-xs text-amber-200/80 leading-relaxed'>
+                                                            You selected <strong className='text-white'>{selectedTemplate?.name ?? 'a different OS'}</strong>.
+                                                            The Pterodactyl installer requires <strong className='text-white'>Ubuntu 22.04</strong>.
+                                                            Your VM will be deployed with Ubuntu 22.04 instead.
+                                                        </p>
+                                                        <div className='flex gap-2 mt-3'>
+                                                            <button
+                                                                type='button'
+                                                                onClick={e => { e.stopPropagation(); setPteroOsWarningAccepted(true) }}
+                                                                className='text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 transition cursor-pointer'
+                                                            >
+                                                                Yes, switch to Ubuntu 22.04
+                                                            </button>
+                                                            <button
+                                                                type='button'
+                                                                onClick={e => { e.stopPropagation(); setInstallPterodactyl(false) }}
+                                                                className='text-xs font-bold px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-gray-300 transition cursor-pointer'
+                                                            >
+                                                                No, deselect Pterodactyl
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
+                                        <AnimatePresence>
+                                            {installPterodactyl && (!pteroNeedsOsSwitch || pteroOsWarningAccepted) && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: 'auto' }}
+                                                    exit={{ opacity: 0, height: 0 }}
+                                                    className='overflow-hidden'
+                                                >
+                                                    <div className='rounded-xl border border-violet-500/20 bg-violet-950/20 p-4 space-y-4'>
+                                                        <h4 className='text-xs font-bold uppercase tracking-wider text-violet-300 flex items-center gap-2'>
+                                                            <CubeTransparentIcon className='w-3.5 h-3.5' />
+                                                            Pterodactyl Configuration
+                                                            <span className='text-[10px] text-rose-400 font-semibold normal-case tracking-normal ml-auto'>All fields required</span>
+                                                        </h4>
+
+                                                        <div className='space-y-1'>
+                                                            <label className='block text-[10px] font-bold uppercase tracking-wider text-gray-400'>
+                                                                Cloudflare Tunnel Token <span className='text-rose-400'>*</span>
+                                                            </label>
+                                                            <div className='relative'>
+                                                                <input
+                                                                    type={pteroShowToken ? 'text' : 'password'}
+                                                                    value={pteroCfToken}
+                                                                    onChange={e => setPteroCfToken(e.target.value)}
+                                                                    placeholder='eyJhIjoiY...'
+                                                                    className='w-full px-4 pr-12 py-2.5 rounded-xl border border-neutral-700 bg-black/60 text-white font-mono text-xs focus:outline-none focus:border-violet-500 transition'
+                                                                />
+                                                                <button
+                                                                    type='button'
+                                                                    onClick={() => setPteroShowToken(v => !v)}
+                                                                    className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition cursor-pointer'
+                                                                >
+                                                                    {pteroShowToken ? <EyeSlashIcon className='w-4 h-4' /> : <EyeIcon className='w-4 h-4' />}
+                                                                </button>
+                                                            </div>
+                                                            <p className='text-[10px] text-gray-500'>Zero Trust → Tunnels → Create tunnel → copy the token</p>
+                                                        </div>
+
+                                                        <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+                                                            {[
+                                                                { label: 'Panel Domain', value: pteroPanelFqdn, onChange: setPteroPanelFqdn, placeholder: 'panel.yourdomain.com', hint: 'No https://' },
+                                                                { label: 'Wings Domain', value: pteroWingsFqdn, onChange: setPteroWingsFqdn, placeholder: 'wings.yourdomain.com', hint: 'Separate subdomain for Wings' },
+                                                                { label: 'Admin Email', value: pteroAdminEmail, onChange: setPteroAdminEmail, placeholder: 'admin@example.com', hint: '' },
+                                                                { label: 'Admin Username', value: pteroAdminUsername, onChange: setPteroAdminUsername, placeholder: 'admin', hint: 'Alphanumeric only' },
+                                                                { label: 'First Name', value: pteroAdminFirstname, onChange: setPteroAdminFirstname, placeholder: 'Alex', hint: '' },
+                                                                { label: 'Last Name', value: pteroAdminLastname, onChange: setPteroAdminLastname, placeholder: 'Smith', hint: '' },
+                                                            ].map(field => (
+                                                                <div key={field.label} className='space-y-1'>
+                                                                    <label className='block text-[10px] font-bold uppercase tracking-wider text-gray-400'>
+                                                                        {field.label} <span className='text-rose-400'>*</span>
+                                                                    </label>
+                                                                    <input
+                                                                        type='text'
+                                                                        value={field.value}
+                                                                        onChange={e => field.onChange(e.target.value)}
+                                                                        placeholder={field.placeholder}
+                                                                        className='w-full px-4 py-2.5 rounded-xl border border-neutral-700 bg-black/60 text-white text-xs focus:outline-none focus:border-violet-500 transition'
+                                                                    />
+                                                                    {field.hint && <p className='text-[10px] text-gray-500'>{field.hint}</p>}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        <div className={cn(
+                                                            'flex items-center gap-2 text-xs font-semibold rounded-lg px-3 py-2 border transition-colors',
+                                                            pterodactylFormComplete
+                                                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                                        )}>
+                                                            {pterodactylFormComplete
+                                                                ? <><CheckCircleIcon className='w-4 h-4 shrink-0' /> All fields complete — ready to proceed</>  
+                                                                : <><ExclamationTriangleIcon className='w-4 h-4 shrink-0' /> Fill all fields above before proceeding</>}
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
+                                        <div className='flex justify-between items-center pt-3 border-t border-neutral-800'>
+                                            <button
+                                                type='button'
+                                                onClick={() => goToStep(2)}
+                                                className='py-2.5 px-5 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition'
+                                            >
+                                                <ArrowLeftIcon className='w-4 h-4' /> Back
+                                            </button>
+                                            <button
+                                                type='button'
+                                                onClick={() => goToStep(4)}
+                                                disabled={!pterodactylFormComplete}
+                                                title={!pterodactylFormComplete ? 'Complete or deselect Pterodactyl to proceed' : undefined}
+                                                className='py-2.5 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 transition cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed'
+                                            >
                                                 Next: Credentials <ArrowRightIcon className='w-4 h-4' />
                                             </button>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* ── STEP 3: Credentials ── */}
-                                {step === 3 && (
+                                {/* ── STEP 4: Credentials ── */}
+                                {step === 4 && (
                                     <div className='space-y-5 max-w-2xl mx-auto'>
                                         <h3 className='text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2'>
                                             <PasswordIcon className='w-4 h-4 text-amber-400' />
@@ -911,14 +1125,14 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                         <div className='flex justify-between items-center pt-3 border-t border-neutral-800'>
                                             <button
                                                 type='button'
-                                                onClick={() => goToStep(2)}
+                                                onClick={() => goToStep(3)}
                                                 className='py-2.5 px-5 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition'
                                             >
                                                 <ArrowLeftIcon className='w-4 h-4' /> Back
                                             </button>
                                             <button
                                                 type='button'
-                                                onClick={() => goToStep(4)}
+                                                onClick={() => goToStep(5)}
                                                 className='py-2.5 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 transition cursor-pointer active:scale-95'
                                             >
                                                 Review & Confirm <ArrowRightIcon className='w-4 h-4' />
@@ -927,8 +1141,8 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                     </div>
                                 )}
 
-                                {/* ── STEP 4: Review & Deploy ── */}
-                                {step === 4 && selectedPlan && (
+                                {/* ── STEP 5: Review & Deploy ── */}
+                                {step === 5 && selectedPlan && (
                                     <div className='space-y-5 max-w-2xl mx-auto'>
                                         <h3 className='text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2'>
                                             <SparklesIcon className='w-4 h-4 text-blue-400' />
@@ -944,9 +1158,16 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                     <h3 className='text-xl font-bold text-white'>{computedServerName}</h3>
                                                     <p className='text-xs text-gray-400 font-mono mt-0.5'>{computedFullHostname}</p>
                                                 </div>
-                                                <span className='ml-auto px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30'>
-                                                    {selectedTemplate?.name}
-                                                </span>
+                                                <div className='ml-auto flex flex-col items-end gap-1'>
+                                                    <span className='px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30'>
+                                                        {selectedTemplate?.name}
+                                                    </span>
+                                                    {installPterodactyl && (
+                                                        <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1'>
+                                                            <ServerStackIcon className='w-3 h-3' /> Pterodactyl
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             <div className='grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-4'>
@@ -985,7 +1206,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                             <div className='flex items-center gap-3'>
                                                 <button
                                                     type='button'
-                                                    onClick={() => goToStep(3)}
+                                                    onClick={() => goToStep(4)}
                                                     className='py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-gray-300 font-bold text-xs cursor-pointer transition'
                                                 >
                                                     Back
@@ -1003,6 +1224,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                         </div>
                                     </div>
                                 )}
+
                             </motion.div>
                         </AnimatePresence>
                     </div>

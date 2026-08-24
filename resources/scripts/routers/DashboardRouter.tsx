@@ -34,8 +34,14 @@ export const routes: Route[] = [
         path: 'pay/:uuid',
         element: lazyLoad(lazy(() => import('@/components/reseller/PublicPaymentCheckoutContainer'))),
     },
+    // Pterodactyl one-click deploy page
+    {
+        path: 'deploy/pterodactyl',
+        element: lazyLoad(lazy(() => import('@/pages/deploy/PterodactylDeployPage'))),
+    },
     ...serverRoutes,
 ]
+
 
 const DashboardRouter = () => {
     const { setRoutes } = useContext(NavigationBarContext)
