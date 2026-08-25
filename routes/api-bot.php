@@ -28,6 +28,16 @@ Route::post('/admin/generate-code',  [BotApiController::class, 'generatePromoCod
 Route::post('/admin/reset-user',     [BotApiController::class, 'adminResetUser']);
 Route::post('/admin/reset-all',      [BotApiController::class, 'adminResetAll']);
 
+// Balance Management
+Route::post('/admin/balance/add',    [BotApiController::class, 'adminAddBalance']);
+Route::post('/admin/balance/deduct', [BotApiController::class, 'adminDeductBalance']);
+Route::post('/admin/balance/set',    [BotApiController::class, 'adminSetBalance']);
+
+// Promo Code Revocation & User Promos
+Route::post('/admin/promo/revoke',               [BotApiController::class, 'revokePromoCode']);
+Route::get('/admin/user-promos/{discordId}',     [BotApiController::class, 'getUserPromoCodes']);
+Route::post('/admin/user-promos',                [BotApiController::class, 'getUserPromoCodes']);
+
 // Promo code redemption
 Route::post('/promo/redeem',         [BotApiController::class, 'redeemPromoCode']);
 

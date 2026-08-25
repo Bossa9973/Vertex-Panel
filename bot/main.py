@@ -234,8 +234,12 @@ async def help_cmd(interaction: discord.Interaction):
         value=(
             "`/userinfo @user` — View full user balance, spending, owned servers & lifecycle history (Admin Only)\n"
             "`/txinfo <ref_id>` — Inspect transaction, server creation/expiry date, price & specs (Admin Only)\n"
-            "`/vm-delete @user` — Staff VM deletion workflow with multi-step owner verification & HTML transcript (Admin Only)\n"
+            "`/add_balance @user amount [reason]` — Add BOLT balance directly to a user account (Admin Only)\n"
+            "`/deduct_balance @user amount [reason]` — Deduct BOLT balance directly from a user account (Admin Only)\n"
+            "`/set_balance @user amount [reason]` — Hard set a user's balance with multi-step safety warnings (Admin Only)\n"
             "`/add_bolts @user` — Interactive Bolt Promo Code Generator with History & Presets (Admin Only)\n"
+            "`/revoke_promo [@user]` — Select and revoke active promo codes via dropdown menu (Admin Only)\n"
+            "`/vm-delete @user` — Staff VM deletion workflow with multi-step owner verification & HTML transcript (Admin Only)\n"
             "`/set_log_channel #channel` — Configure the channel for admin action & redemption audit logs (Admin Only)\n"
             "`/add_invites @user amount` — Manually add invites\n"
             "`/add_messages @user amount` — Manually add messages\n"
@@ -475,7 +479,12 @@ def build_transaction_embed(data: dict) -> discord.Embed:
         embed.add_field(name="🖥️ Linked Server Specifications & Lifecycle", value=srv_val, inline=False)
 
     if promo:
-        p_status = "✅ Claimed" if promo.get("used") else "⏳ Unclaimed"
+        if promo.get("revoked"):
+            p_status = "🚫 Revoked"
+        elif promo.get("used"):
+            p_status = "✅ Claimed"
+        else:
+            p_status = "⏳ Unclaimed"
         admin_id = safe_str(promo.get("created_by_discord_id")).strip()
         admin_tag = f"<@{admin_id}>" if admin_id else "System"
         promo_amount = safe_float(promo.get("amount"))
@@ -700,7 +709,12 @@ class UserInfoView(discord.ui.View):
 
         lines = []
         for p in promos[:12]:
-            status = "✅ CLAIMED" if p.get("used") else "⏳ UNCLAIMED"
+            if p.get("revoked"):
+                status = "🚫 REVOKED"
+            elif p.get("used"):
+                status = "✅ CLAIMED"
+            else:
+                status = "⏳ UNCLAIMED"
             admin_id = safe_str(p.get("created_by_discord_id")).strip()
             admin_str = f"<@{admin_id}>" if admin_id else "System"
             date_str = format_date(p.get("created_at") or p.get("timestamp"))
@@ -2615,6 +2629,680 @@ async def add_bolts(interaction: discord.Interaction, user: Union[discord.Member
 
     flow = AddBoltsInteractiveFlow(admin=interaction.user, target_user=user, user_history_data=user_history_data)
     await flow.start(interaction)
+
+
+# ─── Admin: /add_balance ──────────────────────────────────────────────────────
+
+@bot.tree.command(name="add_balance", description="Add BOLTs / balance to a user's account (Admin Only)")
+@discord.app_commands.describe(
+    user="The target user to grant balance to",
+    amount="Amount of BOLTs to add",
+    reason="Optional reason for the balance grant"
+)
+async def add_balance(
+    interaction: discord.Interaction,
+    user: Union[discord.Member, discord.User],
+    amount: float,
+    reason: Optional[str] = "Admin Credit Grant"
+):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
+
+    if amount <= 0:
+        return await interaction.response.send_message("❌ Please enter a positive amount of BOLTs to add.", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True)
+
+    res = await panel_api.admin_add_balance(
+        discord_id=str(user.id),
+        amount=amount,
+        admin_discord_id=str(interaction.user.id),
+        reason=reason or "Admin Credit Grant"
+    )
+
+    if not res.get("ok"):
+        err_msg = res.get("error") or "Failed to add balance to user."
+        embed = discord.Embed(title="❌ Balance Add Failed", description=err_msg, color=0xEF4444)
+        embed.set_footer(text="Vertex Admin Control Panel | Balance Operations")
+        return await interaction.followup.send(embed=embed, ephemeral=True)
+
+    old_bal = safe_float(res.get("old_balance"))
+    new_bal = safe_float(res.get("new_balance"))
+    added_amt = safe_float(res.get("amount_added", amount))
+
+    success_embed = discord.Embed(
+        title="⚡ Balance Added Successfully",
+        description=f"Successfully credited **{user.mention}** with **⚡ {added_amt:,.2f} BOLTs**.",
+        color=0x22C55E
+    )
+    success_embed.add_field(name="Target User", value=f"{user.mention} (`{user.id}`)", inline=True)
+    success_embed.add_field(name="Amount Added", value=f"**+⚡ {added_amt:,.2f} BOLTs**", inline=True)
+    success_embed.add_field(name="Administrator", value=f"{interaction.user.mention}", inline=True)
+    success_embed.add_field(name="Previous Balance", value=f"`{old_bal:,.2f} BOLTs`", inline=True)
+    success_embed.add_field(name="New Balance", value=f"**`⚡ {new_bal:,.2f} BOLTs`**", inline=True)
+    success_embed.add_field(name="Reason", value=f"`{reason or 'Admin Credit Grant'}`", inline=True)
+    success_embed.set_footer(text="Vertex Admin Control Panel | Balance Operations")
+    success_embed.timestamp = discord.utils.utcnow()
+
+    await interaction.followup.send(embed=success_embed, ephemeral=True)
+
+    # Audit log
+    log_embed = discord.Embed(
+        title="⚡ [Audit Log] User Balance Added",
+        color=0x22C55E,
+        timestamp=discord.utils.utcnow()
+    )
+    log_embed.add_field(name="Admin", value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=True)
+    log_embed.add_field(name="Target User", value=f"{user.mention} (`{user.id}`)", inline=True)
+    log_embed.add_field(name="Amount Added", value=f"**+⚡ {added_amt:,.2f} BOLTs**", inline=True)
+    log_embed.add_field(name="Old Balance", value=f"`{old_bal:,.2f} BOLTs`", inline=True)
+    log_embed.add_field(name="New Balance", value=f"**`{new_bal:,.2f} BOLTs`**", inline=True)
+    log_embed.add_field(name="Reason", value=f"`{reason or 'Admin Credit Grant'}`", inline=True)
+    log_embed.set_footer(text="Vertex Admin Audit Logger")
+    await log_to_channel(log_embed)
+
+
+# ─── Admin: /deduct_balance ───────────────────────────────────────────────────
+
+@bot.tree.command(name="deduct_balance", description="Deduct BOLTs / balance from a user's account (Admin Only)")
+@discord.app_commands.describe(
+    user="The target user to deduct balance from",
+    amount="Amount of BOLTs to deduct",
+    reason="Optional reason for the deduction"
+)
+async def deduct_balance(
+    interaction: discord.Interaction,
+    user: Union[discord.Member, discord.User],
+    amount: float,
+    reason: Optional[str] = "Admin Credit Deduction"
+):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
+
+    if amount <= 0:
+        return await interaction.response.send_message("❌ Please enter a positive amount of BOLTs to deduct.", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True)
+
+    res = await panel_api.admin_deduct_balance(
+        discord_id=str(user.id),
+        amount=amount,
+        admin_discord_id=str(interaction.user.id),
+        reason=reason or "Admin Credit Deduction"
+    )
+
+    if not res.get("ok"):
+        err_msg = res.get("error") or "Failed to deduct balance from user."
+        embed = discord.Embed(title="❌ Balance Deduction Failed", description=err_msg, color=0xEF4444)
+        embed.set_footer(text="Vertex Admin Control Panel | Balance Operations")
+        return await interaction.followup.send(embed=embed, ephemeral=True)
+
+    old_bal = safe_float(res.get("old_balance"))
+    new_bal = safe_float(res.get("new_balance"))
+    deducted_amt = safe_float(res.get("amount_deducted", amount))
+
+    success_embed = discord.Embed(
+        title="📉 Balance Deducted Successfully",
+        description=f"Successfully deducted **⚡ {deducted_amt:,.2f} BOLTs** from **{user.mention}**.",
+        color=0xF59E0B
+    )
+    success_embed.add_field(name="Target User", value=f"{user.mention} (`{user.id}`)", inline=True)
+    success_embed.add_field(name="Amount Deducted", value=f"**-⚡ {deducted_amt:,.2f} BOLTs**", inline=True)
+    success_embed.add_field(name="Administrator", value=f"{interaction.user.mention}", inline=True)
+    success_embed.add_field(name="Previous Balance", value=f"`{old_bal:,.2f} BOLTs`", inline=True)
+    success_embed.add_field(name="New Balance", value=f"**`⚡ {new_bal:,.2f} BOLTs`**", inline=True)
+    success_embed.add_field(name="Reason", value=f"`{reason or 'Admin Credit Deduction'}`", inline=True)
+    success_embed.set_footer(text="Vertex Admin Control Panel | Balance Operations")
+    success_embed.timestamp = discord.utils.utcnow()
+
+    await interaction.followup.send(embed=success_embed, ephemeral=True)
+
+    # Audit log
+    log_embed = discord.Embed(
+        title="📉 [Audit Log] User Balance Deducted",
+        color=0xF59E0B,
+        timestamp=discord.utils.utcnow()
+    )
+    log_embed.add_field(name="Admin", value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=True)
+    log_embed.add_field(name="Target User", value=f"{user.mention} (`{user.id}`)", inline=True)
+    log_embed.add_field(name="Amount Deducted", value=f"**-⚡ {deducted_amt:,.2f} BOLTs**", inline=True)
+    log_embed.add_field(name="Old Balance", value=f"`{old_bal:,.2f} BOLTs`", inline=True)
+    log_embed.add_field(name="New Balance", value=f"**`{new_bal:,.2f} BOLTs`**", inline=True)
+    log_embed.add_field(name="Reason", value=f"`{reason or 'Admin Credit Deduction'}`", inline=True)
+    log_embed.set_footer(text="Vertex Admin Audit Logger")
+    await log_to_channel(log_embed)
+
+
+# ─── Admin: /set_balance (Hard Set Flow with Sequential Warnings) ─────────────
+
+class HardSetBalanceFlow:
+    """Manages the multi-step warning flow for hard setting user balance."""
+
+    def __init__(
+        self,
+        admin: discord.Member,
+        target_user: Union[discord.Member, discord.User],
+        target_amount: float,
+        reason: str,
+        user_history_data: dict
+    ):
+        self.admin = admin
+        self.target_user = target_user
+        self.target_amount = round(target_amount, 2)
+        self.reason = reason or "Staff Hard Ledger Override"
+        self.data = user_history_data or {}
+
+    def build_warning_step1_embed(self) -> discord.Embed:
+        d = self.data or {}
+        u = d.get("user") or {}
+        summary = d.get("summary") or {}
+        current_balance = safe_float(summary.get("current_balance", d.get("balance", 0.0)))
+        diff = round(self.target_amount - current_balance, 2)
+        diff_sign = "+" if diff > 0 else ""
+
+        user_name = safe_str(u.get("name") or self.target_user.name)
+        user_email = safe_str(u.get("email") or "Not Linked")
+
+        embed = discord.Embed(
+            title="⚠️ CRITICAL WARNING: Hard Set User Balance // Step 1 of 2",
+            description=(
+                f"You are initiating a **forceful ledger overwrite** for **{self.target_user.mention}**.\n\n"
+                f"• **Account:** {user_name} (`{user_email}`)\n"
+                f"• **Current Balance:** `{current_balance:,.2f} BOLTs`\n"
+                f"• **Target Hard Balance:** `⚡ {self.target_amount:,.2f} BOLTs`\n"
+                f"• **Net Ledger Adjustment:** `⚡ {diff_sign}{diff:,.2f} BOLTs`\n"
+                f"• **Reason:** `{self.reason}`\n\n"
+                "⚠️ **IMPORTANT NOTICE:**\n"
+                "Hard setting balance **forcefully overwrites** the user's available credits in the database directly. "
+                "All future server renewals and billing cycles will immediately compute against this new hard balance."
+            ),
+            color=0xF59E0B
+        )
+        embed.set_footer(text="Warning Step 1/2 • Vertex High-Impact Balance Override")
+        return embed
+
+    def build_warning_step2_embed(self) -> discord.Embed:
+        d = self.data or {}
+        summary = d.get("summary") or {}
+        current_balance = safe_float(summary.get("current_balance", d.get("balance", 0.0)))
+        diff = round(self.target_amount - current_balance, 2)
+        diff_sign = "+" if diff > 0 else ""
+
+        embed = discord.Embed(
+            title="🚨 SEVERE WARNING: Final Verification Required // Step 2 of 2",
+            description=(
+                "🛑 **ARE YOU ABSOLUTELY SURE YOU WANT TO OVERWRITE THIS BALANCE?**\n\n"
+                f"• **Target Recipient:** {self.target_user.mention} (`{self.target_user.id}`)\n"
+                f"• **Current Balance:** `{current_balance:,.2f} BOLTs`\n"
+                f"• **NEW HARD BALANCE:** **`⚡ {self.target_amount:,.2f} BOLTs`**\n"
+                f"• **Net Change:** `⚡ {diff_sign}{diff:,.2f} BOLTs`\n"
+                f"• **Operator:** {self.admin.mention} (`{self.admin.id}`)\n"
+                f"• **Logged Reason:** `{self.reason}`\n\n"
+                "🔥 **Clicking confirm will immediately execute the database update.** "
+                "This action cannot be undone automatically and will be permanently recorded in audit logs."
+            ),
+            color=0xEF4444
+        )
+        embed.set_footer(text="Warning Step 2/2 • Final Confirmation Required")
+        return embed
+
+    async def start(self, interaction: discord.Interaction):
+        flow = self
+
+        class Warning1View(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+
+            async def interaction_check(self, i: discord.Interaction) -> bool:
+                if i.user.id != flow.admin.id:
+                    await i.response.send_message("❌ This confirmation belongs to another administrator.", ephemeral=True)
+                    return False
+                return True
+
+            @discord.ui.button(label="⚠️ Acknowledge Risk & Proceed to Final Warning", style=discord.ButtonStyle.danger, emoji="⚠️")
+            async def on_proceed(self, i: discord.Interaction, btn: discord.ui.Button):
+                await flow.show_warning_step2(i)
+
+            @discord.ui.button(label="❌ Abort & Cancel", style=discord.ButtonStyle.secondary, emoji="✖️")
+            async def on_cancel(self, i: discord.Interaction, btn: discord.ui.Button):
+                cancel_embed = discord.Embed(
+                    title="❌ Action Aborted",
+                    description="Hard balance overwrite was cancelled. No changes were made.",
+                    color=0x9CA3AF
+                )
+                await i.response.edit_message(embed=cancel_embed, view=None)
+
+        await interaction.followup.send(embed=self.build_warning_step1_embed(), view=Warning1View(), ephemeral=True)
+
+    async def show_warning_step2(self, interaction: discord.Interaction):
+        flow = self
+
+        class Warning2View(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+
+            async def interaction_check(self, i: discord.Interaction) -> bool:
+                if i.user.id != flow.admin.id:
+                    await i.response.send_message("❌ This confirmation belongs to another administrator.", ephemeral=True)
+                    return False
+                return True
+
+            @discord.ui.button(label="🔴 OVERWRITE BALANCE NOW", style=discord.ButtonStyle.danger, emoji="🔥")
+            async def on_confirm(self, i: discord.Interaction, btn: discord.ui.Button):
+                await flow.execute_hard_set(i)
+
+            @discord.ui.button(label="❌ Abort & Cancel", style=discord.ButtonStyle.secondary, emoji="✖️")
+            async def on_cancel(self, i: discord.Interaction, btn: discord.ui.Button):
+                cancel_embed = discord.Embed(
+                    title="❌ Action Aborted",
+                    description="Hard balance overwrite was cancelled. No changes were made.",
+                    color=0x9CA3AF
+                )
+                await i.response.edit_message(embed=cancel_embed, view=None)
+
+        await interaction.response.edit_message(embed=self.build_warning_step2_embed(), view=Warning2View())
+
+    async def execute_hard_set(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        res = await panel_api.admin_set_balance(
+            discord_id=str(self.target_user.id),
+            amount=self.target_amount,
+            admin_discord_id=str(self.admin.id),
+            reason=self.reason
+        )
+
+        if not res.get("ok"):
+            err_msg = res.get("error") or "Failed to hard set user balance."
+            err_embed = discord.Embed(title="❌ Hard Balance Overwrite Failed", description=err_msg, color=0xEF4444)
+            return await interaction.edit_original_response(embed=err_embed, view=None)
+
+        old_bal = safe_float(res.get("old_balance"))
+        new_bal = safe_float(res.get("new_balance", self.target_amount))
+        diff = safe_float(res.get("difference", new_bal - old_bal))
+        diff_sign = "+" if diff > 0 else ""
+
+        success_embed = discord.Embed(
+            title="✅ Balance Hard Overwrite Completed",
+            description=f"Successfully forced ledger balance for **{self.target_user.mention}** to **⚡ {new_bal:,.2f} BOLTs**.",
+            color=0x22C55E
+        )
+        success_embed.add_field(name="Target User", value=f"{self.target_user.mention} (`{self.target_user.id}`)", inline=True)
+        success_embed.add_field(name="Previous Balance", value=f"`{old_bal:,.2f} BOLTs`", inline=True)
+        success_embed.add_field(name="New Hard Balance", value=f"**`⚡ {new_bal:,.2f} BOLTs`**", inline=True)
+        success_embed.add_field(name="Net Adjustment", value=f"`⚡ {diff_sign}{diff:,.2f} BOLTs`", inline=True)
+        success_embed.add_field(name="Administrator", value=f"{self.admin.mention}", inline=True)
+        success_embed.add_field(name="Reason", value=f"`{self.reason}`", inline=True)
+        success_embed.set_footer(text="Vertex Admin Control Panel | Balance Overwrite Complete")
+        success_embed.timestamp = discord.utils.utcnow()
+
+        await interaction.edit_original_response(embed=success_embed, view=None)
+
+        # High priority audit log
+        log_embed = discord.Embed(
+            title="🚨 [Audit Log] User Balance Hard Overwrite Executed",
+            color=0xEF4444,
+            timestamp=discord.utils.utcnow()
+        )
+        log_embed.add_field(name="Admin Operator", value=f"{self.admin.mention} (`{self.admin.id}`)", inline=True)
+        log_embed.add_field(name="Target User", value=f"{self.target_user.mention} (`{self.target_user.id}`)", inline=True)
+        log_embed.add_field(name="Previous Balance", value=f"`{old_bal:,.2f} BOLTs`", inline=True)
+        log_embed.add_field(name="New Hard Balance", value=f"**`⚡ {new_bal:,.2f} BOLTs`**", inline=True)
+        log_embed.add_field(name="Net Difference", value=f"`⚡ {diff_sign}{diff:,.2f} BOLTs`", inline=True)
+        log_embed.add_field(name="Logged Reason", value=f"`{self.reason}`", inline=True)
+        log_embed.set_footer(text="Vertex Admin Security & Audit Logger")
+        await log_to_channel(log_embed)
+
+
+@bot.tree.command(name="set_balance", description="Hard set a user's balance with multi-step safety warnings (Admin Only)")
+@discord.app_commands.describe(
+    user="The target user to overwrite balance for",
+    amount="Target hard balance amount (BOLTs)",
+    reason="Optional reason for the hard balance set"
+)
+async def set_balance(
+    interaction: discord.Interaction,
+    user: Union[discord.Member, discord.User],
+    amount: float,
+    reason: Optional[str] = "Staff Hard Ledger Override"
+):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
+
+    if amount < 0:
+        return await interaction.response.send_message("❌ Balance amount cannot be negative.", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True)
+
+    user_history_data = await panel_api.get_user_history(str(user.id))
+    if not user_history_data.get("ok") or not user_history_data.get("user"):
+        embed = discord.Embed(
+            title="❌ User Account Not Found",
+            description=f"Could not find a linked Vertex panel account for {user.mention} (`{user.id}`). The user must sign in and link their Discord account in Account Settings first.",
+            color=0xEF4444
+        )
+        return await interaction.followup.send(embed=embed, ephemeral=True)
+
+    flow = HardSetBalanceFlow(
+        admin=interaction.user,
+        target_user=user,
+        target_amount=amount,
+        reason=reason or "Staff Hard Ledger Override",
+        user_history_data=user_history_data
+    )
+    await flow.start(interaction)
+
+
+# ─── Admin: /revoke_promo (Interactive User Select & Burger Dropdown Menu) ───
+
+class RevokePromoInteractiveFlow:
+    """Manages the interactive promo revocation flow with UserSelect and Dropdown Select Menu."""
+
+    def __init__(self, admin: discord.Member, target_user: Optional[Union[discord.Member, discord.User]] = None):
+        self.admin = admin
+        self.target_user = target_user
+        self.promos: list[dict] = []
+        self.selected_promo: Optional[dict] = None
+
+    async def start(self, interaction: discord.Interaction):
+        if self.target_user:
+            await self.load_and_display_promos(interaction)
+        else:
+            await self.show_user_select(interaction)
+
+    async def show_user_select(self, interaction: discord.Interaction):
+        flow = self
+
+        embed = discord.Embed(
+            title="🎫 Revoke Promo Code // Step 1: Select User",
+            description="Please choose the target user below whose active promo codes you wish to inspect and revoke:",
+            color=0x3B82F6
+        )
+        embed.set_footer(text="Vertex Admin Control Panel | Promo Code Revocation")
+
+        class UserSelectView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+
+            async def interaction_check(self, i: discord.Interaction) -> bool:
+                if i.user.id != flow.admin.id:
+                    await i.response.send_message("❌ This session belongs to another administrator.", ephemeral=True)
+                    return False
+                return True
+
+            @discord.ui.select(cls=discord.ui.UserSelect, placeholder="🍔 Select a user to inspect promo codes...")
+            async def on_user_selected(self, i: discord.Interaction, select: discord.ui.UserSelect):
+                flow.target_user = select.values[0]
+                await flow.load_and_display_promos(i)
+
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, view=UserSelectView(), ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, view=UserSelectView(), ephemeral=True)
+
+    async def load_and_display_promos(self, interaction: discord.Interaction):
+        flow = self
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        promos_res = await panel_api.get_user_promos(str(self.target_user.id))
+        all_promos = promos_res.get("promos") if promos_res.get("ok") else []
+
+        if not all_promos:
+            history_res = await panel_api.get_user_history(str(self.target_user.id))
+            all_promos = history_res.get("promo_history") or []
+
+        self.promos = all_promos
+        active_promos = [p for p in all_promos if not p.get("used") and not p.get("revoked")]
+
+        if not active_promos:
+            if not all_promos:
+                embed = discord.Embed(
+                    title="ℹ️ No Promo Codes Found",
+                    description=f"No promo codes have ever been generated for **{self.target_user.mention}** (`{self.target_user.id}`).",
+                    color=0x9CA3AF
+                )
+            else:
+                embed = discord.Embed(
+                    title="ℹ️ No Active Unredeemed Promo Codes",
+                    description=f"**{self.target_user.mention}** has no active unredeemed promo codes available to revoke.",
+                    color=0xF59E0B
+                )
+                p_lines = []
+                for p in all_promos[:8]:
+                    st = "🚫 REVOKED" if p.get("revoked") else "✅ CLAIMED" if p.get("used") else "⏳ UNCLAIMED"
+                    code = safe_str(p.get("code"))
+                    amt = safe_float(p.get("amount"))
+                    date = format_date(p.get("created_at") or p.get("timestamp"))
+                    p_lines.append(f"• `{code}` (**⚡ {amt:,.0f} BOLTs**) — {st} (`{date}`)")
+                add_chunked_fields(embed=embed, field_title="Past Promo Code History", lines=p_lines, max_len=1000)
+
+            embed.set_footer(text="Vertex Admin Control Panel | Promo Revocation")
+            if interaction.response.is_done():
+                return await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                return await interaction.response.edit_message(embed=embed, view=None)
+
+        # Build burger dropdown select menu
+        embed = discord.Embed(
+            title="🍔 Select Promo Code to Revoke // Step 2",
+            description=(
+                f"Found **{len(active_promos)}** active unredeemed promo code(s) for **{self.target_user.mention}**.\n\n"
+                "Please select a promo code from the dropdown menu below to invalidate and revoke it:"
+            ),
+            color=0xF59E0B
+        )
+
+        options = []
+        for p in active_promos[:25]:
+            code = safe_str(p.get("code")).strip()
+            amt = safe_float(p.get("amount"))
+            date = format_date(p.get("created_at") or p.get("timestamp"))
+            reason = truncate_text(p.get("reason") or "Admin Gift", 45)
+            options.append(discord.SelectOption(
+                label=f"⚡ {amt:,.0f} BOLTs — {code}",
+                value=code,
+                description=f"Issued {date} • {reason}"[:100],
+                emoji="🎫"
+            ))
+
+        class PromoDropdown(discord.ui.Select):
+            def __init__(self):
+                super().__init__(placeholder="🍔 Select a promo code from the menu...", min_values=1, max_values=1, options=options)
+
+            async def callback(self, i: discord.Interaction):
+                selected_code = self.values[0]
+                matched = next((p for p in active_promos if safe_str(p.get("code")).strip() == selected_code), None)
+                flow.selected_promo = matched or {"code": selected_code, "amount": 0}
+                await flow.show_revoke_confirmation(i)
+
+        class PromoSelectView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+                self.add_item(PromoDropdown())
+
+            async def interaction_check(self, i: discord.Interaction) -> bool:
+                if i.user.id != flow.admin.id:
+                    await i.response.send_message("❌ This session belongs to another administrator.", ephemeral=True)
+                    return False
+                return True
+
+            @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary, row=1)
+            async def on_cancel(self, i: discord.Interaction, btn: discord.ui.Button):
+                cancel_embed = discord.Embed(title="❌ Cancelled", description="Promo code revocation was cancelled.", color=0x9CA3AF)
+                await i.response.edit_message(embed=cancel_embed, view=None)
+
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, view=PromoSelectView(), ephemeral=True)
+        else:
+            await interaction.response.edit_message(embed=embed, view=PromoSelectView())
+
+    async def show_revoke_confirmation(self, interaction: discord.Interaction):
+        flow = self
+        promo = self.selected_promo or {}
+        code = safe_str(promo.get("code"))
+        amt = safe_float(promo.get("amount"))
+        reason = safe_str(promo.get("reason") or "Admin Gift")
+        date = format_date(promo.get("created_at") or promo.get("timestamp"))
+
+        embed = discord.Embed(
+            title="⚠️ Confirm Promo Code Revocation",
+            description=(
+                f"Are you sure you want to permanently revoke promo code **`{code}`**?\n\n"
+                f"• **Recipient:** {self.target_user.mention} (`{self.target_user.id}`)\n"
+                f"• **Value:** `⚡ {amt:,.2f} BOLTs`\n"
+                f"• **Original Reason:** *{reason}*\n"
+                f"• **Issued On:** `{date}`\n\n"
+                "🚫 **Once revoked, this promo code will be permanently invalidated and cannot be redeemed on the Discord Bot or Web Panel.**"
+            ),
+            color=0xEF4444
+        )
+
+        class ConfirmRevokeView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+
+            async def interaction_check(self, i: discord.Interaction) -> bool:
+                if i.user.id != flow.admin.id:
+                    await i.response.send_message("❌ This session belongs to another administrator.", ephemeral=True)
+                    return False
+                return True
+
+            @discord.ui.button(label="🗑️ Revoke Code Now", style=discord.ButtonStyle.danger, emoji="🗑️")
+            async def on_revoke_now(self, i: discord.Interaction, btn: discord.ui.Button):
+                await flow.execute_revocation(i, code=code, reason="Revoked by Administrator")
+
+            @discord.ui.button(label="✏️ Custom Revoke Reason", style=discord.ButtonStyle.secondary, emoji="✏️")
+            async def on_custom_reason(self, i: discord.Interaction, btn: discord.ui.Button):
+                async def reason_cb(modal_i: discord.Interaction, custom_reason: str):
+                    await flow.execute_revocation(modal_i, code=code, reason=custom_reason)
+
+                await i.response.send_modal(CustomReasonModal(reason_cb))
+
+            @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+            async def on_cancel(self, i: discord.Interaction, btn: discord.ui.Button):
+                cancel_embed = discord.Embed(title="❌ Cancelled", description="Promo code revocation was cancelled.", color=0x9CA3AF)
+                await i.response.edit_message(embed=cancel_embed, view=None)
+
+        await interaction.response.edit_message(embed=embed, view=ConfirmRevokeView())
+
+    async def execute_revocation(self, interaction: discord.Interaction, code: str, reason: str):
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        res = await panel_api.revoke_promo_code(
+            code=code,
+            admin_discord_id=str(self.admin.id),
+            reason=reason
+        )
+
+        if not res.get("ok"):
+            err_msg = res.get("error") or "Failed to revoke promo code."
+            err_embed = discord.Embed(title="❌ Revocation Failed", description=err_msg, color=0xEF4444)
+            if interaction.response.is_done():
+                return await interaction.followup.send(embed=err_embed, ephemeral=True)
+            else:
+                return await interaction.response.edit_message(embed=err_embed, view=None)
+
+        p_info = res.get("promo") or {}
+        amt = safe_float(p_info.get("amount", self.selected_promo.get("amount") if self.selected_promo else 0))
+
+        success_embed = discord.Embed(
+            title="🚫 Promo Code Revoked Successfully",
+            description=f"Promo code **`{code}`** (**⚡ {amt:,.0f} BOLTs**) has been permanently invalidated.",
+            color=0xEF4444
+        )
+        success_embed.add_field(name="Target Recipient", value=f"{self.target_user.mention} (`{self.target_user.id}`)", inline=True)
+        success_embed.add_field(name="Revoked Code", value=f"```\n{code}\n```", inline=False)
+        success_embed.add_field(name="Value", value=f"**⚡ {amt:,.2f} BOLTs**", inline=True)
+        success_embed.add_field(name="Revoked By", value=f"{self.admin.mention}", inline=True)
+        success_embed.add_field(name="Revocation Reason", value=f"`{reason}`", inline=True)
+        success_embed.add_field(name="Timestamp", value=f"<t:{int(time.time())}:F>", inline=True)
+        success_embed.set_footer(text="Vertex Admin Control Panel | Promo Code Invalidation")
+        success_embed.timestamp = discord.utils.utcnow()
+
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=success_embed, ephemeral=True)
+        else:
+            await interaction.response.edit_message(embed=success_embed, view=None)
+
+        # Audit log
+        log_embed = discord.Embed(
+            title="🚫 [Audit Log] Bolt Promo Code Revoked",
+            color=0xEF4444,
+            timestamp=discord.utils.utcnow()
+        )
+        log_embed.add_field(name="Admin", value=f"{self.admin.mention} (`{self.admin.id}`)", inline=True)
+        log_embed.add_field(name="Recipient", value=f"{self.target_user.mention} (`{self.target_user.id}`)", inline=True)
+        log_embed.add_field(name="Code", value=f"`{code}`", inline=True)
+        log_embed.add_field(name="Amount", value=f"**⚡ {amt:,.0f} BOLTs**", inline=True)
+        log_embed.add_field(name="Reason", value=f"`{reason}`", inline=True)
+        log_embed.set_footer(text="Vertex Admin Security & Audit Logger")
+        await log_to_channel(log_embed)
+
+
+@bot.tree.command(name="revoke_promo", description="Revoke an active promo code generated for a user (Admin Only)")
+@discord.app_commands.describe(
+    user="Optional target user to inspect promo codes for"
+)
+async def revoke_promo(
+    interaction: discord.Interaction,
+    user: Optional[Union[discord.Member, discord.User]] = None
+):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
+
+    flow = RevokePromoInteractiveFlow(admin=interaction.user, target_user=user)
+    await flow.start(interaction)
+
+
+# ─── Admin: /balance (Command Group) ──────────────────────────────────────────
+
+balance_group = discord.app_commands.Group(name="balance", description="Manage user balances and credits (Admin Only)")
+
+@balance_group.command(name="add", description="Add BOLTs / balance to a user account (Admin Only)")
+@discord.app_commands.describe(
+    user="The target user to grant balance to",
+    amount="Amount of BOLTs to add",
+    reason="Optional reason for the balance grant"
+)
+async def balance_add(
+    interaction: discord.Interaction,
+    user: Union[discord.Member, discord.User],
+    amount: float,
+    reason: Optional[str] = "Admin Credit Grant"
+):
+    await add_balance.callback(interaction, user=user, amount=amount, reason=reason)
+
+@balance_group.command(name="deduct", description="Deduct BOLTs / balance from a user account (Admin Only)")
+@discord.app_commands.describe(
+    user="The target user to deduct balance from",
+    amount="Amount of BOLTs to deduct",
+    reason="Optional reason for the deduction"
+)
+async def balance_deduct(
+    interaction: discord.Interaction,
+    user: Union[discord.Member, discord.User],
+    amount: float,
+    reason: Optional[str] = "Admin Credit Deduction"
+):
+    await deduct_balance.callback(interaction, user=user, amount=amount, reason=reason)
+
+@balance_group.command(name="set", description="Hard set a user's balance with safety warnings (Admin Only)")
+@discord.app_commands.describe(
+    user="The target user to overwrite balance for",
+    amount="Target hard balance amount (BOLTs)",
+    reason="Optional reason for the hard balance set"
+)
+async def balance_set(
+    interaction: discord.Interaction,
+    user: Union[discord.Member, discord.User],
+    amount: float,
+    reason: Optional[str] = "Staff Hard Ledger Override"
+):
+    await set_balance.callback(interaction, user=user, amount=amount, reason=reason)
+
+bot.tree.add_command(balance_group)
 
 
 # ─── Admin: /add_messages ─────────────────────────────────────────────────────

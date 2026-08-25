@@ -155,6 +155,13 @@ class AccountController extends ApiController
             ], 409);
         }
 
+        if (!empty($promo->revoked)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This promo code has been revoked by an administrator and can no longer be redeemed.',
+            ], 410);
+        }
+
         if ($promo->discord_id !== $user->discord_id) {
             return response()->json([
                 'success' => false,

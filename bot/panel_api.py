@@ -131,6 +131,64 @@ async def generate_promo_code(discord_id: str, amount: int, admin_discord_id: st
     })
     return data["code"]
 
+# ─── Balance Operations ──────────────────────────────────────────────────────
+
+async def admin_add_balance(discord_id: str, amount: float, admin_discord_id: str, reason: str = "Admin Credit Grant") -> dict:
+    """Add balance (BOLTs) to a user's account."""
+    try:
+        return await _post("/admin/balance/add", {
+            "discord_id":       str(discord_id).strip(),
+            "amount":           amount,
+            "admin_discord_id": str(admin_discord_id).strip(),
+            "reason":           reason,
+        })
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+async def admin_deduct_balance(discord_id: str, amount: float, admin_discord_id: str, reason: str = "Admin Credit Deduction") -> dict:
+    """Deduct balance (BOLTs) from a user's account."""
+    try:
+        return await _post("/admin/balance/deduct", {
+            "discord_id":       str(discord_id).strip(),
+            "amount":           amount,
+            "admin_discord_id": str(admin_discord_id).strip(),
+            "reason":           reason,
+        })
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+async def admin_set_balance(discord_id: str, amount: float, admin_discord_id: str, reason: str = "Staff Hard Balance Override") -> dict:
+    """Hard set a user's balance to an exact amount."""
+    try:
+        return await _post("/admin/balance/set", {
+            "discord_id":       str(discord_id).strip(),
+            "amount":           amount,
+            "admin_discord_id": str(admin_discord_id).strip(),
+            "reason":           reason,
+        })
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+# ─── Promo Code Revocation & User Promos ─────────────────────────────────────
+
+async def get_user_promos(discord_id: str) -> dict:
+    """Fetch all promo codes issued to a Discord user."""
+    try:
+        return await _get(f"/admin/user-promos/{str(discord_id).strip()}")
+    except Exception as e:
+        return {"ok": False, "error": str(e), "promos": []}
+
+async def revoke_promo_code(code: str, admin_discord_id: str, reason: str = "Revoked by Administrator") -> dict:
+    """Revoke an active promo code."""
+    try:
+        return await _post("/admin/promo/revoke", {
+            "code":             str(code).strip().upper(),
+            "admin_discord_id": str(admin_discord_id).strip(),
+            "reason":           reason,
+        })
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 # ─── User History & Tracking ──────────────────────────────────────────────────
 
 async def get_user_history(identifier: str) -> dict:

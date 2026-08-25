@@ -286,6 +286,430 @@ class BotApiController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Admin: add balance (BOLTs) to a user account.
+     * POST /api/bot/admin/balance/add   { discord_id, amount, admin_discord_id, reason? }
+     */
+    public function adminAddBalance(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $request->validate([
+            'discord_id'       => 'required|string|max:32',
+            'amount'           => 'required|numeric|min:0.01',
+            'admin_discord_id' => 'required|string|max:32',
+            'reason'           => 'nullable|string|max:255',
+        ]);
+
+        $discordId = (string) $request->input('discord_id');
+        $adminDiscordId = (string) $request->input('admin_discord_id');
+        $amount = round((float) $request->input('amount'), 2);
+        $reason = $request->input('reason') ?: 'Admin Credit Grant';
+
+        /** @var User|null $user */
+        $user = User::where('discord_id', $discordId)->first();
+        if (!$user) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "No linked Vertex panel account found for Discord user <@{$discordId}>. The user must sign in and link their Discord account in Account Settings first.",
+            ], 404);
+        }
+
+        $oldBalance = round((float) ($user->credits ?? 0), 2);
+        $newBalance = round($oldBalance + $amount, 2);
+
+        try {
+            DB::transaction(function () use ($user, $amount, $newBalance, $reason, $adminDiscordId, $discordId) {
+                DB::table('users')->where('id', $user->id)->update(['credits' => $newBalance]);
+
+                try {
+                    $user->creditTransactions()->create([
+                        'amount'       => $amount,
+                        'type'         => 'admin_deposit',
+                        'description'  => "Admin Balance Grant: {$reason}",
+                        'reference_id' => 'ADMIN-ADD-' . strtoupper(Str::random(8)),
+                    ]);
+                } catch (\Throwable $t) {
+                    \Illuminate\Support\Facades\Log::warning("Credit transaction record skipped: " . $t->getMessage());
+                }
+
+                try {
+                    \Convoy\Facades\Activity::event('admin:balance-add')
+                        ->actor($user)
+                        ->description("Admin <@{$adminDiscordId}> added {$amount} BOLTs to {$user->name} (<@{$discordId}>). Reason: '{$reason}'")
+                        ->property([
+                            'admin_discord_id' => $adminDiscordId,
+                            'target_user_id'   => $user->id,
+                            'target_discord_id'=> $discordId,
+                            'amount_added'     => $amount,
+                            'old_balance'      => $user->credits,
+                            'new_balance'      => $newBalance,
+                            'reason'           => $reason,
+                        ])
+                        ->withRequestMetadata()
+                        ->log();
+                } catch (\Throwable $t) {}
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to add balance: " . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Database error occurred while adding balance: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'ok'           => true,
+            'user'         => [
+                'id'         => $user->id,
+                'name'       => $user->name,
+                'email'      => $user->email,
+                'discord_id' => $user->discord_id,
+            ],
+            'amount_added' => $amount,
+            'old_balance'  => $oldBalance,
+            'new_balance'  => $newBalance,
+            'reason'       => $reason,
+        ]);
+    }
+
+    /**
+     * Admin: deduct balance (BOLTs) from a user account.
+     * POST /api/bot/admin/balance/deduct   { discord_id, amount, admin_discord_id, reason? }
+     */
+    public function adminDeductBalance(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $request->validate([
+            'discord_id'       => 'required|string|max:32',
+            'amount'           => 'required|numeric|min:0.01',
+            'admin_discord_id' => 'required|string|max:32',
+            'reason'           => 'nullable|string|max:255',
+        ]);
+
+        $discordId = (string) $request->input('discord_id');
+        $adminDiscordId = (string) $request->input('admin_discord_id');
+        $amount = round((float) $request->input('amount'), 2);
+        $reason = $request->input('reason') ?: 'Admin Credit Deduction';
+
+        /** @var User|null $user */
+        $user = User::where('discord_id', $discordId)->first();
+        if (!$user) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "No linked Vertex panel account found for Discord user <@{$discordId}>. The user must sign in and link their Discord account in Account Settings first.",
+            ], 404);
+        }
+
+        $oldBalance = round((float) ($user->credits ?? 0), 2);
+        if ($oldBalance <= 0) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "User {$user->name} already has 0.00 BOLTs balance. Cannot deduct balance further.",
+            ], 422);
+        }
+
+        $newBalance = max(0.0, round($oldBalance - $amount, 2));
+        $actualDeducted = round($oldBalance - $newBalance, 2);
+
+        try {
+            DB::transaction(function () use ($user, $actualDeducted, $oldBalance, $newBalance, $reason, $adminDiscordId, $discordId) {
+                DB::table('users')->where('id', $user->id)->update(['credits' => $newBalance]);
+
+                try {
+                    $user->creditTransactions()->create([
+                        'amount'       => -$actualDeducted,
+                        'type'         => 'admin_deduction',
+                        'description'  => "Admin Balance Deduction: {$reason}",
+                        'reference_id' => 'ADMIN-DED-' . strtoupper(Str::random(8)),
+                    ]);
+                } catch (\Throwable $t) {
+                    \Illuminate\Support\Facades\Log::warning("Credit transaction record skipped: " . $t->getMessage());
+                }
+
+                try {
+                    \Convoy\Facades\Activity::event('admin:balance-deduct')
+                        ->actor($user)
+                        ->description("Admin <@{$adminDiscordId}> deducted {$actualDeducted} BOLTs from {$user->name} (<@{$discordId}>). Reason: '{$reason}'")
+                        ->property([
+                            'admin_discord_id' => $adminDiscordId,
+                            'target_user_id'   => $user->id,
+                            'target_discord_id'=> $discordId,
+                            'amount_deducted'  => $actualDeducted,
+                            'old_balance'      => $oldBalance,
+                            'new_balance'      => $newBalance,
+                            'reason'           => $reason,
+                        ])
+                        ->withRequestMetadata()
+                        ->log();
+                } catch (\Throwable $t) {}
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to deduct balance: " . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Database error occurred while deducting balance: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'ok'              => true,
+            'user'            => [
+                'id'         => $user->id,
+                'name'       => $user->name,
+                'email'      => $user->email,
+                'discord_id' => $user->discord_id,
+            ],
+            'amount_deducted' => $actualDeducted,
+            'old_balance'     => $oldBalance,
+            'new_balance'     => $newBalance,
+            'reason'          => $reason,
+        ]);
+    }
+
+    /**
+     * Admin: hard set a user's balance to an exact amount.
+     * POST /api/bot/admin/balance/set   { discord_id, amount, admin_discord_id, reason? }
+     */
+    public function adminSetBalance(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $request->validate([
+            'discord_id'       => 'required|string|max:32',
+            'amount'           => 'required|numeric|min:0',
+            'admin_discord_id' => 'required|string|max:32',
+            'reason'           => 'nullable|string|max:255',
+        ]);
+
+        $discordId = (string) $request->input('discord_id');
+        $adminDiscordId = (string) $request->input('admin_discord_id');
+        $targetBalance = round((float) $request->input('amount'), 2);
+        $reason = $request->input('reason') ?: 'Staff Hard Ledger Override';
+
+        /** @var User|null $user */
+        $user = User::where('discord_id', $discordId)->first();
+        if (!$user) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "No linked Vertex panel account found for Discord user <@{$discordId}>. The user must sign in and link their Discord account in Account Settings first.",
+            ], 404);
+        }
+
+        $oldBalance = round((float) ($user->credits ?? 0), 2);
+        $diff = round($targetBalance - $oldBalance, 2);
+
+        try {
+            DB::transaction(function () use ($user, $oldBalance, $targetBalance, $diff, $reason, $adminDiscordId, $discordId) {
+                DB::table('users')->where('id', $user->id)->update(['credits' => $targetBalance]);
+
+                try {
+                    $user->creditTransactions()->create([
+                        'amount'       => $diff,
+                        'type'         => 'admin_hard_set',
+                        'description'  => "Admin Hard Balance Set ({$oldBalance} -> {$targetBalance} BOLTs): {$reason}",
+                        'reference_id' => 'ADMIN-SET-' . strtoupper(Str::random(8)),
+                    ]);
+                } catch (\Throwable $t) {
+                    \Illuminate\Support\Facades\Log::warning("Credit transaction record skipped: " . $t->getMessage());
+                }
+
+                try {
+                    \Convoy\Facades\Activity::event('admin:balance-hard-set')
+                        ->actor($user)
+                        ->description("Admin <@{$adminDiscordId}> forcefully set {$user->name} (<@{$discordId}>) balance from {$oldBalance} to {$targetBalance} BOLTs (diff: {$diff}). Reason: '{$reason}'")
+                        ->property([
+                            'admin_discord_id' => $adminDiscordId,
+                            'target_user_id'   => $user->id,
+                            'target_discord_id'=> $discordId,
+                            'old_balance'      => $oldBalance,
+                            'new_balance'      => $targetBalance,
+                            'difference'       => $diff,
+                            'reason'           => $reason,
+                        ])
+                        ->withRequestMetadata()
+                        ->log();
+                } catch (\Throwable $t) {}
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to hard set balance: " . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Database error occurred while hard setting balance: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'ok'          => true,
+            'user'        => [
+                'id'         => $user->id,
+                'name'       => $user->name,
+                'email'      => $user->email,
+                'discord_id' => $user->discord_id,
+            ],
+            'old_balance' => $oldBalance,
+            'new_balance' => $targetBalance,
+            'difference'  => $diff,
+            'reason'      => $reason,
+        ]);
+    }
+
+    /**
+     * Admin: revoke an unredeemed promo code.
+     * POST /api/bot/admin/promo/revoke   { code, admin_discord_id, reason? }
+     */
+    public function revokePromoCode(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $request->validate([
+            'code'             => 'required|string|max:32',
+            'admin_discord_id' => 'required|string|max:32',
+            'reason'           => 'nullable|string|max:255',
+        ]);
+
+        $code = strtoupper(trim($request->input('code')));
+        $adminDiscordId = (string) $request->input('admin_discord_id');
+        $reason = $request->input('reason') ?: 'Revoked by Administrator';
+
+        $promo = DB::table('promo_codes')->where('code', $code)->first();
+
+        if (!$promo) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Promo code '{$code}' was not found in the database.",
+            ], 404);
+        }
+
+        if ($promo->used) {
+            $usedDate = $promo->used_at ? Carbon::parse($promo->used_at)->toFormattedDateString() : 'earlier';
+            return response()->json([
+                'ok'    => false,
+                'error' => "Cannot revoke promo code '{$code}' because it has already been redeemed on {$usedDate}.",
+            ], 409);
+        }
+
+        if (!empty($promo->revoked)) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Promo code '{$code}' is already revoked.",
+            ], 400);
+        }
+
+        try {
+            DB::table('promo_codes')->where('code', $code)->update([
+                'revoked'               => 1,
+                'revoked_at'            => now(),
+                'revoked_by_discord_id' => $adminDiscordId,
+                'revoke_reason'         => $reason,
+            ]);
+
+            try {
+                \Convoy\Facades\Activity::event('admin:promo-code-revoke')
+                    ->description("Admin <@{$adminDiscordId}> revoked {$promo->amount} BOLT promo code ({$code}) for <@{$promo->discord_id}> with reason: '{$reason}'")
+                    ->property([
+                        'code'                   => $code,
+                        'amount'                 => (float) $promo->amount,
+                        'target_discord_id'      => $promo->discord_id,
+                        'admin_discord_id'       => $adminDiscordId,
+                        'reason'                 => $reason,
+                    ])
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $t) {}
+
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to revoke promo code: " . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Database error occurred while revoking promo code: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'ok'      => true,
+            'message' => "Promo code '{$code}' has been successfully revoked.",
+            'promo'   => [
+                'code'                  => $code,
+                'amount'                => (float) $promo->amount,
+                'discord_id'            => $promo->discord_id,
+                'original_reason'       => $promo->reason ?? 'Admin Gift',
+                'created_at'            => $promo->created_at ? Carbon::parse($promo->created_at)->toIso8601String() : null,
+                'revoked_at'            => now()->toIso8601String(),
+                'revoked_by_discord_id' => $adminDiscordId,
+                'revoke_reason'         => $reason,
+            ],
+        ]);
+    }
+
+    /**
+     * Admin: get all promo codes for a Discord user.
+     * GET /api/bot/admin/user-promos/{discordId}
+     * POST /api/bot/admin/user-promos   { discord_id }
+     */
+    public function getUserPromoCodes(Request $request, ?string $discordId = null): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $id = $discordId ?: $request->input('discord_id') ?: $request->input('query');
+        if (empty($id)) {
+            return response()->json(['ok' => false, 'error' => 'No Discord ID provided.'], 400);
+        }
+
+        if (preg_match('/<@!?(\d+)>/', $id, $matches)) {
+            $id = $matches[1];
+        }
+
+        $user = User::where('discord_id', $id)->first();
+
+        $promoQuery = DB::table('promo_codes')->orderBy('created_at', 'desc');
+        if ($user) {
+            $promoQuery->where(function ($q) use ($id, $user) {
+                $q->where('discord_id', $id)->orWhere('user_id', $user->id);
+            });
+        } else {
+            $promoQuery->where('discord_id', $id);
+        }
+
+        $promos = $promoQuery->take(50)->get()->map(function ($p) {
+            $status = 'unclaimed';
+            if ($p->used) {
+                $status = 'claimed';
+            } elseif (!empty($p->revoked)) {
+                $status = 'revoked';
+            }
+
+            return [
+                'code'                  => $p->code,
+                'amount'                => (float) $p->amount,
+                'status'                => $status, // unclaimed, claimed, revoked
+                'used'                  => (bool) $p->used,
+                'used_at'               => $p->used_at ? Carbon::parse($p->used_at)->toIso8601String() : null,
+                'revoked'               => (bool) ($p->revoked ?? false),
+                'revoked_at'            => !empty($p->revoked_at) ? Carbon::parse($p->revoked_at)->toIso8601String() : null,
+                'revoked_by_discord_id' => $p->revoked_by_discord_id ?? null,
+                'revoke_reason'         => $p->revoke_reason ?? null,
+                'created_by_discord_id' => $p->created_by_discord_id,
+                'reason'                => $p->reason ?? 'Admin Gift',
+                'created_at'            => $p->created_at ? Carbon::parse($p->created_at)->toIso8601String() : null,
+                'timestamp'             => $p->created_at ? Carbon::parse($p->created_at)->timestamp : time(),
+            ];
+        });
+
+        return response()->json([
+            'ok'         => true,
+            'discord_id' => $id,
+            'user'       => $user ? [
+                'id'      => $user->id,
+                'name'    => $user->name,
+                'email'   => $user->email,
+                'credits' => (float) ($user->credits ?? 0),
+            ] : null,
+            'promos'     => $promos->values(),
+        ]);
+    }
+
     // =========================================================================
     // PROMO CODE REDEMPTION
     // =========================================================================
@@ -314,6 +738,10 @@ class BotApiController extends Controller
 
         if ($promo->used) {
             return response()->json(['ok' => false, 'error' => 'This code has already been redeemed.'], 409);
+        }
+
+        if (!empty($promo->revoked)) {
+            return response()->json(['ok' => false, 'error' => 'This promo code has been revoked by an administrator and can no longer be redeemed.'], 410);
         }
 
         if ((string) $promo->discord_id !== (string) $discordId) {
@@ -604,6 +1032,10 @@ class BotApiController extends Controller
                 'amount'                => (float) $p->amount,
                 'used'                  => (bool) $p->used,
                 'used_at'               => $p->used_at ? Carbon::parse($p->used_at)->toIso8601String() : null,
+                'revoked'               => (bool) ($p->revoked ?? false),
+                'revoked_at'            => !empty($p->revoked_at) ? Carbon::parse($p->revoked_at)->toIso8601String() : null,
+                'revoked_by_discord_id' => $p->revoked_by_discord_id ?? null,
+                'revoke_reason'         => $p->revoke_reason ?? null,
                 'created_by_discord_id' => $p->created_by_discord_id,
                 'reason'                => $p->reason ?? 'Admin Gift',
                 'created_at'            => $p->created_at ? Carbon::parse($p->created_at)->toIso8601String() : null,
@@ -865,6 +1297,10 @@ class BotApiController extends Controller
                     'amount'                => (float) $pRecord->amount,
                     'used'                  => (bool) $pRecord->used,
                     'used_at'               => $pRecord->used_at ? Carbon::parse($pRecord->used_at)->toIso8601String() : null,
+                    'revoked'               => (bool) ($pRecord->revoked ?? false),
+                    'revoked_at'            => !empty($pRecord->revoked_at) ? Carbon::parse($pRecord->revoked_at)->toIso8601String() : null,
+                    'revoked_by_discord_id' => $pRecord->revoked_by_discord_id ?? null,
+                    'revoke_reason'         => $pRecord->revoke_reason ?? null,
                     'created_by_discord_id' => $pRecord->created_by_discord_id,
                     'reason'                => $pRecord->reason ?? 'Admin Gift',
                     'created_at'            => $pRecord->created_at ? Carbon::parse($pRecord->created_at)->toIso8601String() : null,
@@ -1119,20 +1555,54 @@ class BotApiController extends Controller
                     $table->unsignedBigInteger('user_id')->nullable()->index();
                     $table->decimal('amount', 16, 2);
                     $table->boolean('used')->default(false)->index();
+                    $table->boolean('revoked')->default(false)->index();
                     $table->string('created_by_discord_id', 32);
+                    $table->string('revoked_by_discord_id', 32)->nullable();
                     $table->string('reason', 255)->nullable();
+                    $table->string('revoke_reason', 255)->nullable();
                     $table->timestamp('used_at')->nullable();
+                    $table->timestamp('revoked_at')->nullable();
                     $table->timestamp('created_at')->useCurrent();
                 });
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error("Failed creating promo_codes table: " . $e->getMessage());
             }
-        } elseif (!\Illuminate\Support\Facades\Schema::hasColumn('promo_codes', 'reason')) {
-            try {
-                \Illuminate\Support\Facades\Schema::table('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
-                    $table->string('reason', 255)->nullable()->after('created_by_discord_id');
-                });
-            } catch (\Throwable $e) {}
+        } else {
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('promo_codes', 'reason')) {
+                try {
+                    \Illuminate\Support\Facades\Schema::table('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
+                        $table->string('reason', 255)->nullable()->after('created_by_discord_id');
+                    });
+                } catch (\Throwable $e) {}
+            }
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('promo_codes', 'revoked')) {
+                try {
+                    \Illuminate\Support\Facades\Schema::table('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
+                        $table->boolean('revoked')->default(false)->index()->after('used');
+                    });
+                } catch (\Throwable $e) {}
+            }
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('promo_codes', 'revoked_at')) {
+                try {
+                    \Illuminate\Support\Facades\Schema::table('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
+                        $table->timestamp('revoked_at')->nullable()->after('used_at');
+                    });
+                } catch (\Throwable $e) {}
+            }
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('promo_codes', 'revoked_by_discord_id')) {
+                try {
+                    \Illuminate\Support\Facades\Schema::table('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
+                        $table->string('revoked_by_discord_id', 32)->nullable()->after('created_by_discord_id');
+                    });
+                } catch (\Throwable $e) {}
+            }
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('promo_codes', 'revoke_reason')) {
+                try {
+                    \Illuminate\Support\Facades\Schema::table('promo_codes', function (\Illuminate\Database\Schema\Blueprint $table) {
+                        $table->string('revoke_reason', 255)->nullable()->after('reason');
+                    });
+                } catch (\Throwable $e) {}
+            }
         }
 
         if (!\Illuminate\Support\Facades\Schema::hasTable('discord_stats')) {
