@@ -23,6 +23,8 @@ Route::get('/settings/credits', [Admin\AdminSettingsController::class, 'getCredi
 Route::post('/settings/credits', [Admin\AdminSettingsController::class, 'updateCreditsSettings']);
 Route::get('/settings/app-install', [Admin\AdminSettingsController::class, 'getAppInstallSetting']);
 Route::post('/settings/app-install', [Admin\AdminSettingsController::class, 'updateAppInstallSetting']);
+Route::get('/settings/earn-awards', [Admin\AdminSettingsController::class, 'getEarnAwardsSettings']);
+Route::post('/settings/earn-awards', [Admin\AdminSettingsController::class, 'updateEarnAwardsSettings']);
 
 
 /*

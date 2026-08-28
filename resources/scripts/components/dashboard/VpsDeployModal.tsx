@@ -24,6 +24,8 @@ import {
     XMarkIcon,
     ExclamationTriangleIcon,
     CubeTransparentIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 import { Sparkles as SparklesComp } from '@/components/ui/sparkles'
@@ -117,6 +119,34 @@ const stepVariants = {
         },
     }),
 }
+
+const planVariants = {
+    enter: (dir: number) => ({
+        x: dir > 0 ? 35 : -35,
+        opacity: 0,
+        scale: 0.98,
+    }),
+    center: {
+        x: 0,
+        opacity: 1,
+        scale: 1,
+        transition: {
+            duration: 0.32,
+            ease: [0.16, 1, 0.3, 1],
+        },
+    },
+    exit: (dir: number) => ({
+        x: dir > 0 ? -35 : 35,
+        opacity: 0,
+        scale: 0.98,
+        transition: {
+            duration: 0.2,
+            ease: [0.7, 0, 0.84, 0],
+        },
+    }),
+}
+
+const PLANS_PER_PAGE = 3
 
 const StepPillSwitch = ({
     currentStep,
@@ -230,6 +260,8 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
     const [dir, setDir] = useState<number>(1)
 
     const [plans, setPlans] = useState<VpsPlan[]>([])
+    const [planPage, setPlanPage] = useState<number>(1)
+    const [planPageDir, setPlanPageDir] = useState<number>(1)
     const [nodes, setNodes] = useState<NodeOption[]>([])
     const [templates, setTemplates] = useState<TemplateOption[]>([])
 
@@ -292,6 +324,8 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
         if (opened) {
             setStep(1)
             setDir(1)
+            setPlanPage(1)
+            setPlanPageDir(1)
             setError(null)
             setLoading(true)
             http.get('/api/client/plans')
@@ -694,105 +728,218 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                 exit='exit'
                                 className='w-full'
                             >
-                                {step === 1 && (
-                                    <div className='space-y-4 max-w-4xl mx-auto'>
-                                        <div>
-                                            <div className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'>
-                                                {plans.map((plan) => {
-                                                    const isSelected = selectedPlanId === plan.id
-                                                    const planPriceValue = isYearly ? Math.round(plan.price * 12 * 0.85) : plan.price
+                                {step === 1 && (() => {
+                                    const totalPlanPages = Math.max(1, Math.ceil(plans.length / PLANS_PER_PAGE))
+                                    const currentPlans = plans.slice((planPage - 1) * PLANS_PER_PAGE, planPage * PLANS_PER_PAGE)
 
-                                                    return (
-                                                        <Card
-                                                            key={plan.id}
-                                                            onClick={() => setSelectedPlanId(plan.id)}
-                                                            className={cn(
-                                                                'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
-                                                                isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0900ff] z-20 border-blue-500 ring-2 ring-blue-500/40'
-                                                                    : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
-                                                            )}
-                                                        >
-                                                            <CardHeader className='text-left p-5 pb-3'>
-                                                                <div className='flex justify-between items-center mb-1'>
-                                                                    <h3 className='text-xl font-bold text-white'>{plan.name}</h3>
-                                                                    {isSelected && (
-                                                                        <CheckCircleIcon className='w-5 h-5 text-blue-400 shrink-0' />
-                                                                    )}
-                                                                </div>
-                                                                <div className='flex items-baseline my-2'>
-                                                                    <span className='text-3xl font-semibold flex items-center gap-1 text-amber-400'>
-                                                                        <BoltSvgIcon className='w-5 h-5 text-amber-400 shrink-0' />
-                                                                        <NumberFlow
-                                                                            value={planPriceValue}
-                                                                            className='text-3xl font-semibold text-amber-400'
-                                                                        />
-                                                                    </span>
-                                                                    <span className='text-gray-300 text-xs ml-1.5 font-medium'>
-                                                                        BOLTs/{isYearly ? 'yr' : 'mo'}
-                                                                    </span>
-                                                                </div>
-                                                                <p className='text-xs text-gray-400 line-clamp-2 min-h-[32px]'>
-                                                                    {plan.description || 'Optimized cloud instance for high concurrency workloads.'}
-                                                                </p>
-                                                            </CardHeader>
+                                    const handlePlanPageChange = (newPage: number) => {
+                                        if (newPage < 1 || newPage > totalPlanPages || newPage === planPage) return
+                                        setPlanPageDir(newPage > planPage ? 1 : -1)
+                                        setPlanPage(newPage)
+                                    }
 
-                                                            <CardContent className='p-5 pt-0 mt-auto'>
-                                                                <button
-                                                                    type='button'
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        setSelectedPlanId(plan.id)
-                                                                        goToStep(2)
-                                                                    }}
+                                    return (
+                                        <div className='space-y-4 max-w-4xl mx-auto'>
+                                            {/* Animated Cards Grid Container */}
+                                            <div className='relative overflow-hidden min-h-[360px] flex flex-col justify-center'>
+                                                <AnimatePresence mode='wait' custom={planPageDir}>
+                                                    <motion.div
+                                                        key={planPage}
+                                                        custom={planPageDir}
+                                                        variants={planVariants}
+                                                        initial='enter'
+                                                        animate='center'
+                                                        exit='exit'
+                                                        className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'
+                                                    >
+                                                        {currentPlans.map((plan) => {
+                                                            const isSelected = selectedPlanId === plan.id
+                                                            const planPriceValue = isYearly ? Math.round(plan.price * 12 * 0.85) : plan.price
+
+                                                            return (
+                                                                <Card
+                                                                    key={plan.id}
+                                                                    onClick={() => setSelectedPlanId(plan.id)}
                                                                     className={cn(
-                                                                        'w-full py-2.5 px-4 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2',
+                                                                        'relative cursor-pointer transition-all duration-300 text-white border-neutral-800 flex flex-col justify-between',
                                                                         isSelected
-                                                                            ? 'bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white'
-                                                                            : 'bg-gradient-to-t from-neutral-950 to-neutral-700 shadow-lg shadow-neutral-900 border border-neutral-800 text-white hover:border-neutral-600'
+                                                                            ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 shadow-[0px_-13px_300px_0px_#0900ff] z-20 border-blue-500 ring-2 ring-blue-500/40'
+                                                                            : 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 z-10 hover:border-neutral-700'
                                                                     )}
                                                                 >
-                                                                    {isSelected ? 'Selected' : 'Select Plan'}
-                                                                </button>
+                                                                    <CardHeader className='text-left p-5 pb-3'>
+                                                                        <div className='flex justify-between items-center mb-1'>
+                                                                            <h3 className='text-xl font-bold text-white'>{plan.name}</h3>
+                                                                            {isSelected && (
+                                                                                <CheckCircleIcon className='w-5 h-5 text-blue-400 shrink-0' />
+                                                                            )}
+                                                                        </div>
+                                                                        <div className='flex items-baseline my-2'>
+                                                                            <span className='text-3xl font-semibold flex items-center gap-1 text-amber-400'>
+                                                                                <BoltSvgIcon className='w-5 h-5 text-amber-400 shrink-0' />
+                                                                                <NumberFlow
+                                                                                    value={planPriceValue}
+                                                                                    className='text-3xl font-semibold text-amber-400'
+                                                                                />
+                                                                            </span>
+                                                                            <span className='text-gray-300 text-xs ml-1.5 font-medium'>
+                                                                                BOLTs/{isYearly ? 'yr' : 'mo'}
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className='text-xs text-gray-400 line-clamp-2 min-h-[32px]'>
+                                                                            {plan.description || 'Optimized cloud instance for high concurrency workloads.'}
+                                                                        </p>
+                                                                    </CardHeader>
 
-                                                                <div className='space-y-2 pt-4 border-t border-neutral-700/80 mt-4 text-xs'>
-                                                                    <div className='flex items-center gap-2 text-gray-300'>
-                                                                        <span className='h-2 w-2 bg-blue-500 rounded-full shrink-0' />
-                                                                        <CpuChipIcon className='w-3.5 h-3.5 text-blue-400 shrink-0' />
-                                                                        <span>{plan.cpu} vCPU Cores</span>
-                                                                    </div>
-                                                                    <div className='flex items-center gap-2 text-gray-300'>
-                                                                        <span className='h-2 w-2 bg-emerald-500 rounded-full shrink-0' />
-                                                                        <ServerIcon className='w-3.5 h-3.5 text-emerald-400 shrink-0' />
-                                                                        <span>
-                                                                            {plan.ram >= 1024 ? `${(plan.ram / 1024).toFixed(0)} GB` : `${plan.ram} MB`} RAM
+                                                                    <CardContent className='p-5 pt-0 mt-auto'>
+                                                                        <button
+                                                                            type='button'
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation()
+                                                                                setSelectedPlanId(plan.id)
+                                                                                goToStep(2)
+                                                                            }}
+                                                                            className={cn(
+                                                                                'w-full py-2.5 px-4 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2',
+                                                                                isSelected
+                                                                                    ? 'bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white'
+                                                                                    : 'bg-gradient-to-t from-neutral-950 to-neutral-700 shadow-lg shadow-neutral-900 border border-neutral-800 text-white hover:border-neutral-600'
+                                                                            )}
+                                                                        >
+                                                                            {isSelected ? 'Selected' : 'Select Plan'}
+                                                                        </button>
+
+                                                                        <div className='space-y-2 pt-4 border-t border-neutral-700/80 mt-4 text-xs'>
+                                                                            <div className='flex items-center gap-2 text-gray-300'>
+                                                                                <span className='h-2 w-2 bg-blue-500 rounded-full shrink-0' />
+                                                                                <CpuChipIcon className='w-3.5 h-3.5 text-blue-400 shrink-0' />
+                                                                                <span>{plan.cpu} vCPU Cores</span>
+                                                                            </div>
+                                                                            <div className='flex items-center gap-2 text-gray-300'>
+                                                                                <span className='h-2 w-2 bg-emerald-500 rounded-full shrink-0' />
+                                                                                <ServerIcon className='w-3.5 h-3.5 text-emerald-400 shrink-0' />
+                                                                                <span>
+                                                                                    {plan.ram >= 1024 ? `${(plan.ram / 1024).toFixed(0)} GB` : `${plan.ram} MB`} RAM
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className='flex items-center gap-2 text-gray-300'>
+                                                                                <span className='h-2 w-2 bg-indigo-500 rounded-full shrink-0' />
+                                                                                <CircleStackIcon className='w-3.5 h-3.5 text-indigo-400 shrink-0' />
+                                                                                <span>{plan.disk} GB NVMe SSD</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </CardContent>
+                                                                </Card>
+                                                            )
+                                                        })}
+                                                    </motion.div>
+                                                </AnimatePresence>
+                                            </div>
+
+                                            {/* Pagination Controls Bar */}
+                                            {totalPlanPages > 1 && (
+                                                <div className='flex flex-wrap items-center justify-between gap-3 pt-1 px-1'>
+                                                    <div className='flex items-center gap-2 text-xs text-gray-400 font-medium'>
+                                                        <span className='inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900/90 border border-neutral-800 text-[11px] text-gray-300 shadow-inner'>
+                                                            <ServerStackIcon className='w-3.5 h-3.5 text-blue-400' />
+                                                            <span>
+                                                                Showing <strong className='text-white font-semibold'>{(planPage - 1) * PLANS_PER_PAGE + 1}–{Math.min(planPage * PLANS_PER_PAGE, plans.length)}</strong> of <strong className='text-white font-semibold'>{plans.length}</strong> plans
+                                                            </span>
+                                                        </span>
+                                                    </div>
+
+                                                    <div className='flex items-center gap-2'>
+                                                        {/* Prev Button */}
+                                                        <button
+                                                            type='button'
+                                                            onClick={() => handlePlanPageChange(planPage - 1)}
+                                                            disabled={planPage <= 1}
+                                                            className='group h-8 px-3 rounded-xl bg-neutral-900/90 hover:bg-neutral-800/90 border border-neutral-800 hover:border-neutral-700 disabled:opacity-30 disabled:hover:bg-neutral-900/90 disabled:hover:border-neutral-800 disabled:cursor-not-allowed text-gray-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 cursor-pointer active:scale-95 shadow-md'
+                                                        >
+                                                            <ChevronLeftIcon className='w-3.5 h-3.5 text-gray-400 group-hover:text-blue-400 group-disabled:text-gray-600 transition-colors' />
+                                                            <span>Prev</span>
+                                                        </button>
+
+                                                        {/* Page Number Pills with spring motion highlight */}
+                                                        <div className='relative flex items-center p-1 rounded-xl bg-neutral-900/90 border border-neutral-800/90 backdrop-blur-md gap-1 shadow-inner'>
+                                                            {Array.from({ length: totalPlanPages }, (_, i) => i + 1).map((pageNum) => {
+                                                                const isActive = planPage === pageNum
+                                                                const pageHasSelectedPlan = plans
+                                                                    .slice((pageNum - 1) * PLANS_PER_PAGE, pageNum * PLANS_PER_PAGE)
+                                                                    .some((p) => p.id === selectedPlanId)
+
+                                                                return (
+                                                                    <button
+                                                                        key={pageNum}
+                                                                        type='button'
+                                                                        onClick={() => handlePlanPageChange(pageNum)}
+                                                                        className={cn(
+                                                                            'relative z-10 min-w-[30px] h-6 px-2 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer',
+                                                                            isActive
+                                                                                ? 'text-white font-bold'
+                                                                                : 'text-gray-400 hover:text-gray-200 hover:bg-neutral-800/50'
+                                                                        )}
+                                                                    >
+                                                                        {isActive && (
+                                                                            <motion.span
+                                                                                layoutId='activePlanPageIndicator'
+                                                                                className='absolute inset-0 rounded-lg bg-gradient-to-t from-blue-600 to-blue-500 border border-blue-400 shadow-md shadow-blue-600/50'
+                                                                                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                                                                            />
+                                                                        )}
+                                                                        <span className='relative z-10 flex items-center gap-1'>
+                                                                            <span>{pageNum}</span>
+                                                                            {pageHasSelectedPlan && !isActive && (
+                                                                                <span className='w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.8)]' />
+                                                                            )}
                                                                         </span>
-                                                                    </div>
-                                                                    <div className='flex items-center gap-2 text-gray-300'>
-                                                                        <span className='h-2 w-2 bg-indigo-500 rounded-full shrink-0' />
-                                                                        <CircleStackIcon className='w-3.5 h-3.5 text-indigo-400 shrink-0' />
-                                                                        <span>{plan.disk} GB NVMe SSD</span>
-                                                                    </div>
-                                                                </div>
-                                                            </CardContent>
-                                                        </Card>
-                                                    )
-                                                })}
+                                                                    </button>
+                                                                )
+                                                            })}
+                                                        </div>
+
+                                                        {/* Next Button */}
+                                                        <button
+                                                            type='button'
+                                                            onClick={() => handlePlanPageChange(planPage + 1)}
+                                                            disabled={planPage >= totalPlanPages}
+                                                            className='group h-8 px-3 rounded-xl bg-neutral-900/90 hover:bg-neutral-800/90 border border-neutral-800 hover:border-neutral-700 disabled:opacity-30 disabled:hover:bg-neutral-900/90 disabled:hover:border-neutral-800 disabled:cursor-not-allowed text-gray-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 cursor-pointer active:scale-95 shadow-md'
+                                                        >
+                                                            <span>Next</span>
+                                                            <ChevronRightIcon className='w-3.5 h-3.5 text-gray-400 group-hover:text-blue-400 group-disabled:text-gray-600 transition-colors' />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Bottom Step Action Bar */}
+                                            <div className='flex items-center justify-between pt-3 pb-2 border-t border-neutral-800/80'>
+                                                <div className='text-xs text-gray-400'>
+                                                    {selectedPlan ? (
+                                                        <span className='flex items-center gap-2'>
+                                                            <span className='text-[11px] font-medium text-gray-400'>Selected:</span>
+                                                            <span className='font-bold text-white bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5'>
+                                                                <CheckCircleIcon className='w-3.5 h-3.5 text-blue-400' />
+                                                                {selectedPlan.name}
+                                                            </span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className='text-xs text-gray-500'>Please select a plan to continue</span>
+                                                    )}
+                                                </div>
+
+                                                <button
+                                                    type='button'
+                                                    onClick={() => goToStep(2)}
+                                                    disabled={!selectedPlanId}
+                                                    className='py-2.5 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 shadow-lg shadow-blue-800/50 border border-blue-400 text-white font-bold text-xs flex items-center gap-2 transition cursor-pointer active:scale-95 disabled:opacity-40 disabled:pointer-events-none'
+                                                >
+                                                    Next: OS & Node <ArrowRightIcon className='w-4 h-4' />
+                                                </button>
                                             </div>
                                         </div>
-
-                                        <div className='flex justify-end pt-2 pb-4'>
-                                            <button
-                                                type='button'
-                                                onClick={() => goToStep(2)}
-                                                disabled={!selectedPlanId}
-                                                className='py-3 px-6 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 shadow-lg shadow-blue-800 border border-blue-500 text-white font-bold text-xs flex items-center gap-2 transition cursor-pointer active:scale-95 disabled:opacity-40'
-                                            >
-                                                Next: OS & Node <ArrowRightIcon className='w-4 h-4' />
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
+                                    )
+                                })()}
 
                                 {step === 2 && (
                                     <div className='space-y-5 max-w-3xl mx-auto'>

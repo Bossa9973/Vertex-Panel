@@ -97,6 +97,21 @@ export const EarnBoltsContainer: React.FC = () => {
         }
     }
 
+    const availableCategories = Array.from(new Set(tasks.map(t => t.category)))
+
+    useEffect(() => {
+        if (activeTab !== 'all' && !availableCategories.includes(activeTab)) {
+            setActiveTab('all')
+        }
+    }, [tasks])
+
+    const tabOptions: { id: 'all' | 'invites' | 'boosts' | 'messages'; label: string }[] = [
+        { id: 'all', label: 'All Tasks' },
+        ...(availableCategories.includes('invites') ? [{ id: 'invites' as const, label: 'Invites' }] : []),
+        ...(availableCategories.includes('boosts') ? [{ id: 'boosts' as const, label: 'Server Boosts' }] : []),
+        ...(availableCategories.includes('messages') ? [{ id: 'messages' as const, label: 'Chat Activity' }] : []),
+    ]
+
     const filteredTasks = tasks.filter(t => activeTab === 'all' || t.category === activeTab)
     const totalAvailableBolts = tasks.filter(t => !t.is_claimed).reduce((sum, t) => sum + t.reward_bolts, 0)
 
@@ -158,51 +173,48 @@ export const EarnBoltsContainer: React.FC = () => {
                     </div>
 
                     {/* FILTER TABS & JOIN DISCORD CTA */}
-                    <div className='flex flex-wrap items-center justify-between gap-4 mt-4 mb-6 font-sans'>
-                        {/* StepPillSwitch Filter Tabs */}
-                        <div className='relative z-10 flex w-fit rounded-full bg-neutral-900/90 border border-gray-700/80 p-1 backdrop-blur-md'>
-                            {[
-                                { id: 'all', label: 'All Tasks' },
-                                { id: 'invites', label: 'Invites' },
-                                { id: 'boosts', label: 'Server Boosts' },
-                                { id: 'messages', label: 'Chat Activity' },
-                            ].map(tab => {
-                                const isActive = activeTab === tab.id
-                                return (
-                                    <button
-                                        key={tab.id}
-                                        type='button'
-                                        onClick={() => setActiveTab(tab.id as any)}
-                                        className={`relative z-10 w-fit h-8 rounded-full px-4 py-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
-                                            isActive ? 'text-white font-bold' : 'text-gray-400 hover:text-gray-200'
-                                        }`}
-                                    >
-                                        {isActive && (
-                                            <motion.span
-                                                layoutId='earnFilterSwitch'
-                                                className='absolute top-0 left-0 h-8 w-full rounded-full border-2 shadow-sm shadow-blue-600 border-blue-500 bg-gradient-to-t from-blue-600 to-blue-500'
-                                                transition={{ type: 'spring', stiffness: 400, damping: 30, mass: 0.8 }}
-                                            />
-                                        )}
-                                        <span className='relative flex items-center gap-1.5'>
-                                            {tab.label}
-                                        </span>
-                                    </button>
-                                )
-                            })}
-                        </div>
+                    {tabOptions.length > 1 && (
+                        <div className='flex flex-wrap items-center justify-between gap-4 mt-4 mb-6 font-sans'>
+                            {/* StepPillSwitch Filter Tabs */}
+                            <div className='relative z-10 flex w-fit rounded-full bg-neutral-900/90 border border-gray-700/80 p-1 backdrop-blur-md'>
+                                {tabOptions.map(tab => {
+                                    const isActive = activeTab === tab.id
+                                    return (
+                                        <button
+                                            key={tab.id}
+                                            type='button'
+                                            onClick={() => setActiveTab(tab.id)}
+                                            className={`relative z-10 w-fit h-8 rounded-full px-4 py-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
+                                                isActive ? 'text-white font-bold' : 'text-gray-400 hover:text-gray-200'
+                                            }`}
+                                        >
+                                            {isActive && (
+                                                <motion.span
+                                                    layoutId='earnFilterSwitch'
+                                                    className='absolute top-0 left-0 h-8 w-full rounded-full border-2 shadow-sm shadow-blue-600 border-blue-500 bg-gradient-to-t from-blue-600 to-blue-500'
+                                                    transition={{ type: 'spring', stiffness: 400, damping: 30, mass: 0.8 }}
+                                                />
+                                            )}
+                                            <span className='relative flex items-center gap-1.5'>
+                                                {tab.label}
+                                            </span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
 
-                        {/* Join Official Discord Button */}
-                        <a
-                            href='https://discord.gg'
-                            target='_blank'
-                            rel='noreferrer'
-                            className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 rounded-xl shadow-lg shadow-blue-800 text-white font-bold text-xs px-4 py-2 inline-flex items-center gap-2 transition cursor-pointer active:scale-95'
-                        >
-                            <span>Join Official Discord</span>
-                            <ArrowRightIcon className='w-3.5 h-3.5' />
-                        </a>
-                    </div>
+                            {/* Join Official Discord Button */}
+                            <a
+                                href='https://discord.gg'
+                                target='_blank'
+                                rel='noreferrer'
+                                className='bg-gradient-to-t from-blue-500 to-blue-600 border border-blue-500 rounded-xl shadow-lg shadow-blue-800 text-white font-bold text-xs px-4 py-2 inline-flex items-center gap-2 transition cursor-pointer active:scale-95'
+                            >
+                                <span>Join Official Discord</span>
+                                <ArrowRightIcon className='w-3.5 h-3.5' />
+                            </a>
+                        </div>
+                    )}
 
                     {/* TASK CARDS GRID */}
                     <div className='relative'>
@@ -232,6 +244,18 @@ export const EarnBoltsContainer: React.FC = () => {
                                     {[1, 2, 3, 4, 5, 6].map(i => (
                                         <div key={i} className='h-52 rounded-2xl bg-white/[0.02] border border-white/[0.05] animate-pulse' />
                                     ))}
+                                </div>
+                            ) : tasks.length === 0 ? (
+                                <div className='text-center py-16 px-4 bg-white/[0.02] border border-white/[0.05] rounded-2xl'>
+                                    <GiftIcon className='w-12 h-12 text-gray-500 mx-auto mb-3 opacity-60' />
+                                    <h3 className='text-base font-bold text-white mb-1'>No Active Reward Challenges</h3>
+                                    <p className='text-xs text-gray-400 max-w-sm mx-auto leading-relaxed'>
+                                        There are no active community challenges available right now. Please check back soon or join our Discord community!
+                                    </p>
+                                </div>
+                            ) : filteredTasks.length === 0 ? (
+                                <div className='text-center py-12 px-4 bg-white/[0.02] border border-white/[0.05] rounded-2xl'>
+                                    <p className='text-xs text-gray-400'>No active challenges in this category.</p>
                                 </div>
                             ) : (
                                 <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 font-sans mb-8'>

@@ -65,18 +65,68 @@ class EarnBoltsController extends ApiController
     ];
 
     /**
+     * Retrieve admin configuration for enabled/disabled earn awards.
+     */
+    protected function getAwardsSettings(): array
+    {
+        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'earn_awards_settings')->first();
+        $defaults = [
+            'invites_enabled' => true,
+            'boosts_enabled' => true,
+            'messages_enabled' => true,
+            'disabled_tasks' => [],
+        ];
+
+        if (!$setting || empty($setting->value)) {
+            return $defaults;
+        }
+
+        $data = json_decode($setting->value, true);
+        return is_array($data) ? array_merge($defaults, $data) : $defaults;
+    }
+
+    /**
+     * Check whether a specific task is enabled by category and task key.
+     */
+    protected function isTaskEnabled(string $taskKey, array $task, array $settings): bool
+    {
+        $category = $task['category'] ?? '';
+        if ($category === 'invites' && empty($settings['invites_enabled'])) {
+            return false;
+        }
+        if ($category === 'boosts' && empty($settings['boosts_enabled'])) {
+            return false;
+        }
+        if ($category === 'messages' && empty($settings['messages_enabled'])) {
+            return false;
+        }
+
+        $disabledTasks = is_array($settings['disabled_tasks'] ?? null) ? $settings['disabled_tasks'] : [];
+        if (in_array($taskKey, $disabledTasks, true)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Get earn status and list of claimed/unclaimed tasks with live requirements count.
      */
     public function status(Request $request): JsonResponse
     {
         $user = $request->user();
         $claims = DiscordClaim::where('user_id', $user->id)->get()->keyBy('task_key');
+        $settings = $this->getAwardsSettings();
 
         $discordId = $user->discord_id;
         $stats = $this->getUserDiscordStats($discordId);
 
         $formattedTasks = [];
         foreach ($this->tasks as $key => $task) {
+            if (!$this->isTaskEnabled($key, $task, $settings)) {
+                continue;
+            }
+
             $claim = $claims->get($key);
             $currentCount = $this->getTaskCurrentCount($task['category'], $stats);
             $isEligible = $currentCount >= $task['target_count'];
@@ -156,6 +206,15 @@ class EarnBoltsController extends ApiController
             ], 422);
         }
 
+        $settings = $this->getAwardsSettings();
+        $task = $this->tasks[$taskKey];
+        if (!$this->isTaskEnabled($taskKey, $task, $settings)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This award challenge is currently disabled by administrator.',
+            ], 403);
+        }
+
         $existingClaim = DiscordClaim::where('user_id', $user->id)
             ->where('task_key', $taskKey)
             ->first();
@@ -167,7 +226,6 @@ class EarnBoltsController extends ApiController
             ], 400);
         }
 
-        $task = $this->tasks[$taskKey];
         $stats = $this->getUserDiscordStats($discordId);
         $currentCount = $this->getTaskCurrentCount($task['category'], $stats);
 

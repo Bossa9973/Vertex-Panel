@@ -283,5 +283,82 @@ class AdminSettingsController extends ApiController
             ],
         ]);
     }
+
+    public function getEarnAwardsSettings()
+    {
+        $setting = DB::table('settings')->where('key', 'earn_awards_settings')->first();
+        $defaults = [
+            'invites_enabled' => true,
+            'boosts_enabled' => true,
+            'messages_enabled' => true,
+            'disabled_tasks' => [],
+        ];
+
+        $data = $setting ? json_decode($setting->value, true) : $defaults;
+        if (!is_array($data)) {
+            $data = $defaults;
+        }
+
+        $allTasks = [
+            ['key' => 'invites_15', 'title' => '15 Discord Invites', 'category' => 'invites', 'requirement_text' => 'Invite 15 members to our Discord server', 'target_count' => 15, 'reward_bolts' => 3000],
+            ['key' => 'invites_25', 'title' => '25 Discord Invites', 'category' => 'invites', 'requirement_text' => 'Invite 25 members to our Discord server', 'target_count' => 25, 'reward_bolts' => 5000],
+            ['key' => 'boost_1', 'title' => '1 Server Boost', 'category' => 'boosts', 'requirement_text' => 'Boost our Discord server 1 time', 'target_count' => 1, 'reward_bolts' => 3000],
+            ['key' => 'boost_2', 'title' => '2 Server Boosts', 'category' => 'boosts', 'requirement_text' => 'Boost our Discord server 2 times', 'target_count' => 2, 'reward_bolts' => 5000],
+            ['key' => 'messages_200', 'title' => '200 Messages Sent', 'category' => 'messages', 'requirement_text' => 'Send 200 messages in Discord chat channels', 'target_count' => 200, 'reward_bolts' => 3000],
+            ['key' => 'messages_300', 'title' => '300 Messages Sent', 'category' => 'messages', 'requirement_text' => 'Send 300 messages in Discord chat channels', 'target_count' => 300, 'reward_bolts' => 3000],
+        ];
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'invites_enabled' => (bool) ($data['invites_enabled'] ?? true),
+                'boosts_enabled' => (bool) ($data['boosts_enabled'] ?? true),
+                'messages_enabled' => (bool) ($data['messages_enabled'] ?? true),
+                'disabled_tasks' => is_array($data['disabled_tasks'] ?? null) ? $data['disabled_tasks'] : [],
+                'available_tasks' => $allTasks,
+            ],
+        ]);
+    }
+
+    public function updateEarnAwardsSettings(Request $request)
+    {
+        $request->validate([
+            'invites_enabled' => 'required|boolean',
+            'boosts_enabled' => 'required|boolean',
+            'messages_enabled' => 'required|boolean',
+            'disabled_tasks' => 'nullable|array',
+            'disabled_tasks.*' => 'string',
+        ]);
+
+        $payload = [
+            'invites_enabled' => (bool) $request->input('invites_enabled'),
+            'boosts_enabled' => (bool) $request->input('boosts_enabled'),
+            'messages_enabled' => (bool) $request->input('messages_enabled'),
+            'disabled_tasks' => array_values(array_unique((array) $request->input('disabled_tasks', []))),
+        ];
+
+        DB::table('settings')->updateOrInsert(
+            ['key' => 'earn_awards_settings'],
+            [
+                'value' => json_encode($payload),
+                'updated_at' => now(),
+            ]
+        );
+
+        try {
+            \Convoy\Facades\Activity::event('admin:earn-awards-update')
+                ->actor($request->user())
+                ->description("Admin updated /earn community awards configuration")
+                ->property(['settings' => $payload])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Earn awards settings updated successfully.',
+            'data' => $payload,
+        ]);
+    }
 }
 
