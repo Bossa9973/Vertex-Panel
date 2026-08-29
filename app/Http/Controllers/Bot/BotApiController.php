@@ -1,8 +1,12 @@
-﻿<?php
+<?php
 
 namespace Convoy\Http\Controllers\Bot;
 
 use Convoy\Http\Controllers\Controller;
+use Convoy\Models\ActivityLog;
+use Convoy\Models\CreditTransaction;
+use Convoy\Models\Node;
+use Convoy\Models\Server;
 use Convoy\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
