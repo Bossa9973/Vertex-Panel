@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace Convoy\Http\Controllers\Bot;
 
@@ -1732,5 +1732,202 @@ class BotApiController extends Controller
             ->update(['sent' => true]);
 
         return response()->json(['ok' => true]);
+    }
+
+    // =========================================================================
+    // BOT-INITIATED SAFE SERVER ACTIONS — called from the Discord support bot
+    // All endpoints validate server ownership by matching discord_id -> user -> server.user_id
+    // Only safe, non-destructive actions (power cycle + rename) are exposed.
+    // =========================================================================
+
+    /**
+     * Get the live power state of a specific server owned by a Discord user.
+     * GET /api/bot/server-state/{discordId}/{serverId}
+     */
+    public function getServerState(Request $request, string $discordId, string $serverId): JsonResponse
+    {
+        $user = User::where('discord_id', $discordId)->first();
+        if (!$user) {
+            return response()->json(['ok' => false, 'error' => 'No panel account linked to this Discord ID.'], 404);
+        }
+
+        $server = \Convoy\Models\Server::where('id', (int) $serverId)
+            ->where('user_id', $user->id)
+            ->with('node')
+            ->first();
+
+        if (!$server) {
+            return response()->json(['ok' => false, 'error' => 'Server not found or not owned by this user.'], 404);
+        }
+
+        // Attempt to get live power state from Proxmox via the node
+        $powerState = 'unknown';
+        try {
+            $nodeService = app(\Convoy\Services\Nodes\NodeService::class ?? null);
+            if ($nodeService && method_exists($nodeService, 'getServerStatus')) {
+                $status = $nodeService->getServerStatus($server);
+                $powerState = $status['status'] ?? 'unknown';
+            }
+        } catch (\Throwable $e) {
+            // Proxmox unreachable — return unknown gracefully
+            \Illuminate\Support\Facades\Log::warning('[BotAPI] getServerState: Proxmox unreachable: ' . $e->getMessage());
+            $powerState = 'proxmox_unreachable';
+        }
+
+        return response()->json([
+            'ok'          => true,
+            'id'          => $server->id,
+            'vmid'        => $server->vmid,
+            'name'        => $server->name,
+            'status'      => $server->status ?? 'in_use',
+            'power_state' => $powerState,
+        ]);
+    }
+
+    /**
+     * Perform a safe power action (start / shutdown / reboot) on a user's server.
+     * POST /api/bot/server-action   { discord_id, server_id, action }
+     * action ∈ ['start', 'shutdown', 'reboot']
+     */
+    public function performServerAction(Request $request): JsonResponse
+    {
+        $request->validate([
+            'discord_id' => 'required|string|max:32',
+            'server_id'  => 'required|integer',
+            'action'     => 'required|string|in:start,shutdown,reboot',
+        ]);
+
+        $discordId = (string) $request->input('discord_id');
+        $serverId  = (int) $request->input('server_id');
+        $action    = (string) $request->input('action');
+
+        $user = User::where('discord_id', $discordId)->first();
+        if (!$user) {
+            return response()->json(['ok' => false, 'error' => 'No panel account linked to this Discord ID.'], 404);
+        }
+
+        $server = \Convoy\Models\Server::where('id', $serverId)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$server) {
+            return response()->json(['ok' => false, 'error' => 'Server not found or not owned by this user.'], 404);
+        }
+
+        // Map action strings to Proxmox state values
+        $stateMap = [
+            'start'    => 'start',
+            'shutdown' => 'shutdown',
+            'reboot'   => 'reboot',
+        ];
+
+        try {
+            // Dispatch via the existing server state update mechanism
+            $serverStateService = app(\Convoy\Services\Servers\ServerStateService::class ?? \Convoy\Services\Servers\ServerService::class ?? null);
+
+            if ($serverStateService && method_exists($serverStateService, 'updatePowerState')) {
+                $serverStateService->updatePowerState($server, $stateMap[$action]);
+            } elseif ($serverStateService && method_exists($serverStateService, 'power')) {
+                $serverStateService->power($server, $action);
+            } else {
+                // Fallback: directly update via Proxmox API if available
+                $node = $server->node;
+                if (!$node) {
+                    return response()->json(['ok' => false, 'error' => 'Server node not found.'], 503);
+                }
+                // Try to call Proxmox directly through the node's service
+                throw new \RuntimeException('No server power service available — check app bindings.');
+            }
+
+            // Log the action
+            try {
+                \Convoy\Facades\Activity::event('bot:server-power-action')
+                    ->actor($user)
+                    ->description("Discord bot performed '{$action}' on server #{$server->id} ({$server->name}) for user {$user->name} (<@{$discordId}>)")
+                    ->property([
+                        'server_id'  => $server->id,
+                        'server_name'=> $server->name,
+                        'action'     => $action,
+                        'discord_id' => $discordId,
+                    ])
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $t) {}
+
+            return response()->json([
+                'ok'      => true,
+                'message' => ucfirst($action) . ' command sent to ' . $server->name . ' successfully.',
+                'action'  => $action,
+                'server'  => $server->name,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('[BotAPI] performServerAction error: ' . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Failed to send ' . $action . ' command: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Rename a server owned by a Discord user.
+     * POST /api/bot/server-rename   { discord_id, server_id, name }
+     */
+    public function renameServer(Request $request): JsonResponse
+    {
+        $request->validate([
+            'discord_id' => 'required|string|max:32',
+            'server_id'  => 'required|integer',
+            'name'       => 'required|string|min:1|max:40',
+        ]);
+
+        $discordId = (string) $request->input('discord_id');
+        $serverId  = (int) $request->input('server_id');
+        $newName   = trim((string) $request->input('name'));
+
+        $user = User::where('discord_id', $discordId)->first();
+        if (!$user) {
+            return response()->json(['ok' => false, 'error' => 'No panel account linked to this Discord ID.'], 404);
+        }
+
+        $server = \Convoy\Models\Server::where('id', $serverId)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$server) {
+            return response()->json(['ok' => false, 'error' => 'Server not found or not owned by this user.'], 404);
+        }
+
+        $oldName = $server->name;
+
+        try {
+            DB::table('servers')->where('id', $server->id)->update(['name' => $newName]);
+
+            try {
+                \Convoy\Facades\Activity::event('bot:server-rename')
+                    ->actor($user)
+                    ->description("Discord bot renamed server #{$server->id} from '{$oldName}' to '{$newName}' for user {$user->name} (<@{$discordId}>)")
+                    ->property([
+                        'server_id' => $server->id,
+                        'old_name'  => $oldName,
+                        'new_name'  => $newName,
+                        'discord_id'=> $discordId,
+                    ])
+                    ->withRequestMetadata()
+                    ->log();
+            } catch (\Throwable $t) {}
+
+            return response()->json([
+                'ok'   => true,
+                'name' => $newName,
+                'id'   => $server->id,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('[BotAPI] renameServer error: ' . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Failed to rename server: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

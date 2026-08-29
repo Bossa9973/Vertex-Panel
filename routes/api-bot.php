@@ -61,3 +61,10 @@ Route::post('/ptero-dm-queue/mark-sent',   [BotApiController::class, 'pterodacty
 
 
 
+
+
+// ── Bot-initiated safe server actions ──────────────────────────────────────
+// Ownership is validated server-side: discord_id -> user -> server.user_id
+Route::get('/server-state/{discordId}/{serverId}', [BotApiController::class, 'getServerState']);
+Route::post('/server-action',  [BotApiController::class, 'performServerAction']);
+Route::post('/server-rename',  [BotApiController::class, 'renameServer']);
