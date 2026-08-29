@@ -741,7 +741,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                     return (
                                         <div className='space-y-4 max-w-4xl mx-auto'>
                                             {/* Animated Cards Grid Container */}
-                                            <div className='relative overflow-hidden min-h-[360px] flex flex-col justify-center'>
+                                            <div className='relative min-h-[360px] flex flex-col justify-center'>
                                                 <AnimatePresence mode='wait' custom={planPageDir}>
                                                     <motion.div
                                                         key={planPage}
