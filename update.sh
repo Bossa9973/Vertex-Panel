@@ -241,15 +241,15 @@ perform_update() {
 
     # Update Composer dependencies & autoloader.
     # Strategy:
-    #   1. Try a plain "composer install" (fast path, uses lock file as-is).
-    #   2. If it fails due to a lock/json mismatch (a package in composer.json is
-    #      missing from composer.lock), extract just the missing package names and
-    #      run "composer require <pkg> --no-update" for each one — this writes the
-    #      new entries into composer.lock WITHOUT touching any other package or
-    #      triggering security-advisory resolution on laravel/framework etc.
+    #   1. Try a plain "composer install" (uses lock file as-is — fast path).
+    #   2. If it fails because a package in composer.json is missing from
+    #      composer.lock, extract the missing package name(s) and run
+    #      "composer require <pkg> --no-update" for each — this writes only those
+    #      entries into composer.lock without touching laravel/framework or any
+    #      other locked package (avoids security-advisory resolution failures).
     #   3. Re-run "composer install" which now succeeds cleanly.
     COMPOSER_FIXED_LOG="/tmp/vertex_composer.log"
-    : > "$COMPOSER_FIXED_LOG"   # truncate / create
+    : > "$COMPOSER_FIXED_LOG"
 
     spinner_start "Updating PHP dependencies & autoloader"
     if composer install --no-dev --optimize-autoloader --no-interaction \
@@ -257,19 +257,15 @@ perform_update() {
         spinner_stop
         success "Updating PHP dependencies & autoloader"
     else
-        # Check for the specific lock-file-out-of-sync error
         if grep -q "not present in the lock file" "$COMPOSER_FIXED_LOG" || \
            grep -q "lock file is not up to date" "$COMPOSER_FIXED_LOG"; then
             spinner_stop
             warn "composer.lock is out of sync — adding missing packages..."
 
-            # Extract every package name that Composer says is missing from the lock file
-            MISSING_PKGS=$(grep "not present in the lock file" "$COMPOSER_FIXED_LOG" \
-                | grep -oP '"[^"]+/[^"]+"' | tr -d '"' | sort -u)
-
+            MISSING_PKGS=$(grep -oP 'Required package "\K[^"]+' "$COMPOSER_FIXED_LOG" | sort -u)
             if [[ -z "$MISSING_PKGS" ]]; then
-                # Fallback: parse the "Required package X" lines
-                MISSING_PKGS=$(grep -oP 'Required package "\K[^"]+' "$COMPOSER_FIXED_LOG" | sort -u)
+                MISSING_PKGS=$(grep "not present in the lock file" "$COMPOSER_FIXED_LOG" \
+                    | grep -oP '"[^"]+/[^"]+"' | tr -d '"' | sort -u)
             fi
 
             if [[ -z "$MISSING_PKGS" ]]; then
@@ -304,7 +300,6 @@ perform_update() {
             spinner_stop
             success "Missing packages registered"
 
-            # Now a plain install should work
             spinner_start "Installing PHP dependencies & autoloader"
             if composer install --no-dev --optimize-autoloader --no-interaction \
                     -d "${INSTALL_DIR}" >> "$COMPOSER_FIXED_LOG" 2>&1; then
@@ -331,30 +326,6 @@ perform_update() {
             exit 1
         fi
     fi
-                error_msg "Failed: Reconciling PHP dependencies"
-                echo ""
-                echo "   Last 20 lines of composer output:"
-                tail -20 "$COMPOSER_LOG" | sed "s/^/   /"
-                cp "$COMPOSER_LOG" /tmp/vertex_update.log
-                rm -f "$COMPOSER_LOG"
-                php artisan up --no-interaction 2>/dev/null || true
-                exit 1
-            fi
-        else
-            spinner_stop
-            cp "$COMPOSER_LOG" /tmp/vertex_update.log
-            rm -f "$COMPOSER_LOG"
-            error_msg "Failed: Updating PHP dependencies & autoloader"
-            echo ""
-            echo "   Last 20 lines of composer output:"
-            tail -20 "$COMPOSER_LOG" | sed "s/^/   /"
-            cp "$COMPOSER_LOG" /tmp/vertex_update.log
-            rm -f "$COMPOSER_LOG"
-            php artisan up --no-interaction 2>/dev/null || true
-            exit 1
-        fi
-    fi
-    rm -f "$COMPOSER_LOG"
     if [[ "$FRONTEND_CHANGED" == true ]]; then
         if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
             run_or_fail "Installing Node.js dependencies (offline cache)" \
