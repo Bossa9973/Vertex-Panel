@@ -239,10 +239,44 @@ perform_update() {
     # Clean up downloaded zip
     run_quietly rm -rf "$tmp_zip" "$tmp_dir"
 
-    # Always update Composer autoloader (takes 1.5s) to guarantee new PHP classes are autoloaded
-    run_or_fail "Updating PHP dependencies & autoloader" \
-        composer install --no-dev --optimize-autoloader --no-interaction -d "${INSTALL_DIR}"
-
+    # Update Composer dependencies & autoloader.
+    # If composer.json has packages not yet in composer.lock (e.g. a new dependency added
+    # directly without running "composer update"), "composer install" fails with
+    # "not present in the lock file". We detect this and auto-run "composer update".
+    spinner_start "Updating PHP dependencies & autoloader"
+    COMPOSER_LOG=$(mktemp)
+    if composer install --no-dev --optimize-autoloader --no-interaction \
+            -d "${INSTALL_DIR}" > "$COMPOSER_LOG" 2>&1; then
+        spinner_stop
+        success "Updating PHP dependencies & autoloader"
+    else
+        if grep -q "not present in the lock file" "$COMPOSER_LOG" || \
+           grep -q "lock file is not up to date" "$COMPOSER_LOG"; then
+            spinner_stop
+            warn "composer.lock is out of sync — running composer update to reconcile..."
+            spinner_start "Reconciling composer.lock with composer.json"
+            if composer update --no-dev --optimize-autoloader --no-interaction \
+                    -d "${INSTALL_DIR}" >> "$COMPOSER_LOG" 2>&1; then
+                spinner_stop
+                success "PHP dependencies reconciled & autoloader updated"
+            else
+                spinner_stop
+                cp "$COMPOSER_LOG" /tmp/vertex_update.log
+                rm -f "$COMPOSER_LOG"
+                error_msg "Failed: Reconciling PHP dependencies"
+                php artisan up --no-interaction 2>/dev/null || true
+                exit 1
+            fi
+        else
+            spinner_stop
+            cp "$COMPOSER_LOG" /tmp/vertex_update.log
+            rm -f "$COMPOSER_LOG"
+            error_msg "Failed: Updating PHP dependencies & autoloader"
+            php artisan up --no-interaction 2>/dev/null || true
+            exit 1
+        fi
+    fi
+    rm -f "$COMPOSER_LOG"
     if [[ "$FRONTEND_CHANGED" == true ]]; then
         if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
             run_or_fail "Installing Node.js dependencies (offline cache)" \
