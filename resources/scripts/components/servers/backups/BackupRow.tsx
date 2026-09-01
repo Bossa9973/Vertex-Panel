@@ -1,4 +1,4 @@
-﻿//@ts-ignore
+//@ts-ignore
 import Dots from '@/assets/images/icons/dots-vertical.svg'
 import { ServerContext } from '@/state/server'
 import { bytesToString } from '@/util/helpers'

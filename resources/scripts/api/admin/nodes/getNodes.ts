@@ -1,4 +1,4 @@
-﻿import http, { PaginatedResult, getPaginationSet } from '@/api/http'
+import http, { PaginatedResult, getPaginationSet } from '@/api/http'
 
 export interface Node {
     id: number

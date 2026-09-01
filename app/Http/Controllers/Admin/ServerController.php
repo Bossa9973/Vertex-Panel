@@ -2,9 +2,12 @@
 
 namespace Convoy\Http\Controllers\Admin;
 
+use Convoy\Enums\Server\BackupCompressionType;
+use Convoy\Enums\Server\BackupMode;
 use Convoy\Enums\Server\Status;
 use Convoy\Enums\Server\SuspensionAction;
 use Convoy\Exceptions\Repository\Proxmox\ProxmoxConnectionException;
+use Convoy\Exceptions\Service\Backup\TooManyBackupsException;
 use Convoy\Http\Controllers\ApiController;
 use Convoy\Http\Requests\Admin\Servers\Settings\UpdateBuildRequest;
 use Convoy\Http\Requests\Admin\Servers\Settings\UpdateGeneralInfoRequest;
@@ -12,6 +15,7 @@ use Convoy\Http\Requests\Admin\Servers\StoreServerRequest;
 use Convoy\Models\Filters\FiltersServerByAddressPoolId;
 use Convoy\Models\Filters\FiltersServerWildcard;
 use Convoy\Models\Server;
+use Convoy\Services\Backups\BackupCreationService;
 use Convoy\Services\Servers\CloudinitService;
 use Convoy\Services\Servers\NetworkService;
 use Convoy\Services\Servers\ServerCreationService;
@@ -21,9 +25,12 @@ use Convoy\Services\Servers\SyncBuildService;
 use Convoy\Transformers\Admin\ServerBuildTransformer;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\QueryBuilder;
 use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use Throwable;
 
 class ServerController extends ApiController
 {
@@ -35,6 +42,7 @@ class ServerController extends ApiController
         private ServerCreationService   $creationService,
         private CloudinitService        $cloudinitService,
         private SyncBuildService        $buildModificationService,
+        private BackupCreationService   $backupCreationService,
     )
     {
     }
@@ -154,8 +162,6 @@ class ServerController extends ApiController
         $validated = $request->validate([
             'server_ids'   => 'required|array|min:1',
             'server_ids.*' => 'required|integer|exists:servers,id',
-            // force=false  → dispatch real deletion job chain (Proxmox + DB, failure → deletion_failed)
-            // force=true   → skip Proxmox entirely, wipe DB + release IPs immediately
             'force'        => 'nullable|boolean',
         ]);
 
@@ -167,21 +173,16 @@ class ServerController extends ApiController
 
         foreach ($servers as $server) {
             if ($force) {
-                // ── Failed Uninstalls path: DB wipe only, no Proxmox ──────────
                 $server->addresses()->update(['server_id' => null]);
                 $server->delete();
                 $wiped++;
             } else {
-                // ── Normal path: dispatch ServerDeletionService job chain ──────
-                // validateStatus() throws if server is in a conflicting state, so
-                // reset the status first to allow deletion dispatch.
                 $server->update(['status' => null]);
 
                 try {
                     $this->deletionService->handle($server);
                     $dispatched++;
                 } catch (\Throwable $e) {
-                    // Could not queue — mark as deletion_failed so it surfaces in the Failed Uninstalls tab
                     $server->update(['status' => \Convoy\Enums\Server\Status::DELETION_FAILED->value]);
                 }
             }
@@ -196,6 +197,64 @@ class ServerController extends ApiController
             'message'     => $message,
             'dispatched'  => $dispatched,
             'wiped'       => $wiped,
+        ]);
+    }
+
+    /**
+     * Admin action to trigger VM backups and push to Google Drive.
+     * Can trigger for all servers or a specific list of server IDs.
+     */
+    public function triggerBackups(Request $request)
+    {
+        $validated = $request->validate([
+            'server_ids'   => 'nullable|array',
+            'server_ids.*' => 'integer|exists:servers,id',
+            'all'          => 'nullable|boolean',
+            'force'        => 'nullable|boolean',
+        ]);
+
+        $query = Server::query();
+
+        if (!empty($validated['server_ids'])) {
+            $query->whereIn('id', $validated['server_ids']);
+        } elseif (!($validated['all'] ?? true)) {
+            $query->where('plan_tier', 'paid');
+        }
+
+        if (!($validated['force'] ?? true)) {
+            $query->whereDoesntHave('backups', function ($q) {
+                $q->where('created_at', '>', now()->subDay());
+            });
+        }
+
+        $servers = $query->get();
+        $dispatched = 0;
+        $skipped = 0;
+
+        foreach ($servers as $server) {
+            try {
+                $this->backupCreationService->create(
+                    server         : $server,
+                    name           : 'Admin backup (' . now()->format('Y-m-d H:i') . ')',
+                    mode           : BackupMode::SNAPSHOT,
+                    compressionType: BackupCompressionType::ZSTD,
+                    isLocked       : false,
+                );
+                $dispatched++;
+            } catch (TooManyBackupsException|TooManyRequestsHttpException $e) {
+                $skipped++;
+                Log::warning("[AdminTriggerBackups] Skipped server #{$server->id}: " . $e->getMessage());
+            } catch (Throwable $e) {
+                $skipped++;
+                Log::error("[AdminTriggerBackups] Error on server #{$server->id}: " . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'success'    => true,
+            'message'    => "Dispatched backup for {$dispatched} server(s). Skipped {$skipped}.",
+            'dispatched' => $dispatched,
+            'skipped'    => $skipped,
         ]);
     }
 }

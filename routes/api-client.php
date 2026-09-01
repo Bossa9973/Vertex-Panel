@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Convoy\Http\Controllers\Client;
 use Convoy\Http\Middleware\Activity\ServerSubject;

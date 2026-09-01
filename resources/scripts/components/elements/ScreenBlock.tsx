@@ -1,4 +1,4 @@
-﻿import { ExclamationCircleIcon, LinkIcon } from '@heroicons/react/24/outline'
+import { ExclamationCircleIcon, LinkIcon } from '@heroicons/react/24/outline'
 import { Button } from '@mantine/core'
 import { ComponentType, ReactNode } from 'react'
 

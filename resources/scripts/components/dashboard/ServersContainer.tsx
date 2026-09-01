@@ -1,4 +1,4 @@
-﻿import { useStoreState } from '@/state'
+import { useStoreState } from '@/state'
 import { usePersistedState } from '@/util/usePersistedState'
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
 import { ServerIcon } from '@heroicons/react/24/outline'

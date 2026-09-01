@@ -1,4 +1,4 @@
-﻿import http from '@/api/http'
+import http from '@/api/http'
 
 /**
  * Requests a short-lived (5-minute) Google Drive download URL for a backup

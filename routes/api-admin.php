@@ -141,6 +141,7 @@ Route::prefix('/servers')->group(function () {
     Route::get('/', [Admin\ServerController::class, 'index']);
     Route::post('/', [Admin\ServerController::class, 'store']);
     Route::post('/bulk-delete', [Admin\ServerController::class, 'bulkDelete']);
+    Route::post('/trigger-backups', [Admin\ServerController::class, 'triggerBackups']);
 
     Route::group(['prefix' => '/{server}', 'middleware' => ValidateServerStatusMiddleware::class],
         function () {

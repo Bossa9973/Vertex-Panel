@@ -1,4 +1,4 @@
-﻿{
+{
     "name":  "convoypanel/panel",
     "type":  "project",
     "description":  "A beautifully designed KVM server management panel for Proxmox Virtual Environment.",
