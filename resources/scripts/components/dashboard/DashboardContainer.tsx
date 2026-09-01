@@ -11,6 +11,18 @@ import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
 import { RocketLaunchIcon } from '@heroicons/react/24/outline'
 
 const LOCATION_FLAGS: Record<string, string> = {
+    'India': 'https://flagcdn.com/in.svg',
+    'Mumbai, India': 'https://flagcdn.com/in.svg',
+    'Mumbai, IN': 'https://flagcdn.com/in.svg',
+    'Delhi, India': 'https://flagcdn.com/in.svg',
+    'Delhi, IN': 'https://flagcdn.com/in.svg',
+    'Bangalore, IN': 'https://flagcdn.com/in.svg',
+    'Node: IN-1': 'https://flagcdn.com/in.svg',
+    'Node: IN-2': 'https://flagcdn.com/in.svg',
+    'IN-1': 'https://flagcdn.com/in.svg',
+    'IN-2': 'https://flagcdn.com/in.svg',
+    'IN': 'https://flagcdn.com/in.svg',
+    'IND': 'https://flagcdn.com/in.svg',
     'New York, USA': 'https://flagcdn.com/us.svg',
     'London, UK': 'https://flagcdn.com/gb.svg',
     'Frankfurt, DE': 'https://flagcdn.com/de.svg',
@@ -25,6 +37,33 @@ const LOCATION_FLAGS: Record<string, string> = {
     'Tokyo, JP': 'https://flagcdn.com/jp.svg',
     'Singapore, SG': 'https://flagcdn.com/sg.svg',
     'Sydney, AU': 'https://flagcdn.com/au.svg',
+}
+
+const getFlagForLocationString = (locString: string): string => {
+    if (!locString) return 'https://flagcdn.com/w40/de.png'
+    const lower = locString.toLowerCase()
+    if (lower.includes('india') || lower.includes('mumbai') || lower.includes('delhi') || lower.includes('bangalore') || lower.includes('chennai') || lower.includes('hyderabad') || lower.includes('in-') || lower.includes('in_') || lower === 'in' || lower === 'ind') {
+        return 'https://flagcdn.com/in.svg'
+    }
+    if (lower.includes('us') || lower.includes('united states') || lower.includes('new york')) {
+        return 'https://flagcdn.com/us.svg'
+    }
+    if (lower.includes('uk') || lower.includes('london') || lower.includes('great britain') || lower.includes('gb')) {
+        return 'https://flagcdn.com/gb.svg'
+    }
+    if (lower.includes('japan') || lower.includes('tokyo') || lower.includes('jp')) {
+        return 'https://flagcdn.com/jp.svg'
+    }
+    if (lower.includes('singapore') || lower.includes('sg')) {
+        return 'https://flagcdn.com/sg.svg'
+    }
+    if (lower.includes('australia') || lower.includes('sydney') || lower.includes('au')) {
+        return 'https://flagcdn.com/au.svg'
+    }
+    if (lower.includes('germany') || lower.includes('frankfurt') || lower.includes('de')) {
+        return 'https://flagcdn.com/de.svg'
+    }
+    return LOCATION_FLAGS[locString] || 'https://flagcdn.com/w40/de.png'
 }
 
 const extractIpAddress = (srv: any, idx: number): string => {
@@ -97,8 +136,8 @@ export const DashboardContainer: React.FC = () => {
 
                     const flag =
                         nodeData?.flag ||
-                        LOCATION_FLAGS[loc] ||
-                        LOCATION_FLAGS[nodeData?.name || ''] ||
+                        getFlagForLocationString(loc) ||
+                        getFlagForLocationString(nodeData?.name || '') ||
                         'https://flagcdn.com/w40/de.png'
                     const expiresAt = srv.expires_at ? new Date(srv.expires_at) : new Date(Date.now() + (29 - (idx % 5) * 3) * 86400000)
                     const now = new Date()

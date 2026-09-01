@@ -163,14 +163,29 @@ class ServerDeployController extends Controller
 
         // Format nodes for selection
         $formattedNodes = $nodes->map(function ($node) {
-            $locCode = $node->location ? strtoupper($node->location->short_code) : 'DEFAULT';
+            $locCode = $node->location ? strtolower($node->location->short_code) : '';
+            $locDesc = $node->location ? strtolower($node->location->description ?? '') : '';
+            $nodeName = strtolower($node->name ?? '');
+
             $flag = 'https://flagcdn.com/w40/de.png';
-            if (Str::contains(strtolower($locCode), 'us')) {
+            if (Str::contains($locCode, ['in', 'ind']) || Str::contains($locDesc, ['india', 'mumbai', 'delhi', 'bangalore', 'chennai', 'hyderabad', 'pune', 'kolkata']) || Str::contains($nodeName, ['india', 'in-', 'in_', 'mumbai', 'delhi', 'bangalore', 'chennai', 'hyderabad', 'pune', 'kolkata', 'ind-'])) {
+                $flag = 'https://flagcdn.com/w40/in.png';
+            } elseif (Str::contains($locCode, 'us') || Str::contains($locDesc, ['united states', 'usa', 'america', 'new york', 'dallas', 'chicago', 'los angeles', 'miami']) || Str::contains($nodeName, ['us-', 'us_', 'usa', 'new york'])) {
                 $flag = 'https://flagcdn.com/w40/us.png';
-            } elseif (Str::contains(strtolower($locCode), ['uk', 'gb'])) {
+            } elseif (Str::contains($locCode, ['uk', 'gb']) || Str::contains($locDesc, ['united kingdom', 'london', 'great britain', 'england']) || Str::contains($nodeName, ['uk-', 'uk_', 'london'])) {
                 $flag = 'https://flagcdn.com/w40/gb.png';
-            } elseif (Str::contains(strtolower($locCode), 'jp')) {
+            } elseif (Str::contains($locCode, 'jp') || Str::contains($locDesc, ['japan', 'tokyo', 'osaka']) || Str::contains($nodeName, ['jp-', 'jp_', 'tokyo'])) {
                 $flag = 'https://flagcdn.com/w40/jp.png';
+            } elseif (Str::contains($locCode, 'sg') || Str::contains($locDesc, 'singapore') || Str::contains($nodeName, ['sg-', 'sg_', 'singapore'])) {
+                $flag = 'https://flagcdn.com/w40/sg.png';
+            } elseif (Str::contains($locCode, 'au') || Str::contains($locDesc, ['australia', 'sydney', 'melbourne']) || Str::contains($nodeName, ['au-', 'au_', 'sydney'])) {
+                $flag = 'https://flagcdn.com/w40/au.png';
+            } elseif (Str::contains($locCode, 'ca') || Str::contains($locDesc, ['canada', 'toronto', 'montreal', 'vancouver'])) {
+                $flag = 'https://flagcdn.com/w40/ca.png';
+            } elseif (Str::contains($locCode, 'fr') || Str::contains($locDesc, ['france', 'paris'])) {
+                $flag = 'https://flagcdn.com/w40/fr.png';
+            } elseif (Str::contains($locCode, ['de', 'ger']) || Str::contains($locDesc, ['germany', 'frankfurt', 'berlin'])) {
+                $flag = 'https://flagcdn.com/w40/de.png';
             }
 
             return [
