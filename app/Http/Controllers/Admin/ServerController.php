@@ -209,18 +209,34 @@ class ServerController extends ApiController
         $validated = $request->validate([
             'server_ids'   => 'nullable|array',
             'server_ids.*' => 'integer|exists:servers,id',
+            'node_id'      => 'nullable|integer|exists:nodes,id',
+            'tier'         => 'nullable|string|in:all,paid,free',
             'all'          => 'nullable|boolean',
             'force'        => 'nullable|boolean',
         ]);
 
         $query = Server::query();
 
+        // Filter by specific server IDs
         if (!empty($validated['server_ids'])) {
             $query->whereIn('id', $validated['server_ids']);
-        } elseif (!($validated['all'] ?? true)) {
-            $query->where('plan_tier', 'paid');
+        } else {
+            // Filter by node if specified
+            if (!empty($validated['node_id'])) {
+                $query->where('node_id', $validated['node_id']);
+            }
+
+            // Filter by plan tier if specified (and not 'all')
+            $tier = $validated['tier'] ?? 'all';
+            if ($tier === 'paid') {
+                $query->where('plan_tier', 'paid');
+            } elseif ($tier === 'free') {
+                $query->where('plan_tier', 'free');
+            }
+            // tier=all or not set: no filter applied
         }
 
+        // Respect the 24h window unless force=true
         if (!($validated['force'] ?? true)) {
             $query->whereDoesntHave('backups', function ($q) {
                 $q->where('created_at', '>', now()->subDay());

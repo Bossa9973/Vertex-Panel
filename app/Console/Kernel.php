@@ -41,7 +41,7 @@ class Kernel extends ConsoleKernel
 
         // Automated cloud backups for paid-tier servers: runs hourly.
         // withoutOverlapping() prevents a slow batch from spawning duplicate runs.
-        $schedule->command(RunScheduledBackupsCommand::class)->hourly()->withoutOverlapping();
+        $schedule->command(RunScheduledBackupsCommand::class)->cron('0 * * * *')->withoutOverlapping();
 
         // Poll sish admin API to update tunnel_port for any server whose tunnel came up since last run
         $schedule->call(function () {
