@@ -240,29 +240,97 @@ perform_update() {
     run_quietly rm -rf "$tmp_zip" "$tmp_dir"
 
     # Update Composer dependencies & autoloader.
-    # If composer.json has packages not yet in composer.lock (e.g. a new dependency added
-    # directly without running "composer update"), "composer install" fails with
-    # "not present in the lock file". We detect this and auto-run "composer update".
+    # Strategy:
+    #   1. Try a plain "composer install" (fast path, uses lock file as-is).
+    #   2. If it fails due to a lock/json mismatch (a package in composer.json is
+    #      missing from composer.lock), extract just the missing package names and
+    #      run "composer require <pkg> --no-update" for each one — this writes the
+    #      new entries into composer.lock WITHOUT touching any other package or
+    #      triggering security-advisory resolution on laravel/framework etc.
+    #   3. Re-run "composer install" which now succeeds cleanly.
+    COMPOSER_FIXED_LOG="/tmp/vertex_composer.log"
+    : > "$COMPOSER_FIXED_LOG"   # truncate / create
+
     spinner_start "Updating PHP dependencies & autoloader"
-    COMPOSER_LOG=$(mktemp)
     if composer install --no-dev --optimize-autoloader --no-interaction \
-            -d "${INSTALL_DIR}" > "$COMPOSER_LOG" 2>&1; then
+            -d "${INSTALL_DIR}" > "$COMPOSER_FIXED_LOG" 2>&1; then
         spinner_stop
         success "Updating PHP dependencies & autoloader"
     else
-        if grep -q "not present in the lock file" "$COMPOSER_LOG" || \
-           grep -q "lock file is not up to date" "$COMPOSER_LOG"; then
+        # Check for the specific lock-file-out-of-sync error
+        if grep -q "not present in the lock file" "$COMPOSER_FIXED_LOG" || \
+           grep -q "lock file is not up to date" "$COMPOSER_FIXED_LOG"; then
             spinner_stop
-            warn "composer.lock is out of sync — running composer update to reconcile..."
-            spinner_start "Reconciling composer.lock with composer.json"
-            if composer update --no-dev --optimize-autoloader --no-interaction \
-                    -d "${INSTALL_DIR}" >> "$COMPOSER_LOG" 2>&1; then
+            warn "composer.lock is out of sync — adding missing packages..."
+
+            # Extract every package name that Composer says is missing from the lock file
+            MISSING_PKGS=$(grep "not present in the lock file" "$COMPOSER_FIXED_LOG" \
+                | grep -oP '"[^"]+/[^"]+"' | tr -d '"' | sort -u)
+
+            if [[ -z "$MISSING_PKGS" ]]; then
+                # Fallback: parse the "Required package X" lines
+                MISSING_PKGS=$(grep -oP 'Required package "\K[^"]+' "$COMPOSER_FIXED_LOG" | sort -u)
+            fi
+
+            if [[ -z "$MISSING_PKGS" ]]; then
+                cp "$COMPOSER_FIXED_LOG" /tmp/vertex_update.log
+                error_msg "Failed: Could not determine missing packages. See /tmp/vertex_update.log"
+                php artisan up --no-interaction 2>/dev/null || true
+                exit 1
+            fi
+
+            spinner_start "Adding missing packages to composer.lock"
+            REQUIRE_OK=true
+            while IFS= read -r pkg; do
+                [[ -z "$pkg" ]] && continue
+                if ! composer require "$pkg" \
+                        --no-update \
+                        --no-interaction \
+                        -d "${INSTALL_DIR}" >> "$COMPOSER_FIXED_LOG" 2>&1; then
+                    REQUIRE_OK=false
+                fi
+            done <<< "$MISSING_PKGS"
+
+            if [[ "$REQUIRE_OK" == false ]]; then
                 spinner_stop
-                success "PHP dependencies reconciled & autoloader updated"
+                cp "$COMPOSER_FIXED_LOG" /tmp/vertex_update.log
+                echo ""
+                echo "   Composer output:"
+                tail -30 "$COMPOSER_FIXED_LOG" | sed 's/^/   /'
+                error_msg "Failed: Could not add missing packages. See /tmp/vertex_update.log"
+                php artisan up --no-interaction 2>/dev/null || true
+                exit 1
+            fi
+            spinner_stop
+            success "Missing packages registered"
+
+            # Now a plain install should work
+            spinner_start "Installing PHP dependencies & autoloader"
+            if composer install --no-dev --optimize-autoloader --no-interaction \
+                    -d "${INSTALL_DIR}" >> "$COMPOSER_FIXED_LOG" 2>&1; then
+                spinner_stop
+                success "PHP dependencies installed & autoloader updated"
             else
                 spinner_stop
-                cp "$COMPOSER_LOG" /tmp/vertex_update.log
-                rm -f "$COMPOSER_LOG"
+                cp "$COMPOSER_FIXED_LOG" /tmp/vertex_update.log
+                echo ""
+                echo "   Composer output:"
+                tail -30 "$COMPOSER_FIXED_LOG" | sed 's/^/   /'
+                error_msg "Failed: Installing PHP dependencies. See /tmp/vertex_update.log"
+                php artisan up --no-interaction 2>/dev/null || true
+                exit 1
+            fi
+        else
+            spinner_stop
+            cp "$COMPOSER_FIXED_LOG" /tmp/vertex_update.log
+            echo ""
+            echo "   Composer output:"
+            tail -30 "$COMPOSER_FIXED_LOG" | sed 's/^/   /'
+            error_msg "Failed: Updating PHP dependencies & autoloader. See /tmp/vertex_update.log"
+            php artisan up --no-interaction 2>/dev/null || true
+            exit 1
+        fi
+    fi
                 error_msg "Failed: Reconciling PHP dependencies"
                 echo ""
                 echo "   Last 20 lines of composer output:"
