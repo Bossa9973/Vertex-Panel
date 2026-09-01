@@ -8,16 +8,18 @@ interface UpdateServerParameters {
     vmid?: number | null
     userId?: number | null
     status?: EloquentStatus
+    planTier?: 'free' | 'paid'
 }
 
 const updateServer = async (
     serverUuid: string,
-    { userId, ...params }: UpdateServerParameters
+    { userId, planTier, ...params }: UpdateServerParameters
 ) => {
     const {
         data: { data },
     } = await http.patch(`/api/admin/servers/${serverUuid}`, {
         user_id: userId,
+        plan_tier: planTier,
         ...params,
     })
 

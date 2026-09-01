@@ -4,10 +4,11 @@ backup.py  —  Vertex Bot  —  Admin Backup Commands
 Slash command group: /backup
 
 Subcommands:
-  /backup all   [tier: all|paid|free]           — backup every VM
-  /backup node  <node_id> [tier: all|paid|free] — backup all VMs on a node
-  /backup server <ids: 1,2,5>                   — backup specific server IDs
-  /backup nodes                                 — list all nodes and their IDs
+  /backup all       [tier: all|paid|free]           — backup every VM
+  /backup node      <node_id> [tier: all|paid|free] — backup all VMs on a node
+  /backup server    <ids: 1,2,5>                   — backup specific server IDs
+  /backup nodes                                     — list all nodes and their IDs
+  /backup set_tier  <server_id> <tier: paid|free>   — mark VM as Paid or Free tier
 
 All subcommands require Administrator permission.
 Files upload to Google Drive immediately after each Proxmox snapshot completes.
@@ -31,7 +32,7 @@ def _tier_label(tier: str) -> str:
 
 
 class Backup(commands.Cog):
-    """Admin commands to trigger Proxmox VM backups to Google Drive."""
+    """Admin commands to trigger Proxmox VM backups to Google Drive and manage backup tiers."""
 
     backup_group = app_commands.Group(
         name="backup",
@@ -104,6 +105,33 @@ class Backup(commands.Cog):
         await self._send_working(interaction, f"Triggering backup for server(s): {ids_display}...")
         result = await panel_api.trigger_backups(server_ids=server_ids, force=True)
         await self._send_result(interaction, result)
+
+    # /backup set_tier
+    @backup_group.command(name="set_tier", description="Mark a server as Paid (hourly cloud backups) or Free (standard)")
+    @app_commands.describe(
+        server_id="Server ID (find it in Admin -> Servers)",
+        tier="Choose Paid or Free",
+    )
+    @app_commands.choices(tier=[
+        app_commands.Choice(name="Paid (Included in hourly cloud backups)", value="paid"),
+        app_commands.Choice(name="Free (Standard / manual backups only)", value="free"),
+    ])
+    async def backup_set_tier(self, interaction: discord.Interaction, server_id: int, tier: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        result = await panel_api.set_server_tier(server_id, tier)
+        if not result or result.get("ok") is False:
+            err = result.get("error") or result.get("message") or "Unknown error updating server tier."
+            embed = discord.Embed(color=DANGER, title="Tier Update Failed", description=err)
+            return await interaction.followup.send(embed=embed, ephemeral=True)
+
+        tier_badge = "💎 Paid Tier (Hourly Cloud Backups Active)" if tier == "paid" else "📦 Free Tier (Standard)"
+        embed = discord.Embed(
+            color=SUCCESS,
+            title="✅ Server Plan Tier Updated",
+            description=f"Server `#{server_id}` (**{result.get('name', 'Server')}**) has been marked as **{tier_badge}**.",
+        )
+        embed.set_footer(text="Paid servers are automatically backed up every hour at :00")
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     async def _send_working(self, interaction: discord.Interaction, description: str) -> None:
         embed = discord.Embed(

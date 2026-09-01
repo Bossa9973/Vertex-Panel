@@ -18,6 +18,7 @@ class UpdateGeneralInfoRequest extends BaseApiRequest
             'user_id' => $rules['user_id'],
             'vmid' => $rules['vmid'],
             'status' => $rules['status'],
+            'plan_tier' => 'sometimes|string|in:free,paid',
         ]);
     }
 }

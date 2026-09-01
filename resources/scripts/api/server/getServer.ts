@@ -28,6 +28,7 @@ export interface Server {
     name: string
     description: string | null
     status: EloquentStatus
+    planTier?: 'free' | 'paid'
 }
 
 export interface ServerBuild {
@@ -39,6 +40,7 @@ export interface ServerBuild {
     name: string
     description: string | null
     status: EloquentStatus
+    planTier?: 'free' | 'paid'
     nodeId: number
     usages: {
         bandwidth: number // bytes
@@ -83,6 +85,7 @@ export const rawDataToServer = (data: any): Server => ({
     name: data.name,
     description: data.description,
     status: data.status,
+    planTier: data.plan_tier ?? 'free',
 })
 
 export const rawDataToServerBuild = (data: any): ServerBuild => ({
@@ -93,6 +96,7 @@ export const rawDataToServerBuild = (data: any): ServerBuild => ({
     hostname: data.hostname,
     name: data.name,
     status: data.status,
+    planTier: data.plan_tier ?? 'free',
     nodeId: data.node_id,
     description: data.description
         ? data.description.length > 0

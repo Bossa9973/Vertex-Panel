@@ -114,6 +114,23 @@ class ServerController extends ApiController
                                                              ->respond();
     }
 
+    
+    public function setTier(Request $request, Server $server)
+    {
+        $validated = $request->validate([
+            'tier' => 'required|string|in:free,paid',
+        ]);
+
+        $server->update(['plan_tier' => $validated['tier']]);
+
+        return response()->json([
+            'ok' => true,
+            'server_id' => $server->id,
+            'name' => $server->name,
+            'plan_tier' => $server->plan_tier,
+            'message' => "Server #{$server->id} ({$server->name}) plan tier updated to {$server->plan_tier}.",
+        ]);
+    }
     public function updateBuild(UpdateBuildRequest $request, Server $server)
     {
         $server->update($request->safe()->except('address_ids'));

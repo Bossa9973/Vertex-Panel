@@ -148,7 +148,8 @@ Route::prefix('/servers')->group(function () {
             Route::get('/', [Admin\ServerController::class, 'show'])->withoutMiddleware(
                 ValidateServerStatusMiddleware::class,
             );
-            Route::patch('/', [Admin\ServerController::class, 'update'])->withoutMiddleware(
+            Route::patch('/', [Admin\ServerController::class, 'update'])->withoutMiddleware(ValidateServerStatusMiddleware::class);
+            Route::post('/tier', [Admin\ServerController::class, 'setTier'])->withoutMiddleware(
                 ValidateServerStatusMiddleware::class,
             );
             Route::delete('/', [Admin\ServerController::class, 'destroy']);

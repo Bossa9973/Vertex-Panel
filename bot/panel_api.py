@@ -333,3 +333,18 @@ async def trigger_backups(
     except Exception as e:
         print(f"[panel_api] trigger_backups failed: {e}")
         return {"ok": False, "error": str(e)}
+
+async def set_server_tier(server_id: int | str, tier: str) -> dict:
+    """Set the plan tier (free or paid) for a specific server."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+            r = await client.post(
+                f"{PANEL_URL}/api/admin/servers/{server_id}/tier",
+                json={"tier": tier},
+                headers=_headers(),
+            )
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        print(f"[panel_api] set_server_tier failed for #{server_id}: {e}")
+        return {"ok": False, "error": str(e)}

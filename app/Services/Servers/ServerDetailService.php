@@ -27,6 +27,7 @@ class ServerDetailService
             'name' => $server->name,
             'description' => $server->description,
             'status' => $server->status,
+            'plan_tier' => $server->plan_tier ?? 'free',
             'created_at' => $server->created_at instanceof \DateTimeInterface ? $server->created_at->toIso8601String() : $server->created_at,
             'expires_at' => $server->expires_at instanceof \DateTimeInterface ? $server->expires_at->toIso8601String() : $server->expires_at,
             'usages' => [

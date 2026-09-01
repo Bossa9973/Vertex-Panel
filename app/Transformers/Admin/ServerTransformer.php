@@ -20,6 +20,7 @@ class ServerTransformer extends TransformerAbstract
             'name' => $server->name,
             'description' => $server->description,
             'status' => $server->status,
+            'plan_tier' => $server->plan_tier ?? 'free',
         ];
     }
 }

@@ -16,7 +16,6 @@ import FormCard from '@/components/elements/FormCard'
 import SelectForm from '@/components/elements/forms/SelectForm'
 import TextInputForm from '@/components/elements/forms/TextInputForm'
 
-import NodesSelectForm from '@/components/admin/servers/NodesSelectForm'
 import UsersSelectForm from '@/components/admin/servers/UsersSelectForm'
 
 const ServerInformationCard = () => {
@@ -36,6 +35,7 @@ const ServerInformationCard = () => {
         vmid: z.preprocess(Number, z.number().min(100).max(999999999)),
         userId: z.preprocess(Number, z.number()),
         status: z.string(),
+        planTier: z.enum(['free', 'paid']),
     })
 
     const form = useForm({
@@ -46,6 +46,7 @@ const ServerInformationCard = () => {
             vmid: server.vmid,
             userId: server.userId.toString(),
             status: server.status ?? 'ready',
+            planTier: (server.planTier as 'free' | 'paid') ?? 'free',
         },
     })
 
@@ -71,6 +72,7 @@ const ServerInformationCard = () => {
                 vmid: data.vmid,
                 userId: data.userId.toString(),
                 status: status ?? 'ready',
+                planTier: data.planTier,
             })
         } catch (error) {
             clearAndAddHttpError(error as any)
@@ -95,6 +97,11 @@ const ServerInformationCard = () => {
         },
     ]
 
+    const planTierOptions = [
+        { value: 'free', label: 'Free Tier (Standard / Manual Backups)' },
+        { value: 'paid', label: 'Paid Tier (Included in Hourly Cloud Backups)' },
+    ]
+
     return (
         <FormCard className='w-full'>
             <FormProvider {...form}>
@@ -117,6 +124,11 @@ const ServerInformationCard = () => {
                             />
                             <TextInputForm name='vmid' label='VMID' />
                             <UsersSelectForm />
+                            <SelectForm
+                                name={'planTier'}
+                                data={planTierOptions}
+                                label='Plan Tier (Backup Policy)'
+                            />
                             <SelectForm
                                 name={'status'}
                                 data={statusTypes}
