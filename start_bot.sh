@@ -84,15 +84,15 @@ cd "$BOT_DIR"
 
 # Python environment
 
-echo "-> Installing Python packages..."
-
-apt-get update -y > /dev/null 2>&1 || true
-
-apt-get install -y python3 python3-pip python3-venv python3-full python3-virtualenv virtualenv > /dev/null 2>&1 || true
-
-
-
 if [ ! -f "venv/bin/activate" ]; then
+
+    echo "-> Installing Python packages..."
+
+    apt-get update -y > /dev/null 2>&1 || true
+
+    apt-get install -y python3 python3-pip python3-venv python3-full python3-virtualenv virtualenv > /dev/null 2>&1 || true
+
+
 
     echo "-> Creating isolated virtual environment..."
 
@@ -122,11 +122,21 @@ source venv/bin/activate
 
 
 
-echo "-> Installing bot requirements..."
+# Only install requirements if discord module is missing or requirements changed
 
-pip install --upgrade pip > /dev/null 2>&1 || true
+if ! python3 -c "import discord, httpx, dotenv" 2>/dev/null; then
 
-pip install -r requirements.txt > /dev/null 2>&1 || pip install -r requirements.txt
+    echo "-> Installing bot requirements..."
+
+    pip install --upgrade pip > /dev/null 2>&1 || true
+
+    pip install -r requirements.txt > /dev/null 2>&1 || pip install -r requirements.txt
+
+else
+
+    echo "-> Python dependencies already installed."
+
+fi
 
 
 
@@ -210,7 +220,7 @@ fi
 
 # Systemd service
 
-echo "-> Creating systemd service..."
+echo "-> Configuring systemd service..."
 
 
 
@@ -250,7 +260,23 @@ EOF
 
 
 
-echo "-> Enabling and starting service..."
+# Install global shortcut for fast restart
+
+if [ -f "/var/www/vertex-panel/restart_bot.sh" ]; then
+
+    cp -f "/var/www/vertex-panel/restart_bot.sh" /usr/local/bin/vertex-bot-restart 2>/dev/null || true
+
+    chmod +x /usr/local/bin/vertex-bot-restart 2>/dev/null || true
+
+    cp -f "/var/www/vertex-panel/restart_bot.sh" /usr/local/bin/bot-restart 2>/dev/null || true
+
+    chmod +x /usr/local/bin/bot-restart 2>/dev/null || true
+
+fi
+
+
+
+echo "-> Starting service..."
 
 systemctl daemon-reload
 
@@ -264,14 +290,14 @@ echo ""
 
 echo "========================================"
 
-echo "✅ Bot setup complete!"
+echo "✅ Bot setup complete & running!"
 
 echo "========================================"
 
 echo ""
 
-echo "View live logs:  journalctl -u vertex-bot -f"
+echo "Quick restart:   bot-restart  (or: bash restart_bot.sh)"
 
-echo "Restart bot:     systemctl restart vertex-bot"
+echo "View live logs:  journalctl -u vertex-bot -f"
 
 echo "Bot config:      nano ${BOT_DIR}/.env"
