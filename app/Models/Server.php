@@ -1,5 +1,7 @@
 <?php
 
+
+
 namespace Convoy\Models;
 
 use Convoy\Casts\MebibytesToAndFromBytes;
@@ -16,11 +18,11 @@ class Server extends Model
     use HasFactory;
 
     protected $casts = [
-        'memory' => MebibytesToAndFromBytes::class,
-        'disk' => MebibytesToAndFromBytes::class,
+        'memory'          => MebibytesToAndFromBytes::class,
+        'disk'            => MebibytesToAndFromBytes::class,
         'bandwidth_usage' => MebibytesToAndFromBytes::class,
         'bandwidth_limit' => MebibytesToAndFromBytes::class,
-        'expires_at' => 'datetime',
+        'expires_at'      => 'datetime',
     ];
 
     protected $guarded = [
@@ -30,20 +32,22 @@ class Server extends Model
     ];
 
     public static array $validationRules = [
-        'name' => 'required|string|min:1|max:40',
-        'node_id' => 'required|integer|exists:nodes,id',
-        'user_id' => 'required|integer|exists:users,id',
-        'vmid' => 'required|numeric|min:100|max:999999999',
-        'hostname' => 'required|string|min:1|max:191',
-        'status' => ['sometimes', 'nullable', 'string', 'in:installing,install_failed,suspended,restoring_backup,restoring_snapshot,deleting,deletion_failed'],
-        'cpu' => 'required|numeric|min:1',
-        'memory' => 'required|numeric|min:16777216',
-        'disk' => 'required|numeric|min:1',
+        'name'            => 'required|string|min:1|max:40',
+        'node_id'         => 'required|integer|exists:nodes,id',
+        'user_id'         => 'required|integer|exists:users,id',
+        'vmid'            => 'required|numeric|min:100|max:999999999',
+        'hostname'        => 'required|string|min:1|max:191',
+        'status'          => ['sometimes', 'nullable', 'string', 'in:installing,install_failed,suspended,restoring_backup,restoring_snapshot,deleting,deletion_failed'],
+        'cpu'             => 'required|numeric|min:1',
+        'memory'          => 'required|numeric|min:16777216',
+        'disk'            => 'required|numeric|min:1',
         'bandwidth_usage' => 'sometimes|numeric|min:0',
-        'snapshot_limit' => 'present|nullable|integer|min:0',
-        'backup_limit' => 'present|nullable|integer|min:0',
+        'snapshot_limit'  => 'present|nullable|integer|min:0',
+        'backup_limit'    => 'present|nullable|integer|min:0',
         'bandwidth_limit' => 'present|nullable|integer|min:0',
-        'hydrated_at' => 'nullable|date',
+        'hydrated_at'     => 'nullable|date',
+        // Tier: free = no auto-backup, paid = scheduled daily cloud backups + UI badge
+        'plan_tier'       => 'sometimes|string|in:free,paid',
     ];
 
     public function node(): BelongsTo
@@ -95,6 +99,14 @@ class Server extends Model
     }
 
     /**
+     * Returns true when this server's tier includes automatic cloud backups.
+     */
+    public function hasPaidTier(): bool
+    {
+        return $this->plan_tier === 'paid';
+    }
+
+    /**
      * Checks if the server is currently in a user-accessible state. If not, an
      * exception is raised. This should be called whenever something needs to make
      * sure the server is not in a weird state that should block user access.
@@ -103,9 +115,7 @@ class Server extends Model
      */
     public function validateCurrentState(): void
     {
-        if (
-            !is_null($this->status)
-        ) {
+        if (!is_null($this->status)) {
             throw new ServerStatusConflictException($this);
         }
     }
@@ -117,3 +127,4 @@ class Server extends Model
         });
     }
 }
+

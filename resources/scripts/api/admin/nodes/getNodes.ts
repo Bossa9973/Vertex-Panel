@@ -1,4 +1,4 @@
-import http, { PaginatedResult, getPaginationSet } from '@/api/http'
+﻿import http, { PaginatedResult, getPaginationSet } from '@/api/http'
 
 export interface Node {
     id: number
@@ -21,6 +21,12 @@ export interface Node {
     network: string
     cotermId: number | null
     serversCount: number
+    // SSH / backup upload fields
+    sshHost: string | null
+    sshPort: number
+    sshUsername: string
+    backupPath: string | null
+    sshKeyConfigured: boolean
 }
 
 export const rawDataToNode = (data: any): Node => ({
@@ -44,6 +50,11 @@ export const rawDataToNode = (data: any): Node => ({
     network: data.network,
     cotermId: data.coterm_id,
     serversCount: data.servers_count,
+    sshHost: data.ssh_host ?? null,
+    sshPort: data.ssh_port ?? 22,
+    sshUsername: data.ssh_username ?? 'root',
+    backupPath: data.backup_path ?? null,
+    sshKeyConfigured: Boolean(data.ssh_key_configured),
 })
 
 export type NodeResponse = PaginatedResult<Node>
@@ -83,3 +94,4 @@ const getNodes = async ({
 }
 
 export default getNodes
+

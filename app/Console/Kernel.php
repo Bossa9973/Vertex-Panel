@@ -1,5 +1,7 @@
 <?php
 
+
+
 namespace Convoy\Console;
 
 use Convoy\Models\ActivityLog;
@@ -11,6 +13,7 @@ use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use Convoy\Console\Commands\Maintenance\PruneUsersCommand;
 use Convoy\Console\Commands\Server\UpdateRateLimitsCommand;
 use Convoy\Console\Commands\Maintenance\PruneOrphanedBackupsCommand;
+use Convoy\Console\Commands\Server\RunScheduledBackupsCommand;
 
 class Kernel extends ConsoleKernel
 {
@@ -36,6 +39,10 @@ class Kernel extends ConsoleKernel
         $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
         $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
 
+        // Automated cloud backups for paid-tier servers: runs hourly.
+        // withoutOverlapping() prevents a slow batch from spawning duplicate runs.
+        $schedule->command(RunScheduledBackupsCommand::class)->hourly()->withoutOverlapping();
+
         // Poll sish admin API to update tunnel_port for any server whose tunnel came up since last run
         $schedule->call(function () {
             \Convoy\Models\Server::whereIn('tunnel_status', ['pending', 'offline'])
@@ -57,3 +64,4 @@ class Kernel extends ConsoleKernel
         //require base_path('routes/console.php');
     }
 }
+

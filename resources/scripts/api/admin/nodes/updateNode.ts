@@ -1,4 +1,4 @@
-import { rawDataToNode } from '@/api/admin/nodes/getNodes'
+﻿import { rawDataToNode } from '@/api/admin/nodes/getNodes'
 import http from '@/api/http'
 
 interface UpdateNodeParameters {
@@ -19,6 +19,12 @@ interface UpdateNodeParameters {
     backupStorage: string
     isoStorage: string
     network: string
+    // SSH / backup upload fields (all optional — can be set separately)
+    sshHost?: string | null
+    sshPort?: number
+    sshUsername?: string
+    sshPrivateKey?: string | null
+    backupPath?: string | null
 }
 
 const updateNode = async (nodeId: number, payload: UpdateNodeParameters) => {
@@ -42,9 +48,16 @@ const updateNode = async (nodeId: number, payload: UpdateNodeParameters) => {
         backup_storage: payload.backupStorage,
         iso_storage: payload.isoStorage,
         network: payload.network,
+        ssh_host: payload.sshHost ?? undefined,
+        ssh_port: payload.sshPort ?? undefined,
+        ssh_username: payload.sshUsername ?? undefined,
+        // Only send the private key if a value was actually entered (it's write-only)
+        ssh_private_key: payload.sshPrivateKey ? payload.sshPrivateKey : undefined,
+        backup_path: payload.backupPath ?? undefined,
     })
 
     return rawDataToNode(data)
 }
 
 export default updateNode
+

@@ -1,5 +1,7 @@
 <?php
 
+
+
 namespace Convoy\Models;
 
 use Convoy\Casts\MebibytesToAndFromBytes;
@@ -14,19 +16,28 @@ class Backup extends Model
     protected $guarded = ['id', 'created_at', 'updated_at'];
 
     protected $casts = [
-        'completed_at' => 'datetime',
-        'size' => MebibytesToAndFromBytes::class,
+        'completed_at'      => 'datetime',
+        'cloud_uploaded_at' => 'datetime',
+        'size'              => MebibytesToAndFromBytes::class,
+    ];
+
+    /**
+     * Default attribute values.
+     */
+    protected $attributes = [
+        'cloud_status' => 'pending',
     ];
 
     public static array $validationRules = [
-        'uuid' => 'required|uuid',
-        'server_id' => 'required|exists:servers,id',
+        'uuid'         => 'required|uuid',
+        'server_id'    => 'required|exists:servers,id',
         'is_successful' => 'sometimes|boolean',
-        'is_locked' => 'sometimes|boolean',
-        'name' => 'required|string|min:1|max:40',
-        'file_name' => 'nullable|string',
-        'size' => 'sometimes|numeric|min:0',
+        'is_locked'    => 'sometimes|boolean',
+        'name'         => 'required|string|min:1|max:40',
+        'file_name'    => 'nullable|string',
+        'size'         => 'sometimes|numeric|min:0',
         'completed_at' => 'nullable|date',
+        'cloud_status' => 'sometimes|in:pending,uploading,uploaded,failed',
     ];
 
     public function server(): BelongsTo
@@ -34,3 +45,4 @@ class Backup extends Model
         return $this->belongsTo(Server::class);
     }
 }
+

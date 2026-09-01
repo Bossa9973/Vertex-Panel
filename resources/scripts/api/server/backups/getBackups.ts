@@ -1,4 +1,4 @@
-import http, {
+﻿import http, {
     FractalResponseData,
     PaginatedResult,
     getPaginationSet,
@@ -16,6 +16,8 @@ export interface Backup {
     isLocked: boolean
     name: string
     size: number
+    /** Cloud upload lifecycle status. Reflects UploadBackupToCloudJob progress. */
+    cloudStatus: 'pending' | 'uploading' | 'uploaded' | 'failed'
     completedAt?: Date
     createdAt: Date
 }
@@ -26,6 +28,7 @@ export const rawDataToBackupObject = (data: FractalResponseData): Backup => ({
     isLocked: data.is_locked,
     name: data.name,
     size: data.size,
+    cloudStatus: data.cloud_status ?? 'pending',
     completedAt: data.completed_at ? new Date(data.completed_at) : undefined,
     createdAt: new Date(data.created_at),
 })
@@ -56,3 +59,4 @@ export default (
             .catch(reject)
     })
 }
+

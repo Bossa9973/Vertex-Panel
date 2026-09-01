@@ -1,98 +1,99 @@
-{
-  "name": "convoypanel/panel",
-  "type": "project",
-  "description": "A beautifully designed KVM server management panel for Proxmox Virtual Environment.",
-  "keywords": [
-    "proxmox",
-    "kvm",
-    "virtualization",
-    "hosting",
-    "SaaS",
-    "server",
-    "panel"
-  ],
-  "license": "BSL",
-  "require": {
-    "php": "^8.2",
-    "ext-gmp": "*",
-    "ext-pcntl": "*",
-    "guzzlehttp/guzzle": "^7.8",
-    "laravel/fortify": "^1.16",
-    "laravel/framework": "^11.0",
-    "laravel/helpers": "^1.6",
-    "laravel/horizon": "^5.28",
-    "laravel/sanctum": "^4.0",
-    "laravel/tinker": "^2.8",
-    "lcobucci/jwt": "^5.0",
-    "phpseclib/phpseclib": "^3.0",
-    "predis/predis": "^3.5",
-    "spatie/eloquent-sortable": "^4.0",
-    "spatie/laravel-data": "^4.15",
-    "spatie/laravel-fractal": "^6.0",
-    "spatie/laravel-query-builder": "^5.1",
-    "symfony/console": "^7.0.3 <7.4",
-    "webmozart/assert": "^1.11"
-  },
-  "require-dev": {
-    "fakerphp/faker": "^1.9.1",
-    "laravel/breeze": "^2.0",
-    "laravel/pint": "^1.2",
-    "mockery/mockery": "^1.4.4",
-    "nunomaduro/collision": "^8.1",
-    "nunomaduro/larastan": "^2.4",
-    "pestphp/pest-plugin-laravel": "^2.2",
-    "phpstan/phpstan": "^1.10",
-    "phpunit/phpunit": "^10.0",
-    "spatie/laravel-ignition": "^2.0"
-  },
-  "autoload": {
-    "files": [
-      "app/Helpers/Network.php"
-    ],
-    "psr-4": {
-      "Convoy\\": "app/",
-      "Database\\Factories\\": "database/factories/",
-      "Database\\Seeders\\": "database/seeders/"
-    }
-  },
-  "autoload-dev": {
-    "psr-4": {
-      "Tests\\": "tests/"
-    }
-  },
-  "scripts": {
-    "post-autoload-dump": [
-      "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
-      "@php artisan package:discover --ansi"
-    ],
-    "post-update-cmd": [
-      "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
-    ],
-    "post-root-package-install": [
-      "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
-    ],
-    "post-create-project-cmd": [
-      "@php artisan key:generate --ansi"
-    ],
-    "analyze": [
-      "./vendor/bin/phpstan analyse --memory-limit=4G"
-    ]
-  },
-  "extra": {
-    "laravel": {
-      "dont-discover": [
-        "laravel/telescope"
-      ]
-    }
-  },
-  "config": {
-    "optimize-autoloader": true,
-    "preferred-install": "dist",
-    "sort-packages": true,
-    "allow-plugins": {
-      "pestphp/pest-plugin": true
-    }
-  },
-  "minimum-stability": "stable",
-  "prefer-stable": true
+﻿{
+    "name":  "convoypanel/panel",
+    "type":  "project",
+    "description":  "A beautifully designed KVM server management panel for Proxmox Virtual Environment.",
+    "keywords":  [
+                     "proxmox",
+                     "kvm",
+                     "virtualization",
+                     "hosting",
+                     "SaaS",
+                     "server",
+                     "panel"
+                 ],
+    "license":  "BSL",
+    "require":  {
+                    "php":  "^8.2",
+                    "ext-gmp":  "*",
+                    "ext-pcntl":  "*",
+                    "guzzlehttp/guzzle":  "^7.8",
+                    "laravel/fortify":  "^1.16",
+                    "laravel/framework":  "^11.0",
+                    "laravel/helpers":  "^1.6",
+                    "laravel/horizon":  "^5.28",
+                    "laravel/sanctum":  "^4.0",
+                    "laravel/tinker":  "^2.8",
+                    "lcobucci/jwt":  "^5.0",
+                    "phpseclib/phpseclib":  "^3.0",
+                    "predis/predis":  "^3.5",
+                    "spatie/eloquent-sortable":  "^4.0",
+                    "spatie/laravel-data":  "^4.15",
+                    "spatie/laravel-fractal":  "^6.0",
+                    "spatie/laravel-query-builder":  "^5.1",
+                    "symfony/console":  "^7.0.3 \u003c7.4",
+                    "webmozart/assert":  "^1.11",
+                    "masbug/flysystem-google-drive-ext":  "^2.3"
+                },
+    "require-dev":  {
+                        "fakerphp/faker":  "^1.9.1",
+                        "laravel/breeze":  "^2.0",
+                        "laravel/pint":  "^1.2",
+                        "mockery/mockery":  "^1.4.4",
+                        "nunomaduro/collision":  "^8.1",
+                        "nunomaduro/larastan":  "^2.4",
+                        "pestphp/pest-plugin-laravel":  "^2.2",
+                        "phpstan/phpstan":  "^1.10",
+                        "phpunit/phpunit":  "^10.0",
+                        "spatie/laravel-ignition":  "^2.0"
+                    },
+    "autoload":  {
+                     "files":  [
+                                   "app/Helpers/Network.php"
+                               ],
+                     "psr-4":  {
+                                   "Convoy\\":  "app/",
+                                   "Database\\Factories\\":  "database/factories/",
+                                   "Database\\Seeders\\":  "database/seeders/"
+                               }
+                 },
+    "autoload-dev":  {
+                         "psr-4":  {
+                                       "Tests\\":  "tests/"
+                                   }
+                     },
+    "scripts":  {
+                    "post-autoload-dump":  [
+                                               "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+                                               "@php artisan package:discover --ansi"
+                                           ],
+                    "post-update-cmd":  [
+                                            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+                                        ],
+                    "post-root-package-install":  [
+                                                      "@php -r \"file_exists(\u0027.env\u0027) || copy(\u0027.env.example\u0027, \u0027.env\u0027);\""
+                                                  ],
+                    "post-create-project-cmd":  [
+                                                    "@php artisan key:generate --ansi"
+                                                ],
+                    "analyze":  [
+                                    "./vendor/bin/phpstan analyse --memory-limit=4G"
+                                ]
+                },
+    "extra":  {
+                  "laravel":  {
+                                  "dont-discover":  [
+                                                        "laravel/telescope"
+                                                    ]
+                              }
+              },
+    "config":  {
+                   "optimize-autoloader":  true,
+                   "preferred-install":  "dist",
+                   "sort-packages":  true,
+                   "allow-plugins":  {
+                                         "pestphp/pest-plugin":  true
+                                     }
+               },
+    "minimum-stability":  "stable",
+    "prefer-stable":  true
 }

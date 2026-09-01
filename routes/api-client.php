@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Convoy\Http\Controllers\Client;
 use Convoy\Http\Middleware\Activity\ServerSubject;
@@ -56,6 +56,7 @@ Route::prefix('/servers/{server}')->middleware(
     Route::prefix('/backups')->group(function () {
         Route::get('/', [Client\Servers\BackupController::class, 'index']);
         Route::post('/', [Client\Servers\BackupController::class, 'store']);
+        Route::get('/{backup}/download', [Client\Servers\BackupController::class, 'download']);
         Route::post('/{backup}/restore', [Client\Servers\BackupController::class, 'restore']);
         Route::delete('/{backup}', [Client\Servers\BackupController::class, 'destroy']);
     });
@@ -111,7 +112,7 @@ Route::post('/pay/{uuid}', [Client\Reseller\PublicPaymentLinkController::class, 
 
 /*
 |--------------------------------------------------------------------------
-| Payment Gateway Webhooks (no auth, CSRF exempt — verified by HMAC signature)
+| Payment Gateway Webhooks (no auth, CSRF exempt вЂ” verified by HMAC signature)
 |--------------------------------------------------------------------------
 */
 Route::post('/webhooks/maxelpay', [Client\Reseller\MaxelpayWebhookController::class, 'handle'])
@@ -119,3 +120,5 @@ Route::post('/webhooks/maxelpay', [Client\Reseller\MaxelpayWebhookController::cl
 
 Route::post('/webhooks/nowpayments', [Client\Reseller\NowPaymentsWebhookController::class, 'handle'])
     ->withoutMiddleware(['auth:sanctum', 'auth', 'verified', \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+
+

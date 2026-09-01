@@ -1,9 +1,12 @@
 <?php
 
+
+
 namespace Convoy\Services\Backups;
 
 use Carbon\Carbon;
 use Closure;
+use Convoy\Jobs\Server\UploadBackupToCloudJob;
 use Convoy\Models\Backup;
 use Convoy\Models\Server;
 use Convoy\Repositories\Proxmox\Server\ProxmoxActivityRepository;
@@ -23,7 +26,7 @@ class BackupMonitorService
     public function checkCreationProgress(Backup $backup, string $upid, ?Closure $callback = null)
     {
         $status = $this->repository->setServer($backup->server)->getStatus($upid);
-        $logs = $this->repository->setServer($backup->server)->getLog($upid);
+        $logs   = $this->repository->setServer($backup->server)->getLog($upid);
 
         // get the filename of the backup (e.g. vzdump-qemu-101-2021_01_01-00_00_00.vma.zstd)
         $fileName = null;
@@ -44,26 +47,30 @@ class BackupMonitorService
 
         if (Str::lower(Arr::get($status, 'exitstatus')) === 'ok') {
             $archives = $this->backupRepository->setServer($backup->server)->getBackups();
-            $archive = collect($archives)->where(
+            $archive  = collect($archives)->where(
                 'volid', "{$backup->server->node->backup_storage}:backup/{$fileName}",
             )->first();
 
             $backup->update([
                 'is_successful' => true,
-                'file_name' => $fileName,
-                'size' => Arr::get($archive, 'size', 0),
-                'completed_at' => Carbon::now(),
+                'file_name'     => $fileName,
+                'size'          => Arr::get($archive, 'size', 0),
+                'completed_at'  => Carbon::now(),
             ]);
+
+            // Dispatch the cloud upload job now that the Proxmox backup is confirmed complete.
+            // The job streams the archive from the node via SFTP and writes it to Google Drive.
+            UploadBackupToCloudJob::dispatch($backup->id);
+
         } else {
             $backup->update([
                 'is_successful' => false,
-                'completed_at' => Carbon::now(),
+                'completed_at'  => Carbon::now(),
             ]);
         }
     }
 
-    public function checkRestorationProgress(Server $server, string $upid, ?Closure $callback = null,
-    )
+    public function checkRestorationProgress(Server $server, string $upid, ?Closure $callback = null)
     {
         $status = $this->repository->setServer($server)->getStatus($upid);
 
@@ -80,3 +87,4 @@ class BackupMonitorService
         ]);
     }
 }
+

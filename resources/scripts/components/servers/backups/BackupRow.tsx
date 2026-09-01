@@ -1,10 +1,16 @@
-//@ts-ignore
+﻿//@ts-ignore
 import Dots from '@/assets/images/icons/dots-vertical.svg'
 import { ServerContext } from '@/state/server'
 import { bytesToString } from '@/util/helpers'
 import useFlash from '@/util/useFlash'
 import useNotify from '@/util/useNotify'
-import { ExclamationCircleIcon } from '@heroicons/react/20/solid'
+import {
+    ArrowDownTrayIcon,
+    CheckCircleIcon,
+    CloudArrowUpIcon,
+    ExclamationCircleIcon,
+    ExclamationTriangleIcon,
+} from '@heroicons/react/20/solid'
 import { Loader } from '@mantine/core'
 import { formatDistanceToNow } from 'date-fns'
 import { useState } from 'react'
@@ -12,6 +18,7 @@ import { useTranslation } from 'react-i18next'
 import { KeyedMutator } from 'swr'
 
 import deleteBackup from '@/api/server/backups/deleteBackup'
+import downloadBackup from '@/api/server/backups/downloadBackup'
 import { Backup, BackupResponse } from '@/api/server/backups/getBackups'
 import restoreBackup from '@/api/server/backups/restoreBackup'
 
@@ -21,7 +28,6 @@ import Menu from '@/components/elements/Menu'
 import Modal from '@/components/elements/Modal'
 import Display from '@/components/elements/displays/DisplayRow'
 
-
 interface Props {
     backup: Backup
     swr: {
@@ -29,15 +35,64 @@ interface Props {
     }
 }
 
-interface DropdownProps {
-    className?: string
-    backup: Backup
-    swr: {
-        mutate: KeyedMutator<BackupResponse>
+/**
+ * Small badge that communicates the Google Drive upload status of a backup.
+ * - pending   = grey pulsing spinner (waiting for Proxmox backup to finish)
+ * - uploading = blue spinner (actively being transferred to Drive)
+ * - uploaded  = green cloud icon (available for download)
+ * - failed    = red warning icon (upload failed after all retries)
+ */
+const CloudStatusBadge = ({ status }: { status: Backup['cloudStatus'] }) => {
+    switch (status) {
+        case 'uploading':
+            return (
+                <span
+                    title='Uploading to Google Drive…'
+                    className='flex items-center gap-1 text-xs text-blue-400'
+                >
+                    <Loader size='xs' color='blue' />
+                    <span className='hidden md:inline'>Uploading</span>
+                </span>
+            )
+        case 'uploaded':
+            return (
+                <span
+                    title='Saved to Google Drive'
+                    className='flex items-center gap-1 text-xs text-green-400'
+                >
+                    <CloudArrowUpIcon className='h-4 w-4' />
+                    <span className='hidden md:inline'>In Drive</span>
+                </span>
+            )
+        case 'failed':
+            return (
+                <span
+                    title='Cloud upload failed'
+                    className='flex items-center gap-1 text-xs text-red-400'
+                >
+                    <ExclamationTriangleIcon className='h-4 w-4' />
+                    <span className='hidden md:inline'>Upload failed</span>
+                </span>
+            )
+        case 'pending':
+        default:
+            return (
+                <span
+                    title='Waiting to upload to Google Drive'
+                    className='flex items-center gap-1 text-xs text-foreground-muted'
+                >
+                    <Loader size='xs' color='gray' />
+                    <span className='hidden md:inline'>Pending</span>
+                </span>
+            )
     }
 }
 
-const Dropdown = ({ className, backup, swr: { mutate } }: DropdownProps) => {
+const Dropdown = ({
+    backup,
+    swr: { mutate },
+    className,
+}: Props & { className?: string }) => {
     const { t } = useTranslation('server.backups')
     const { t: tStrings } = useTranslation('strings')
     const { clearFlashes, clearAndAddHttpError } = useFlash()
@@ -96,6 +151,20 @@ const Dropdown = ({ className, backup, swr: { mutate } }: DropdownProps) => {
         } catch (error) {
             clearAndAddHttpError({
                 key: `servers.backups.${backup.uuid}.delete`,
+                error,
+            })
+        }
+    }
+
+    const handleDownload = async () => {
+        clearFlashes(`servers.backups.${backup.uuid}.download`)
+        try {
+            const { url } = await downloadBackup(server.uuid, backup.uuid)
+            // Open the signed Drive URL in a new tab. The URL is short-lived (5 min).
+            window.open(url, '_blank', 'noopener,noreferrer')
+        } catch (error) {
+            clearAndAddHttpError({
+                key: `servers.backups.${backup.uuid}.download`,
                 error,
             })
         }
@@ -173,6 +242,14 @@ const Dropdown = ({ className, backup, swr: { mutate } }: DropdownProps) => {
                             {tStrings('restore')}
                         </Menu.Item>
                     ) : null}
+                    {backup.cloudStatus === 'uploaded' ? (
+                        <Menu.Item
+                            onClick={handleDownload}
+                            icon={<ArrowDownTrayIcon className='h-4 w-4' />}
+                        >
+                            Download from Drive
+                        </Menu.Item>
+                    ) : null}
                     <Menu.Item
                         color='red'
                         onClick={() => setDeleteModalOpen(true)}
@@ -202,6 +279,10 @@ const BackupRow = ({ backup, swr: { mutate } }: Props) => {
                         !backup.isSuccessful && (
                             <ExclamationCircleIcon className='h-5 w-5 text-error' />
                         )
+                    )}
+                    {/* Cloud upload status badge — shown once the Proxmox backup is done */}
+                    {backup.completedAt && backup.isSuccessful && (
+                        <CloudStatusBadge status={backup.cloudStatus} />
                     )}
                 </div>
 
@@ -235,3 +316,4 @@ const BackupRow = ({ backup, swr: { mutate } }: Props) => {
 }
 
 export default BackupRow
+
