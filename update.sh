@@ -410,48 +410,32 @@ perform_update() {
 
     fi
 
-    if [[ "$FRONTEND_CHANGED" == true ]]; then
-
+    # Frontend assets - always use precompiled Vite assets from repo
+    if [[ -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
+        info "Precompiled Vite assets detected — skipping build"
+    else
+        warn "Precompiled assets not found — compiling on server..."
         if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
-
             run_or_fail "Installing Node.js dependencies (offline cache)" \
                 npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
-
         else
-
             run_or_fail "Installing Node.js dependencies (full download)" \
                 npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
-
         fi
 
         spinner_start "Building frontend assets (Vite)"
-
         if npm run build --prefix "${INSTALL_DIR}" > /tmp/vertex_update.log 2>&1; then
-
             spinner_stop
-
             success "Building frontend assets (Vite)"
-
         else
-
             spinner_stop
-
             warn "Vite build encountered stale/corrupted node_modules. Performing automatic repair..."
-
             rm -rf "${INSTALL_DIR}/node_modules"
-
             run_or_fail "Reinstalling clean Node.js dependencies" \
                 npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
-
             run_or_fail "Building frontend assets (Vite)" \
                 npm run build --prefix "${INSTALL_DIR}"
-
         fi
-
-    else
-
-        info "No frontend changes detected — using precompiled Vite assets"
-
     fi
 
     # Laravel cache — clear stale, then re-cache
