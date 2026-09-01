@@ -270,3 +270,66 @@ async def mark_pterodactyl_dm_sent(queue_id: int) -> None:
         await _post("/ptero-dm-queue/mark-sent", {"id": queue_id})
     except Exception as e:
         print(f"[panel_api] mark_pterodactyl_dm_sent failed for id {queue_id}: {e}")
+
+
+# ════════════════════════════════════════════════════════════════
+# Backup Operations
+# ════════════════════════════════════════════════════════════════
+
+async def get_nodes() -> list:
+    """Fetch all Proxmox nodes from the panel admin API."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+            r = await client.get(
+                f"{PANEL_URL}/api/admin/nodes?per_page=100",
+                headers=_headers(),
+            )
+            r.raise_for_status()
+            data = r.json()
+            return [{"id": n["id"], "name": n["attributes"]["name"]} for n in data.get("data", [])]
+    except Exception as e:
+        print(f"[panel_api] get_nodes failed: {e}")
+        return []
+
+
+async def trigger_backups(
+    *,
+    server_ids: list[int] | None = None,
+    node_id: int | None = None,
+    tier: str = "all",
+    force: bool = True,
+) -> dict:
+    """
+    Trigger VM backups and upload to Google Drive.
+
+    Args:
+        server_ids: Specific server IDs to back up (overrides node/tier).
+        node_id:    Only back up servers on this node.
+        tier:       'all' | 'paid' | 'free'
+        force:      Bypass 24-hour backup window (default True for manual triggers).
+
+    Returns:
+        { ok, dispatched, skipped, message } or { ok: False, error }
+    """
+    try:
+        payload: dict = {"force": force}
+        if server_ids:
+            payload["server_ids"] = server_ids
+        else:
+            payload["all"] = True
+            if node_id:
+                payload["node_id"] = node_id
+            if tier and tier != "all":
+                payload["tier"] = tier
+
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+            r = await client.post(
+                f"{PANEL_URL}/api/admin/servers/trigger-backups",
+                json=payload,
+                headers=_headers(),
+            )
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        print(f"[panel_api] trigger_backups failed: {e}")
+        return {"ok": False, "error": str(e)}
