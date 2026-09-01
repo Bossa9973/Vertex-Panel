@@ -30,11 +30,7 @@
 
 # =============================================================================
 
-
-
 set -euo pipefail
-
-
 
 # --- Constants ----------------------------------------------------------------
 
@@ -45,8 +41,6 @@ GITHUB_BRANCH="main"
 DEFAULT_INSTALL_DIR="/var/www/vertex-panel"
 
 SERVICE_USER="www-data"
-
-
 
 # --- ANSI Colors --------------------------------------------------------------
 
@@ -68,11 +62,7 @@ DIM='\033[2m'
 
 RESET='\033[0m'
 
-
-
 SPINNER_PID=""
-
-
 
 # --- Spinner ------------------------------------------------------------------
 
@@ -104,8 +94,6 @@ spinner_start() {
 
 }
 
-
-
 spinner_stop() {
 
     if [[ -n "$SPINNER_PID" ]]; then
@@ -121,8 +109,6 @@ spinner_stop() {
     fi
 
 }
-
-
 
 # --- Output Helpers -----------------------------------------------------------
 
@@ -156,11 +142,7 @@ print_banner() {
 
 }
 
-
-
 run_quietly() { "$@" > /dev/null 2>&1 || true; }
-
-
 
 info()    { printf "   ${CYAN}*${RESET}  ${WHITE}%b${RESET}\n" "$1"; }
 
@@ -169,8 +151,6 @@ success() { printf "   ${GREEN}ok${RESET} ${GREEN}%b${RESET}\n" "$1"; }
 warn()    { printf "   ${YELLOW}!!${RESET} ${YELLOW}%b${RESET}\n" "$1"; }
 
 error_msg() { printf "   ${RED}xx${RESET} ${RED}${BOLD}%b${RESET}\n" "$1"; }
-
-
 
 run_or_fail() {
 
@@ -200,8 +180,6 @@ run_or_fail() {
 
 }
 
-
-
 # --- Pre-flight Checks --------------------------------------------------------
 
 preflight_checks() {
@@ -213,8 +191,6 @@ preflight_checks() {
         exit 1
 
     fi
-
-
 
     # Determine panel directory
 
@@ -234,11 +210,7 @@ preflight_checks() {
 
     fi
 
-
-
     info "Panel directory: ${BOLD}${INSTALL_DIR}${RESET}"
-
-
 
     if ! curl -s --connect-timeout 5 https://github.com > /dev/null 2>&1; then
 
@@ -250,21 +222,15 @@ preflight_checks() {
 
 }
 
-
-
 # --- Perform Update -----------------------------------------------------------
 
 perform_update() {
 
     cd "$INSTALL_DIR"
 
-
-
     # Get current version before update
 
     OLD_VER=$(grep -oP '(?<="version": ")[^"]+' package.json 2>/dev/null | head -1 || echo "1.0.0")
-
-
 
     # Maintenance mode
 
@@ -276,8 +242,6 @@ perform_update() {
 
     success "Panel put into maintenance mode"
 
-
-
     # Track launching script path if executed from a local file
 
     local launch_script=""
@@ -288,15 +252,11 @@ perform_update() {
 
     fi
 
-
-
     # Process-isolated temp paths to prevent workspace/execution path collision
 
     local tmp_zip="/tmp/vertex-panel-update-$$.zip"
 
     local tmp_dir="/tmp/vertex-panel-update-src-$$"
-
-
 
     spinner_start "Downloading latest release from GitHub (${GITHUB_REPO})"
 
@@ -322,19 +282,13 @@ perform_update() {
 
     fi
 
-
-
     # Extract update
 
     run_or_fail "Extracting update archive" unzip -q -o "$tmp_zip" -d "$tmp_dir"
 
-
-
     local src_dir
 
     src_dir=$(find "$tmp_dir" -maxdepth 1 -type d -not -path "$tmp_dir" | head -1)
-
-
 
     # Set global & process Node memory limit to 8192 MB
 
@@ -345,8 +299,6 @@ perform_update() {
         echo 'export NODE_OPTIONS="--max-old-space-size=8192"' >> /etc/environment 2>/dev/null || true
 
     fi
-
-
 
     # Detect changes BEFORE rsync overwrites INSTALL_DIR
 
@@ -388,28 +340,18 @@ perform_update() {
 
     fi
 
-
-
     # Sync files safely (preserving .env, storage, node_modules, vendor, update.sh, and user files)
 
     spinner_start "Syncing panel files"
 
     if rsync -a --delete --exclude='.env' \
-
         --exclude='storage/' \
-
         --exclude='public/storage' \
-
         --exclude='node_modules/' \
-
         --exclude='vendor/' \
-
         --exclude='.git/' \
-
         --exclude='update.sh' \
-
         --exclude='install.sh' \
-
         "${src_dir}/" "${INSTALL_DIR}/" > /tmp/vertex_update.log 2>&1; then
 
         spinner_stop
@@ -428,8 +370,6 @@ perform_update() {
 
     fi
 
-
-
     # Ensure update.sh is preserved in panel directory, global PATH, and original launch location (never deleted)
 
     if [[ -f "${src_dir}/update.sh" ]]; then
@@ -438,19 +378,13 @@ perform_update() {
 
         chmod +x "${INSTALL_DIR}/update.sh" 2>/dev/null || true
 
-
-
         cp -f "${src_dir}/update.sh" "/usr/local/bin/update.sh" 2>/dev/null || true
 
         chmod +x "/usr/local/bin/update.sh" 2>/dev/null || true
 
-
-
         cp -f "${src_dir}/update.sh" "/usr/local/bin/vertex-update" 2>/dev/null || true
 
         chmod +x "/usr/local/bin/vertex-update" 2>/dev/null || true
-
-
 
         if [[ -n "$launch_script" && -f "$launch_script" ]]; then
 
@@ -462,13 +396,9 @@ perform_update() {
 
     fi
 
-
-
     # Clean up downloaded zip
 
     run_quietly rm -rf "$tmp_zip" "$tmp_dir"
-
-
 
     # Update Composer dependencies & autoloader (takes ~2s from lock file)
 
@@ -478,10 +408,7 @@ perform_update() {
 
     : > "$COMPOSER_LOG"
 
-
-
     if composer install --no-dev --optimize-autoloader --no-interaction \
-
             -d "${INSTALL_DIR}" > "$COMPOSER_LOG" 2>&1; then
 
         spinner_stop
@@ -495,7 +422,6 @@ perform_update() {
         warn "Composer install failed — attempting auto-repair with --no-audit..."
 
         if composer update --no-dev --no-audit --with-dependencies -W --optimize-autoloader --no-interaction \
-
                 -d "${INSTALL_DIR}" >> "$COMPOSER_LOG" 2>&1; then
 
             spinner_stop
@@ -529,18 +455,14 @@ perform_update() {
         if [[ -d "${INSTALL_DIR}/node_modules" ]]; then
 
             run_or_fail "Installing Node.js dependencies (offline cache)" \
-
                 npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund --prefer-offline
 
         else
 
             run_or_fail "Installing Node.js dependencies (full download)" \
-
                 npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
 
         fi
-
-
 
         spinner_start "Building frontend assets (Vite)"
 
@@ -559,11 +481,9 @@ perform_update() {
             rm -rf "${INSTALL_DIR}/node_modules"
 
             run_or_fail "Reinstalling clean Node.js dependencies" \
-
                 npm install --prefix "${INSTALL_DIR}" --legacy-peer-deps --no-audit --no-fund
 
             run_or_fail "Building frontend assets (Vite)" \
-
                 npm run build --prefix "${INSTALL_DIR}"
 
         fi
@@ -574,27 +494,17 @@ perform_update() {
 
     fi
 
-
-
     # Laravel cache — clear stale, then re-cache
 
     run_or_fail "Clearing & re-caching application" \
-
         bash -c "cd '${INSTALL_DIR}' && php artisan optimize:clear && php artisan optimize"
-
-
 
     # Database migrations
 
     run_or_fail "Running database migrations" \
-
         php artisan migrate --force --no-interaction
 
-
-
     run_quietly php artisan view:clear 2>/dev/null || true
-
-
 
     # File permissions
 
@@ -609,8 +519,6 @@ perform_update() {
     spinner_stop
 
     success "File permissions updated"
-
-
 
     # Restart background services & worker daemons
 
@@ -640,8 +548,6 @@ perform_update() {
 
     success "Services and queue/horizon workers restarted"
 
-
-
     # Disable maintenance mode
 
     spinner_start "Bringing panel back online"
@@ -652,13 +558,9 @@ perform_update() {
 
     success "Panel is back online"
 
-
-
     NEW_VER=$(grep -oP '(?<="version": ")[^"]+' package.json 2>/dev/null | head -1 || echo "1.0.0")
 
 }
-
-
 
 # --- Completion Summary -------------------------------------------------------
 
@@ -696,8 +598,6 @@ print_summary() {
 
 }
 
-
-
 cleanup() {
 
     spinner_stop
@@ -712,8 +612,6 @@ cleanup() {
 
 trap 'cleanup; printf "\n   ${RED}Update interrupted or failed. See /tmp/vertex_update.log${RESET}\n"; exit 1' ERR INT TERM
 
-
-
 print_banner
 
 preflight_checks
@@ -721,5 +619,4 @@ preflight_checks
 perform_update
 
 print_summary
-
 
