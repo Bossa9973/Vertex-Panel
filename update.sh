@@ -300,46 +300,6 @@ perform_update() {
 
     fi
 
-    # Detect changes BEFORE rsync overwrites INSTALL_DIR
-
-    FRONTEND_CHANGED=false
-
-    if [[ ! -f "${INSTALL_DIR}/public/build/manifest.json" ]]; then
-
-        FRONTEND_CHANGED=true
-
-    else
-
-        for f in "${src_dir}/package.json" "${src_dir}/vite.config.ts" "${src_dir}/tailwind.config.js" "${src_dir}/postcss.config.js"; do
-
-            if [[ -f "$f" ]]; then
-
-                local_f="${INSTALL_DIR}/$(basename "$f")"
-
-                if [[ ! -f "$local_f" ]] || ! diff -q "$f" "$local_f" > /dev/null 2>&1; then
-
-                    FRONTEND_CHANGED=true
-
-                    break
-
-                fi
-
-            fi
-
-        done
-
-        if [[ "$FRONTEND_CHANGED" == false ]]; then
-
-            if ! diff -rq --exclude='*.map' "${src_dir}/resources/" "${INSTALL_DIR}/resources/" > /dev/null 2>&1; then
-
-                FRONTEND_CHANGED=true
-
-            fi
-
-        fi
-
-    fi
-
     # Sync files safely (preserving .env, storage, node_modules, vendor, update.sh, and user files)
 
     spinner_start "Syncing panel files"
