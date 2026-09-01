@@ -264,6 +264,11 @@ perform_update() {
                 cp "$COMPOSER_LOG" /tmp/vertex_update.log
                 rm -f "$COMPOSER_LOG"
                 error_msg "Failed: Reconciling PHP dependencies"
+                echo ""
+                echo "   Last 20 lines of composer output:"
+                tail -20 "$COMPOSER_LOG" | sed "s/^/   /"
+                cp "$COMPOSER_LOG" /tmp/vertex_update.log
+                rm -f "$COMPOSER_LOG"
                 php artisan up --no-interaction 2>/dev/null || true
                 exit 1
             fi
@@ -272,6 +277,11 @@ perform_update() {
             cp "$COMPOSER_LOG" /tmp/vertex_update.log
             rm -f "$COMPOSER_LOG"
             error_msg "Failed: Updating PHP dependencies & autoloader"
+            echo ""
+            echo "   Last 20 lines of composer output:"
+            tail -20 "$COMPOSER_LOG" | sed "s/^/   /"
+            cp "$COMPOSER_LOG" /tmp/vertex_update.log
+            rm -f "$COMPOSER_LOG"
             php artisan up --no-interaction 2>/dev/null || true
             exit 1
         fi
