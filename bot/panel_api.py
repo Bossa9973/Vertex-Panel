@@ -24,9 +24,9 @@ def _headers() -> dict:
         "Content-Type":  "application/json",
     }
 
-async def _post(path: str, payload: dict) -> dict:
+async def _post(path: str, payload: dict, timeout: float = 15.0) -> dict:
     """POST to the panel bot API. Returns the JSON response or raises on error."""
-    async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
         r = await client.post(f"{BASE_URL}{path}", json=payload, headers=_headers())
         if r.status_code >= 400:
             try:
@@ -39,8 +39,9 @@ async def _post(path: str, payload: dict) -> dict:
                 raise Exception(f"HTTP {r.status_code}: {r.text}")
         return r.json()
 
-async def _get(path: str) -> dict:
-    async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+async def _get(path: str, timeout: float = 15.0) -> dict:
+    """GET from the panel bot API. Returns the JSON response or raises on error."""
+    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
         r = await client.get(f"{BASE_URL}{path}", headers=_headers())
         if r.status_code >= 400:
             try:
@@ -228,7 +229,6 @@ async def get_transaction_details(identifier: str) -> dict:
         print(f"[panel_api] get_transaction_details failed for {identifier}: {e}")
         return {"ok": False, "error": str(e)}
 
-
 # ─── VM Deletion ─────────────────────────────────────────────────────────────
 
 async def delete_vm(server_id: str, admin_discord_id: str, user_discord_id: str, force: bool = False) -> dict:
@@ -247,7 +247,6 @@ async def delete_vm(server_id: str, admin_discord_id: str, user_discord_id: str,
         print(f"[panel_api] delete_vm failed for server {server_id}: {e}")
         return {"ok": False, "error": str(e)}
 
-
 # ─── Pterodactyl Deploy DM Queue ──────────────────────────────────────────────
 
 async def poll_pterodactyl_dm_queue() -> list:
@@ -263,7 +262,6 @@ async def poll_pterodactyl_dm_queue() -> list:
         print(f"[panel_api] poll_pterodactyl_dm_queue failed: {e}")
         return []
 
-
 async def mark_pterodactyl_dm_sent(queue_id: int) -> None:
     """Mark a queued Pterodactyl DM as sent so it isn't re-delivered."""
     try:
@@ -271,26 +269,49 @@ async def mark_pterodactyl_dm_sent(queue_id: int) -> None:
     except Exception as e:
         print(f"[panel_api] mark_pterodactyl_dm_sent failed for id {queue_id}: {e}")
 
+# ─── Server Actions & Controls ────────────────────────────────────────────────
+
+async def get_server_state(discord_id: str, server_id: int) -> dict:
+    """Fetch current state of a server owned by a user."""
+    try:
+        return await _get(f"/server-state/{discord_id}/{server_id}")
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+async def perform_server_action(discord_id: str, server_id: int, action: str) -> dict:
+    """Send a power action (start/stop/restart/kill) to a server."""
+    try:
+        return await _post("/server-action", {
+            "discord_id": str(discord_id).strip(),
+            "server_id": int(server_id),
+            "action": action.strip().lower(),
+        })
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+async def rename_server(discord_id: str, server_id: int, name: str) -> dict:
+    """Rename a server owned by a user."""
+    try:
+        return await _post("/server-rename", {
+            "discord_id": str(discord_id).strip(),
+            "server_id": int(server_id),
+            "name": name.strip(),
+        })
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 # ════════════════════════════════════════════════════════════════
 # Backup Operations
 # ════════════════════════════════════════════════════════════════
 
 async def get_nodes() -> list:
-    """Fetch all Proxmox nodes from the panel admin API."""
+    """Fetch all Proxmox nodes from the panel bot API."""
     try:
-        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
-            r = await client.get(
-                f"{PANEL_URL}/api/admin/nodes?per_page=100",
-                headers=_headers(),
-            )
-            r.raise_for_status()
-            data = r.json()
-            return [{"id": n["id"], "name": n["attributes"]["name"]} for n in data.get("data", [])]
+        data = await _get("/nodes")
+        return data.get("data", [])
     except Exception as e:
         print(f"[panel_api] get_nodes failed: {e}")
         return []
-
 
 async def trigger_backups(
     *,
@@ -322,14 +343,7 @@ async def trigger_backups(
             if tier and tier != "all":
                 payload["tier"] = tier
 
-        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
-            r = await client.post(
-                f"{PANEL_URL}/api/admin/servers/trigger-backups",
-                json=payload,
-                headers=_headers(),
-            )
-            r.raise_for_status()
-            return r.json()
+        return await _post("/backup/trigger", payload, timeout=60.0)
     except Exception as e:
         print(f"[panel_api] trigger_backups failed: {e}")
         return {"ok": False, "error": str(e)}
@@ -337,14 +351,10 @@ async def trigger_backups(
 async def set_server_tier(server_id: int | str, tier: str) -> dict:
     """Set the plan tier (free or paid) for a specific server."""
     try:
-        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
-            r = await client.post(
-                f"{PANEL_URL}/api/admin/servers/{server_id}/tier",
-                json={"tier": tier},
-                headers=_headers(),
-            )
-            r.raise_for_status()
-            return r.json()
+        return await _post("/backup/set-tier", {
+            "server_id": int(server_id),
+            "tier": tier,
+        })
     except Exception as e:
         print(f"[panel_api] set_server_tier failed for #{server_id}: {e}")
         return {"ok": False, "error": str(e)}

@@ -15,8 +15,10 @@ class VerifyCsrfToken extends Middleware
         // Social OAuth callbacks use state-based CSRF protection handled in the controller
         'social',
         'auth/social',
-        // Webhook endpoints use provider-specific HMAC signature verification instead
+        // Webhook and bot API endpoints use token-based authentication
+        'api/bot',
         'api/bot/*',
         'api/client/webhooks/*',
     ];
 }
+

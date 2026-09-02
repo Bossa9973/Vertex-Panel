@@ -68,3 +68,9 @@ Route::post('/ptero-dm-queue/mark-sent',   [BotApiController::class, 'pterodacty
 Route::get('/server-state/{discordId}/{serverId}', [BotApiController::class, 'getServerState']);
 Route::post('/server-action',  [BotApiController::class, 'performServerAction']);
 Route::post('/server-rename',  [BotApiController::class, 'renameServer']);
+
+// ── Proxmox Nodes & Backup Operations (for /backup slash commands) ──────────
+Route::get('/nodes',               [BotApiController::class, 'getNodes']);
+Route::post('/backup/trigger',     [BotApiController::class, 'triggerBackups']);
+Route::post('/backup/set-tier',    [BotApiController::class, 'setServerTier']);
+

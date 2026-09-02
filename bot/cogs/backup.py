@@ -4,6 +4,7 @@ backup.py  —  Vertex Bot  —  Admin Backup Commands
 Slash command group: /backup
 
 Subcommands:
+  /backup vm        <server_id>                     — backup a single VM by ID
   /backup all       [tier: all|paid|free]           — backup every VM
   /backup node      <node_id> [tier: all|paid|free] — backup all VMs on a node
   /backup server    <ids: 1,2,5>                   — backup specific server IDs
@@ -86,6 +87,22 @@ class Backup(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         await self._send_working(interaction, f"Triggering backup for node **#{node_id}** ({_tier_label(tier)})...")
         result = await panel_api.trigger_backups(node_id=node_id, tier=tier, force=True)
+        await self._send_result(interaction, result)
+
+    # /backup vm
+    @backup_group.command(name="vm", description="Backup a single VM by its panel server ID")
+    @app_commands.describe(server_id="Server ID to backup (e.g. 42)")
+    async def backup_vm(self, interaction: discord.Interaction, server_id: int) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if server_id <= 0:
+            embed = discord.Embed(
+                color=DANGER,
+                title="Invalid Server ID",
+                description="Please provide a valid positive integer server ID.",
+            )
+            return await interaction.followup.send(embed=embed, ephemeral=True)
+        await self._send_working(interaction, f"Triggering instant backup for server **#{server_id}**...")
+        result = await panel_api.trigger_backups(server_ids=[server_id], force=True)
         await self._send_result(interaction, result)
 
     # /backup server

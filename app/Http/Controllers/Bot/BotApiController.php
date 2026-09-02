@@ -2,17 +2,24 @@
 
 namespace Convoy\Http\Controllers\Bot;
 
+use Convoy\Enums\Server\BackupCompressionType;
+use Convoy\Enums\Server\BackupMode;
+use Convoy\Exceptions\Service\Backup\TooManyBackupsException;
 use Convoy\Http\Controllers\Controller;
 use Convoy\Models\ActivityLog;
 use Convoy\Models\CreditTransaction;
 use Convoy\Models\Node;
 use Convoy\Models\Server;
 use Convoy\Models\User;
+use Convoy\Services\Backups\BackupCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use Throwable;
 
 class BotApiController extends Controller
 {
@@ -1934,4 +1941,132 @@ class BotApiController extends Controller
             ], 500);
         }
     }
+
+    // =========================================================================
+    // BACKUP & NODE OPERATIONS — for /backup Discord slash commands
+    // =========================================================================
+
+    /**
+     * List all Proxmox nodes.
+     * GET /api/bot/nodes
+     */
+    public function getNodes(): JsonResponse
+    {
+        try {
+            $nodes = Node::select('id', 'name')->get();
+
+            return response()->json([
+                'ok'   => true,
+                'data' => $nodes->map(fn($n) => [
+                    'id'   => $n->id,
+                    'name' => $n->name,
+                ]),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[BotAPI] getNodes error: ' . $e->getMessage(), ['exception' => $e]);
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Trigger backups for servers and push to Google Drive.
+     * POST /api/bot/backup/trigger
+     */
+    public function triggerBackups(Request $request, BackupCreationService $backupCreationService): JsonResponse
+    {
+        $validated = $request->validate([
+            'server_ids'   => 'nullable|array',
+            'server_ids.*' => 'integer|exists:servers,id',
+            'node_id'      => 'nullable|integer|exists:nodes,id',
+            'tier'         => 'nullable|string|in:all,paid,free',
+            'all'          => 'nullable|boolean',
+            'force'        => 'nullable|boolean',
+        ]);
+
+        $query = Server::query();
+
+        // Filter by specific server IDs
+        if (!empty($validated['server_ids'])) {
+            $query->whereIn('id', $validated['server_ids']);
+        } else {
+            // Filter by node if specified
+            if (!empty($validated['node_id'])) {
+                $query->where('node_id', $validated['node_id']);
+            }
+
+            // Filter by plan tier if specified
+            $tier = $validated['tier'] ?? 'all';
+            if ($tier === 'paid') {
+                $query->where('plan_tier', 'paid');
+            } elseif ($tier === 'free') {
+                $query->where('plan_tier', 'free');
+            }
+        }
+
+        // Respect 24h backup window unless force=true
+        if (!($validated['force'] ?? true)) {
+            $query->whereDoesntHave('backups', function ($q) {
+                $q->where('created_at', '>', now()->subDay());
+            });
+        }
+
+        $servers = $query->get();
+        $dispatched = 0;
+        $skipped = 0;
+
+        foreach ($servers as $server) {
+            try {
+                $backupCreationService->create(
+                    server         : $server,
+                    name           : 'Discord Bot backup (' . now()->format('Y-m-d H:i') . ')',
+                    mode           : BackupMode::SNAPSHOT,
+                    compressionType: BackupCompressionType::ZSTD,
+                    isLocked       : false,
+                );
+                $dispatched++;
+            } catch (TooManyBackupsException|TooManyRequestsHttpException $e) {
+                $skipped++;
+                Log::warning("[BotTriggerBackups] Skipped server #{$server->id}: " . $e->getMessage());
+            } catch (\Throwable $e) {
+                $skipped++;
+                Log::error("[BotTriggerBackups] Error on server #{$server->id}: " . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'ok'         => true,
+            'message'    => "Dispatched backup for {$dispatched} server(s). Skipped {$skipped}.",
+            'dispatched' => $dispatched,
+            'skipped'    => $skipped,
+        ]);
+    }
+
+    /**
+     * Update plan tier for a server (free or paid).
+     * POST /api/bot/backup/set-tier
+     */
+    public function setServerTier(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'server_id' => 'required|integer|exists:servers,id',
+            'tier'      => 'required|string|in:free,paid',
+        ]);
+
+        try {
+            $server = Server::findOrFail($validated['server_id']);
+            $server->update(['plan_tier' => $validated['tier']]);
+
+            return response()->json([
+                'ok'        => true,
+                'server_id' => $server->id,
+                'name'      => $server->name,
+                'plan_tier' => $server->plan_tier,
+                'message'   => "Server #{$server->id} ({$server->name}) plan tier updated to {$server->plan_tier}.",
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[BotAPI] setServerTier error: ' . $e->getMessage(), ['exception' => $e]);
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
 }
+
