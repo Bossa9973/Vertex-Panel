@@ -25,7 +25,8 @@ class BackupSingleServerCommand extends Command
     protected $signature = 'server:backup
                             {server : The ID of the server to back up}
                             {--name= : Custom name for the backup snapshot}
-                            {--force : Force backup bypassing constraints}';
+                            {--force : Force backup bypassing constraints}
+                            {--sync : Wait for Proxmox snapshot to finish and stream immediately to Google Drive}';
 
     protected $aliases = ['p:server:backup'];
 
@@ -40,6 +41,7 @@ class BackupSingleServerCommand extends Command
     {
         $serverId = (int) $this->argument('server');
         $customName = $this->option('name');
+        $sync = (bool) $this->option('sync');
 
         $server = Server::find($serverId);
         if (!$server) {
@@ -48,7 +50,7 @@ class BackupSingleServerCommand extends Command
         }
 
         $this->info("Found Server #{$server->id} ({$server->name} / {$server->hostname}, VMID: {$server->vmid}, Node: {$server->node_id}).");
-        $this->line("-> Initiating backup snapshot...");
+        $this->line("-> Initiating backup snapshot on Proxmox...");
 
         $backupName = $customName ?: 'Manual CLI backup (' . now()->format('Y-m-d H:i') . ')';
 
@@ -61,12 +63,38 @@ class BackupSingleServerCommand extends Command
                 isLocked       : false,
             );
 
-            $this->info("✅ [SUCCESS] Backup successfully dispatched for Server #{$server->id}!");
+            $this->info("✅ [DISPATCHED] Backup snapshot dispatched to Proxmox for Server #{$server->id}!");
             if ($backup) {
                 $this->line("   Backup UUID: {$backup->uuid}");
                 $this->line("   Name:        {$backup->name}");
             }
-            $this->line("   Google Drive sync will start automatically upon snapshot completion.");
+
+            if ($sync && $backup) {
+                $this->line("⏳ [--sync] Waiting for Proxmox snapshot creation to complete...");
+                $startTime = time();
+                $completed = false;
+
+                while (time() - $startTime < 180) {
+                    $freshBackup = $backup->fresh();
+                    if ($freshBackup && $freshBackup->is_successful && !empty($freshBackup->file_name)) {
+                        $completed = true;
+                        $backup = $freshBackup;
+                        break;
+                    }
+                    sleep(3);
+                }
+
+                if ($completed) {
+                    $this->info("📦 Proxmox archive ready: {$backup->file_name}");
+                    $this->line("☁️  Streaming archive directly to Google Drive...");
+                    \Convoy\Jobs\Server\UploadBackupToCloudJob::dispatchSync($backup->id);
+                    $this->info("🎉 [SUCCESS] Backup #{$backup->id} successfully uploaded to Google Drive!");
+                } else {
+                    $this->warn("⚠️  Proxmox snapshot is still writing on node storage. Upload will proceed in background via queue.");
+                }
+            } else {
+                $this->line("   Google Drive sync will start automatically upon snapshot completion.");
+            }
 
             return self::SUCCESS;
         } catch (TooManyBackupsException $e) {

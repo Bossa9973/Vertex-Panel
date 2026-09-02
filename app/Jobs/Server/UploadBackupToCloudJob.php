@@ -42,8 +42,9 @@ class UploadBackupToCloudJob implements ShouldQueue
 
     public function __construct(protected int $backupId)
     {
-        // Route to the dedicated backups queue to prevent starvation of monitor jobs.
-        $this->onQueue(env('BACKUP_UPLOAD_QUEUE', 'backups'));
+        // Default to 'default' queue so standard workers automatically process it.
+        // Can be routed to a custom queue by setting BACKUP_UPLOAD_QUEUE in .env.
+        $this->onQueue(env('BACKUP_UPLOAD_QUEUE', 'default'));
     }
 
     public function handle(): void
@@ -56,8 +57,14 @@ class UploadBackupToCloudJob implements ShouldQueue
             return;
         }
 
-        // Bail if the Proxmox backup itself never succeeded or has no file yet.
+        // If the Proxmox backup is still running or has no file yet, release back to queue
         if (!$backup->is_successful || !$backup->file_name) {
+            if ($backup->created_at && $backup->created_at->diffInMinutes(now()) < 30 && method_exists($this, 'release')) {
+                Log::info("[UploadBackup] Backup #{$this->backupId} is still being created on Proxmox. Releasing back to queue for 10s...");
+                $this->release(10);
+                return;
+            }
+
             Log::warning("[UploadBackup] Backup #{$this->backupId} is not successful or has no file_name — skipping upload.");
             return;
         }

@@ -213,14 +213,34 @@ class BotBackupHelperCommand extends Command
                     'error'           => null,
                 ];
 
-                // If --sync is requested, immediately check/upload to Google Drive
+                // If --sync is requested, wait for Proxmox snapshot and immediately stream to Google Drive
                 if ($sync && $backup) {
                     $result['cloud_sync_requested'] = true;
-                    try {
-                        UploadBackupToCloudJob::dispatch($backup->id);
-                        $result['cloud_status'] = 'dispatched_to_cloud';
-                    } catch (Throwable $ue) {
-                        $result['cloud_error'] = $ue->getMessage();
+                    $startTime = time();
+                    $completed = false;
+
+                    while (time() - $startTime < 180) {
+                        $freshBackup = $backup->fresh();
+                        if ($freshBackup && $freshBackup->is_successful && !empty($freshBackup->file_name)) {
+                            $completed = true;
+                            $backup = $freshBackup;
+                            break;
+                        }
+                        sleep(3);
+                    }
+
+                    if ($completed) {
+                        try {
+                            UploadBackupToCloudJob::dispatchSync($backup->id);
+                            $result['cloud_status'] = 'uploaded';
+                            $result['file_name']    = $backup->file_name;
+                        } catch (Throwable $ue) {
+                            $result['cloud_status'] = 'failed';
+                            $result['cloud_error']  = $ue->getMessage();
+                        }
+                    } else {
+                        // Let background worker upload once snapshot completes
+                        $result['cloud_status'] = 'queued_in_background';
                     }
                 }
 
