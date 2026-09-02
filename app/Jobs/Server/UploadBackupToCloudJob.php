@@ -122,7 +122,28 @@ class UploadBackupToCloudJob implements ShouldQueue
 
             // Build the remote path. Uses the configurable backup_path or falls
             // back to /var/lib/vz/dump (Proxmox default for dir-type storage).
-            $remotePath = rtrim($node->getBackupBasePath(), '/') . '/' . $backup->file_name;
+            $basePath   = rtrim($node->getBackupBasePath(), '/');
+            $remotePath = $basePath . '/' . $backup->file_name;
+
+            // Auto-heal: If file does not exist or file_name was corrupt (e.g. 'size:'), scan remote dir for newest backup of this VMID
+            if (!$sftp->stat($remotePath) || !str_starts_with($backup->file_name, 'vzdump-')) {
+                $dirContents = $sftp->nlist($basePath);
+                if (is_array($dirContents)) {
+                    $matchingFiles = array_filter($dirContents, function ($f) use ($server) {
+                        return str_contains($f, "{$server->vmid}") && str_starts_with($f, 'vzdump-');
+                    });
+                    if (!empty($matchingFiles)) {
+                        rsort($matchingFiles);
+                        $healedFileName = reset($matchingFiles);
+                        $healedPath     = $basePath . '/' . $healedFileName;
+                        if ($sftp->stat($healedPath)) {
+                            Log::info("[UploadBackup] Auto-healed backup #{$backup->id} file_name from '{$backup->file_name}' to '{$healedFileName}'.");
+                            $backup->update(['file_name' => $healedFileName]);
+                            $remotePath = $healedPath;
+                        }
+                    }
+                }
+            }
 
             // Verify the file exists before streaming.
             if (!$sftp->stat($remotePath)) {

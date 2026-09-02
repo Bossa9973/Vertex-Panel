@@ -31,10 +31,9 @@ class BackupMonitorService
         // get the filename of the backup (e.g. vzdump-qemu-101-2021_01_01-00_00_00.vma.zstd)
         $fileName = null;
         foreach ($logs as $log) {
-            if (preg_match("/INFO: creating (?:vzdump|VZDump) archive '(.+)'/si", $log['t'], $matches)
-                || preg_match("/(?:creating vzdump archive|archive file:?)\s*['\"]?([^'\"\s]+)/i", $log['t'], $matches)
-            ) {
-                $fileName = Arr::last(explode('/', trim($matches[1])));
+            if (preg_match("/(vzdump-[a-zA-Z0-9_\-]+\.(?:vma|tar)(?:\.[a-z0-9]+)?)/i", $log['t'], $matches)) {
+                $fileName = trim($matches[1]);
+                break;
             }
         }
 
