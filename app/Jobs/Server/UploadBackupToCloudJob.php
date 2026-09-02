@@ -99,7 +99,8 @@ class UploadBackupToCloudJob implements ShouldQueue
             }
 
             // --- SFTP connection ---
-            $sftp = new SFTP($sshHost, $sshPort);
+            $sftp = new SFTP($sshHost, $sshPort, 30);
+            $sftp->setTimeout(120);
             $key  = PublicKeyLoader::load($rawKey);
 
             if (!$sftp->login($sshUsername, $key)) {
