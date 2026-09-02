@@ -47,9 +47,18 @@ class BackupMonitorService
 
         if (Str::lower(Arr::get($status, 'exitstatus')) === 'ok') {
             $archives = $this->backupRepository->setServer($backup->server)->getBackups();
+
+            // If log regex missed the filename, find the newest backup archive on storage for this VM
+            if (!$fileName && !empty($archives)) {
+                $newest = collect($archives)->sortByDesc('ctime')->first();
+                if ($newest && !empty($newest['volid'])) {
+                    $fileName = Arr::last(explode('/', $newest['volid']));
+                }
+            }
+
             $archive  = collect($archives)->where(
                 'volid', "{$backup->server->node->backup_storage}:backup/{$fileName}",
-            )->first();
+            )->first() ?? (!empty($archives) ? collect($archives)->sortByDesc('ctime')->first() : null);
 
             $backup->update([
                 'is_successful' => true,

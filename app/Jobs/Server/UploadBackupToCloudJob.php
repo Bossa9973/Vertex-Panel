@@ -66,11 +66,15 @@ class UploadBackupToCloudJob implements ShouldQueue
         $server = $backup->server;
         $node   = $server->node;
 
+        $sshHost     = !empty($node->ssh_host) ? $node->ssh_host : $node->fqdn;
+        $sshPort     = $node->ssh_port ?: 22;
+        $sshUsername = !empty($node->ssh_username) ? $node->ssh_username : 'root';
+
         // Validate that the node has SSH credentials configured.
-        if (empty($node->ssh_host) || empty($node->ssh_private_key)) {
+        if (empty($sshHost) || empty($node->ssh_private_key)) {
             throw new \RuntimeException(
-                "Node #{$node->id} ({$node->name}) is missing SSH credentials. " .
-                "Configure ssh_host and ssh_private_key in the admin Node Settings."
+                "Node #{$node->id} ({$node->name}) is missing SSH credentials (host or private key). " .
+                "Configure SSH Settings in the admin Node Settings."
             );
         }
 
@@ -79,12 +83,12 @@ class UploadBackupToCloudJob implements ShouldQueue
 
         try {
             // --- SFTP connection ---
-            $sftp = new SFTP($node->ssh_host, $node->ssh_port ?? 22);
+            $sftp = new SFTP($sshHost, $sshPort);
             $key  = PublicKeyLoader::load($node->ssh_private_key);
 
-            if (!$sftp->login($node->ssh_username ?? 'root', $key)) {
+            if (!$sftp->login($sshUsername, $key)) {
                 throw new \RuntimeException(
-                    "SFTP authentication failed for node #{$node->id} ({$node->ssh_host}). " .
+                    "SFTP authentication failed for node #{$node->id} ({$sshHost}:{$sshPort}, user: {$sshUsername}). " .
                     "Verify the SSH key is installed in the node's authorized_keys."
                 );
             }
