@@ -35,9 +35,9 @@ class AppServiceProvider extends ServiceProvider
         }
 
         // Register the Google Drive Flysystem adapter.
-        // Uses a service account JSON key file placed at the path defined by
-        // GDRIVE_SERVICE_ACCOUNT_PATH (default: storage/app/gdrive-service-account.json).
-        // The backup folder is shared with the service account in Google Drive.
+        // Supports both:
+        // 1. Service Account JSON (GDRIVE_SERVICE_ACCOUNT_PATH)
+        // 2. Personal OAuth 2.0 (GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN)
         Storage::extend('google', function ($app, $config) {
             $options = [];
 
@@ -45,12 +45,19 @@ class AppServiceProvider extends ServiceProvider
                 $options['teamDriveId'] = $config['teamDriveId'];
             }
 
-            // Service account credentials take priority over OAuth tokens.
+            // Service account credentials take priority if explicitly provided and exists on disk.
             if (!empty($config['serviceAccountCredentials'] ?? null)
                 && file_exists($config['serviceAccountCredentials'])
             ) {
                 $client = new \Google\Client();
                 $client->setAuthConfig($config['serviceAccountCredentials']);
+                $client->addScope(\Google\Service\Drive::DRIVE);
+                $client->setApplicationName('Convoy Panel');
+            } elseif (!empty($config['clientId'] ?? null) && !empty($config['refreshToken'] ?? null)) {
+                $client = new \Google\Client();
+                $client->setClientId($config['clientId']);
+                $client->setClientSecret($config['clientSecret'] ?? '');
+                $client->refreshToken($config['refreshToken']);
                 $client->addScope(\Google\Service\Drive::DRIVE);
                 $client->setApplicationName('Convoy Panel');
             } else {
@@ -63,7 +70,7 @@ class AppServiceProvider extends ServiceProvider
             $service = new \Google\Service\Drive($client);
             $adapter = new \Masbug\Flysystem\GoogleDriveAdapter(
                 $service,
-                $config['folderId'] ?? '/',
+                $config['folderId'] ?? 'convoy-backups',
                 $options
             );
             $driver = new \League\Flysystem\Filesystem($adapter);

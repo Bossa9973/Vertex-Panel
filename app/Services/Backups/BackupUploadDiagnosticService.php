@@ -223,19 +223,24 @@ class BackupUploadDiagnosticService
             || str_contains($msg, "Google")
             || str_contains($msg, "invalid_grant")
             || str_contains($msg, "quotaExceeded")
+            || str_contains($msg, "UNAUTHENTICATED")
+            || str_contains($msg, "CREDENTIALS_MISSING")
             || str_contains($msg, "serviceAccountCredentials")) {
 
             $diagnosis['category'] = 'Google Drive Storage Error';
             $diagnosis['title']    = "Google Drive Upload Error";
             $diagnosis['what_happened'][] = "SFTP connection to the node succeeded, but streaming the file to Google Drive failed: {$msg}";
 
-            if (str_contains($msg, "invalid_grant")) {
-                $diagnosis['recommendations'][] = "Google OAuth refresh token or Service Account key is expired/invalid. Re-authenticate or update the credentials file.";
+            if (str_contains($msg, "CREDENTIALS_MISSING") || str_contains($msg, "UNAUTHENTICATED")) {
+                $diagnosis['recommendations'][] = "Google authentication credentials are missing or invalid.";
+                $diagnosis['recommendations'][] = "For Personal Google Drive (OAuth), ensure GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, and GDRIVE_REFRESH_TOKEN are set in .env.";
+                $diagnosis['recommendations'][] = "For Service Accounts, ensure GDRIVE_SERVICE_ACCOUNT_PATH points to a valid credentials JSON file.";
+            } elseif (str_contains($msg, "invalid_grant")) {
+                $diagnosis['recommendations'][] = "Google OAuth refresh token or Service Account key is expired/invalid. Re-authenticate or update the credentials.";
             } elseif (str_contains($msg, "quotaExceeded")) {
                 $diagnosis['recommendations'][] = "Your Google Drive account has run out of storage space. Free up space or upgrade storage.";
             } else {
-                $diagnosis['recommendations'][] = "Verify your `GDRIVE_BACKUP_FOLDER_ID` and `GDRIVE_SERVICE_ACCOUNT_PATH` in `.env`.";
-                $diagnosis['recommendations'][] = "Ensure the Google Drive service account has 'Editor' permissions on the backup folder.";
+                $diagnosis['recommendations'][] = "Verify your `GDRIVE_BACKUP_FOLDER_ID` in `.env` (should be folder name like `convoy-backups`).";
             }
             return $diagnosis;
         }

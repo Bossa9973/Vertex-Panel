@@ -42,11 +42,8 @@ return [
             'clientId' => env('GDRIVE_CLIENT_ID', ''),
             'clientSecret' => env('GDRIVE_CLIENT_SECRET', ''),
             'refreshToken' => env('GDRIVE_REFRESH_TOKEN', ''),
-            'serviceAccountCredentials' => env(
-                'GDRIVE_SERVICE_ACCOUNT_PATH',
-                storage_path('app/gdrive-service-account.json')
-            ),
-            'folderId' => env('GDRIVE_BACKUP_FOLDER_ID'),
+            'serviceAccountCredentials' => env('GDRIVE_SERVICE_ACCOUNT_PATH'),
+            'folderId' => env('GDRIVE_BACKUP_FOLDER_ID', env('GDRIVE_BACKUP_FOLDER', 'convoy-backups')),
             'teamDriveId' => env('GDRIVE_TEAM_DRIVE_ID'),
             'throw' => true,
         ],
