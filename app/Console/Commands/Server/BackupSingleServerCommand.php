@@ -27,6 +27,8 @@ class BackupSingleServerCommand extends Command
                             {--name= : Custom name for the backup snapshot}
                             {--force : Force backup bypassing constraints}';
 
+    protected $aliases = ['p:server:backup'];
+
     protected $description = 'Trigger an immediate cloud backup for a single VM and upload to Google Drive.';
 
     public function __construct(private BackupCreationService $backupCreationService)

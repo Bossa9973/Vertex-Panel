@@ -34,6 +34,8 @@ class RunScheduledBackupsCommand extends Command
                             {--force : Bypass the 24-hour backup window check}
                             {--server= : Backup a specific server by ID}';
 
+    protected $aliases = ['p:server:run-scheduled-backups'];
+
     protected $description = 'Create automated cloud backups for servers and push to Google Drive.';
 
     public function __construct(private BackupCreationService $backupCreationService)

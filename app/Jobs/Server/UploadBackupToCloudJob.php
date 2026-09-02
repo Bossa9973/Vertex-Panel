@@ -1,10 +1,9 @@
 <?php
 
-
-
 namespace Convoy\Jobs\Server;
 
 use Convoy\Models\Backup;
+use Convoy\Services\Backups\BackupUploadDiagnosticService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -66,21 +65,22 @@ class UploadBackupToCloudJob implements ShouldQueue
         $server = $backup->server;
         $node   = $server->node;
 
-        $sshHost     = !empty($node->ssh_host) ? $node->ssh_host : $node->fqdn;
-        $sshPort     = $node->ssh_port ?: 22;
-        $sshUsername = !empty($node->ssh_username) ? $node->ssh_username : 'root';
+        $sshHost     = !empty($node->ssh_host) ? trim($node->ssh_host) : trim($node->fqdn ?? '');
+        $sshPort     = (int) ($node->ssh_port ?: 22);
+        $sshUsername = !empty($node->ssh_username) ? trim($node->ssh_username) : 'root';
 
         // Validate that the node has SSH credentials configured.
         if (empty($sshHost) || empty($node->ssh_private_key)) {
             throw new \RuntimeException(
                 "Node #{$node->id} ({$node->name}) is missing SSH credentials (host or private key). " .
-                "Configure SSH Settings in the admin Node Settings."
+                "Configure SSH Settings in Admin -> Nodes -> {$node->name} -> SSH Settings."
             );
         }
 
         // Mark as uploading so the UI reflects the current state.
         $backup->update(['cloud_status' => 'uploading']);
 
+        $stream = null;
         try {
             // Load and normalize private key (supports raw multi-line, single-line pasted key, or server file path)
             $rawKey = trim($node->ssh_private_key ?? '');
@@ -88,25 +88,28 @@ class UploadBackupToCloudJob implements ShouldQueue
                 $rawKey = file_get_contents($rawKey);
             }
 
-            $rawKey = trim($rawKey);
-            if (!str_contains($rawKey, "\n")) {
-                if (preg_match('/^(-----BEGIN [A-Z0-9 ]+-----)\s+(.+)\s+(-----END [A-Z0-9 ]+-----)$/', $rawKey, $m)) {
-                    $header = $m[1];
-                    $body   = str_replace(' ', '', $m[2]);
-                    $footer = $m[3];
-                    $rawKey = $header . "\n" . trim(chunk_split($body, 64, "\n")) . "\n" . $footer;
-                }
+            $diagnosticService = app(BackupUploadDiagnosticService::class);
+            $rawKey = $diagnosticService->normalizePrivateKey($rawKey);
+
+            try {
+                $key = PublicKeyLoader::load($rawKey);
+            } catch (Throwable $ke) {
+                throw new \RuntimeException(
+                    "Failed to parse SSH Private Key for Node #{$node->id} ({$node->name}): " . $ke->getMessage() .
+                    ". Ensure the key is unencrypted (no password) and in standard PEM/OpenSSH format."
+                );
             }
 
             // --- SFTP connection ---
             $sftp = new SFTP($sshHost, $sshPort, 30);
             $sftp->setTimeout(120);
-            $key  = PublicKeyLoader::load($rawKey);
 
             if (!$sftp->login($sshUsername, $key)) {
+                $disconnectReason = $sftp->getDisconnectReason() ?: $sftp->getLastError();
+                $extra = $disconnectReason ? " [Server reported: {$disconnectReason}]" : "";
                 throw new \RuntimeException(
-                    "SFTP authentication failed for node #{$node->id} ({$sshHost}:{$sshPort}, user: {$sshUsername}). " .
-                    "Verify the SSH key is installed in the node's authorized_keys."
+                    "SFTP authentication failed for user '{$sshUsername}' on node #{$node->id} ({$sshHost}:{$sshPort}){$extra}. " .
+                    "Verify that the corresponding public key is saved in `/root/.ssh/authorized_keys` on the node with 600 permissions."
                 );
             }
 
@@ -117,7 +120,8 @@ class UploadBackupToCloudJob implements ShouldQueue
             // Verify the file exists before streaming.
             if (!$sftp->stat($remotePath)) {
                 throw new \RuntimeException(
-                    "Backup file not found on node #{$node->id}: {$remotePath}"
+                    "Backup file not found on node #{$node->id}: '{$remotePath}'. " .
+                    "Verify the file exists on the node or check 'Backup Path' in Node SSH Settings."
                 );
             }
 
@@ -142,8 +146,6 @@ class UploadBackupToCloudJob implements ShouldQueue
             // Stream to Drive. Flysystem handles chunked upload internally.
             Storage::disk('gdrive')->put($drivePath, $stream);
 
-            fclose($stream);
-
             // --- Mark as uploaded ---
             $backup->update([
                 'cloud_status'      => 'uploaded',
@@ -158,6 +160,10 @@ class UploadBackupToCloudJob implements ShouldQueue
             // If all retries are exhausted, failed() will set cloud_status=failed.
             $backup->update(['cloud_status' => 'pending']);
             throw $e;
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
         }
     }
 
@@ -181,4 +187,3 @@ class UploadBackupToCloudJob implements ShouldQueue
         return preg_replace('/[\/\\\\:*?"<>|]/', '-', $name);
     }
 }
-
