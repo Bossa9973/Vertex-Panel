@@ -151,14 +151,41 @@ class UploadBackupToCloudJob implements ShouldQueue
                     "Backup file not found on node #{$node->id}: '{$remotePath}'. " .
                     "Verify the file exists on the node or check 'Backup Path' in Node SSH Settings."
                 );
+            // Stat the remote file to get exact size
+            $stat = $sftp->stat($remotePath);
+            $fileSizeBytes = $stat['size'] ?? 0;
+            $fileSizeFormatted = $this->formatBytes($fileSizeBytes);
+
+            if (app()->runningInConsole()) {
+                echo "\n   📦 Archive Size: {$fileSizeFormatted} ({$fileSizeBytes} bytes)\n";
+                echo "   ⏳ [Phase 1/2] Downloading from Proxmox node via SFTP...\n";
             }
 
-            // Open a stream — phpseclib returns a stream resource when the
-            // third argument to get() is false (stream mode).
-            // We use a temp PHP stream as the sink; Flysystem will drain it.
-            $stream = fopen('php://temp', 'r+');
-            $sftp->get($remotePath, $stream);
-            rewind($stream);
+            // Use a local temp file on disk instead of in-memory php://temp to handle 10GB+ files with zero RAM overhead
+            $tempFile = tempnam(sys_get_temp_dir(), 'vtx_backup_');
+            $startTime = microtime(true);
+            $lastPercent = -1;
+
+            $sftp->get($remotePath, $tempFile, 0, -1, function ($transferred) use ($fileSizeBytes, &$lastPercent, $startTime) {
+                if ($fileSizeBytes > 0) {
+                    $percent = (int) round(($transferred / $fileSizeBytes) * 100);
+                    if ($percent !== $lastPercent && ($percent % 5 === 0 || $percent === 100)) {
+                        $lastPercent = $percent;
+                        $elapsed = max(0.1, microtime(true) - $startTime);
+                        $speedMBs = round(($transferred / 1048576) / $elapsed, 1);
+                        $mbTransferred = round($transferred / 1048576, 1);
+                        $mbTotal = round($fileSizeBytes / 1048576, 1);
+                        if (app()->runningInConsole()) {
+                            echo "      SFTP Stream: [{$percent}%] {$mbTransferred}MB / {$mbTotal}MB ({$speedMBs} MB/s)\r";
+                        }
+                    }
+                }
+            });
+
+            if (app()->runningInConsole()) {
+                echo "\n   ✅ SFTP download complete! Archive buffered successfully.\n";
+                echo "   ☁️  [Phase 2/2] Streaming to Google Drive folder 'convoy-backups'...\n";
+            }
 
             // --- Google Drive path ---
             // Format: node-{id} ({name})/server-{id} ({hostname})/{file_name}
@@ -171,8 +198,16 @@ class UploadBackupToCloudJob implements ShouldQueue
                 $backup->file_name
             );
 
-            // Stream to Drive. Flysystem handles chunked upload internally.
+            // Stream to Google Drive. Flysystem handles resumable chunked upload.
+            $stream = fopen($tempFile, 'rb');
             Storage::disk('gdrive')->put($drivePath, $stream);
+            fclose($stream);
+            $stream = null;
+            @unlink($tempFile);
+
+            if (app()->runningInConsole()) {
+                echo "   🎉 Google Drive stream complete!\n";
+            }
 
             // --- Mark as uploaded ---
             $backup->update([
@@ -191,6 +226,9 @@ class UploadBackupToCloudJob implements ShouldQueue
         } finally {
             if (is_resource($stream)) {
                 fclose($stream);
+            }
+            if (isset($tempFile) && file_exists($tempFile)) {
+                @unlink($tempFile);
             }
         }
     }
@@ -213,5 +251,18 @@ class UploadBackupToCloudJob implements ShouldQueue
     private function sanitizeName(string $name): string
     {
         return preg_replace('/[\/\\\\:*?"<>|]/', '-', $name);
+    }
+
+    /**
+     * Human-readable byte formatting.
+     */
+    private function formatBytes(int $bytes, int $precision = 2): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        $bytes /= pow(1024, $pow);
+        return round($bytes, $precision) . ' ' . $units[$pow];
     }
 }
