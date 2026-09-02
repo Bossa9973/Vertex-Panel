@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useFlashKey } from '@/util/useFlash'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { FormProvider, useForm } from 'react-hook-form'
@@ -23,7 +24,7 @@ import TextInputForm from '@/components/elements/forms/TextInputForm'
  */
 const SshSettingsCard = () => {
     const { data: node, mutate } = useNodeSWR()
-    const { clearFlashes, clearAndAddHttpError } = useFlashKey(
+    const { clearFlashes, clearAndAddHttpError, addFlash } = useFlashKey(
         `admin.nodes.${node?.id}.settings.ssh`
     )
 
@@ -45,6 +46,18 @@ const SshSettingsCard = () => {
             backupPath: node?.backupPath ?? '',
         },
     })
+
+    useEffect(() => {
+        if (node) {
+            form.reset({
+                sshHost: node.sshHost ?? '',
+                sshPort: node.sshPort ?? 22,
+                sshUsername: node.sshUsername ?? 'root',
+                sshPrivateKey: '',
+                backupPath: node.backupPath ?? '',
+            })
+        }
+    }, [node?.id, node?.sshHost, node?.sshPort, node?.sshUsername, node?.backupPath])
 
     const submit = async (data: z.infer<typeof schema>) => {
         if (!node) return
@@ -76,6 +89,12 @@ const SshSettingsCard = () => {
             })
 
             mutate(() => updatedNode, false)
+
+            addFlash({
+                key: `admin.nodes.${node.id}.settings.ssh`,
+                type: 'success',
+                message: 'SSH and backup upload settings have been saved successfully.',
+            })
 
             // Clear the private key field after save (write-only UX)
             form.reset({ ...data, sshPrivateKey: '' })

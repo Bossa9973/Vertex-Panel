@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useFlashKey } from '@/util/useFlash'
 import { hostname } from '@/util/validation'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -69,6 +70,30 @@ const NodeInformationCard = () => {
         },
     })
 
+    useEffect(() => {
+        if (node) {
+            form.reset({
+                name: node.name,
+                locationId: node.locationId.toString(),
+                cluster: node.cluster,
+                verifyTls: node.verifyTls,
+                hidden: Boolean(node.hidden),
+                tokenId: '',
+                secret: '',
+                fqdn: node.fqdn,
+                port: node.port,
+                memory: node.memory / 1048576,
+                memoryOverallocate: node.memoryOverallocate,
+                disk: node.disk / 1048576,
+                diskOverallocate: node.diskOverallocate,
+                vmStorage: node.vmStorage,
+                backupStorage: node.backupStorage,
+                isoStorage: node.isoStorage,
+                network: node.network,
+            })
+        }
+    }, [node?.id, node?.name, node?.fqdn, node?.port, node?.memory, node?.disk])
+
     const submit = async (_data: any) => {
         const { memory, disk, ...data } = _data as z.infer<typeof schema>
         clearFlashes()
@@ -77,6 +102,11 @@ const NodeInformationCard = () => {
                 ...data,
                 memory: memory * 1048576,
                 disk: disk * 1048576,
+                // Preserve existing SSH settings so updating node information doesn't reset them
+                sshHost: node.sshHost,
+                sshPort: node.sshPort,
+                sshUsername: node.sshUsername,
+                backupPath: node.backupPath,
             })
 
             mutate(() => updatedNode, false)
