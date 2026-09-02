@@ -9,6 +9,7 @@ import useNodeSWR from '@/api/admin/nodes/useNodeSWR'
 import Button from '@/components/elements/Button'
 import FlashMessageRender from '@/components/elements/FlashMessageRenderer'
 import FormCard from '@/components/elements/FormCard'
+import TextareaForm from '@/components/elements/forms/TextareaForm'
 import TextInputForm from '@/components/elements/forms/TextInputForm'
 
 /**
@@ -126,13 +127,15 @@ const SshSettingsCard = () => {
                                     placeholder='root'
                                 />
                             </div>
-                            <TextInputForm
+                            <TextareaForm
                                 name='sshPrivateKey'
-                                label='SSH Private Key (PEM / OpenSSH format)'
+                                label='SSH Private Key (PEM / OpenSSH format or key file path)'
+                                rows={4}
+                                className='font-mono text-xs'
                                 placeholder={
                                     node?.sshKeyConfigured
-                                        ? 'Leave blank to keep existing key'
-                                        : 'Paste your private key here (-----BEGIN OPENSSH PRIVATE KEY-----)'
+                                        ? 'Leave blank to keep existing key (or enter new key / key file path)'
+                                        : 'Paste your private key here (-----BEGIN OPENSSH PRIVATE KEY-----) or enter key path (/root/.ssh/vertex_backup_key)'
                                 }
                             />
                             <TextInputForm

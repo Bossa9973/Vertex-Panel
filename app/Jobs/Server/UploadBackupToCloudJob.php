@@ -82,9 +82,25 @@ class UploadBackupToCloudJob implements ShouldQueue
         $backup->update(['cloud_status' => 'uploading']);
 
         try {
+            // Load and normalize private key (supports raw multi-line, single-line pasted key, or server file path)
+            $rawKey = trim($node->ssh_private_key ?? '');
+            if (file_exists($rawKey) && is_readable($rawKey)) {
+                $rawKey = file_get_contents($rawKey);
+            }
+
+            $rawKey = trim($rawKey);
+            if (!str_contains($rawKey, "\n")) {
+                if (preg_match('/^(-----BEGIN [A-Z0-9 ]+-----)\s+(.+)\s+(-----END [A-Z0-9 ]+-----)$/', $rawKey, $m)) {
+                    $header = $m[1];
+                    $body   = str_replace(' ', '', $m[2]);
+                    $footer = $m[3];
+                    $rawKey = $header . "\n" . trim(chunk_split($body, 64, "\n")) . "\n" . $footer;
+                }
+            }
+
             // --- SFTP connection ---
             $sftp = new SFTP($sshHost, $sshPort);
-            $key  = PublicKeyLoader::load($node->ssh_private_key);
+            $key  = PublicKeyLoader::load($rawKey);
 
             if (!$sftp->login($sshUsername, $key)) {
                 throw new \RuntimeException(
