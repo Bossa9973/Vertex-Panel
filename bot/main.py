@@ -175,6 +175,11 @@ async def before_ptero_dm_task():
 
 @bot.tree.error
 async def on_tree_error(interaction: discord.Interaction, error: AppCommandError):
+    err_str = str(error)
+    if "10062" in err_str or "Unknown interaction" in err_str:
+        print(f"[tree_error] Interaction expired (10062): {error}")
+        return
+
     print(f"[tree_error] Command error: {error}")
     err_msg = str(error)
     if isinstance(error, TransformerError):
@@ -910,10 +915,10 @@ async def userinfo_cmd(
     user: Optional[Union[discord.Member, discord.User]] = None,
     query: Optional[str] = None
 ):
-    if not is_admin(interaction):
-        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
-
     await interaction.response.defer(ephemeral=True)
+
+    if not is_admin(interaction):
+        return await interaction.followup.send("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
 
     identifier = str(user.id) if user else (query or str(interaction.user.id))
     label = user.display_name if user else (query or interaction.user.display_name)
@@ -934,10 +939,10 @@ async def userinfo_cmd(
 
 @bot.tree.command(name="txinfo", description="Inspect detailed server info & price for a transaction ID (Admin Only)")
 async def txinfo_cmd(interaction: discord.Interaction, reference_id: str):
-    if not is_admin(interaction):
-        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
-
     await interaction.response.defer(ephemeral=True)
+
+    if not is_admin(interaction):
+        return await interaction.followup.send("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
 
     res = await panel_api.get_transaction_details(reference_id)
     if not res.get("ok"):

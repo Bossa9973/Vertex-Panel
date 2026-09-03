@@ -71,6 +71,38 @@ class BotApiController extends Controller
     }
 
     /**
+     * Bulk store multiple invite codes in one database operation.
+     * POST /api/bot/invite/track-bulk   { invites: [ { code, inviter_discord_id }, ... ] }
+     */
+    public function trackInvitesBulk(Request $request): JsonResponse
+    {
+        $invites = $request->input('invites', []);
+        if (!is_array($invites) || empty($invites)) {
+            return response()->json(['ok' => true, 'count' => 0]);
+        }
+
+        $records = [];
+        foreach ($invites as $item) {
+            $code = $item['code'] ?? null;
+            $inviter = $item['inviter_discord_id'] ?? null;
+            if ($code && $inviter) {
+                $records[] = [
+                    'code'               => substr((string) $code, 0, 32),
+                    'inviter_discord_id' => substr((string) $inviter, 0, 32),
+                ];
+            }
+        }
+
+        if (!empty($records)) {
+            foreach (array_chunk($records, 200) as $chunk) {
+                DB::table('discord_invites')->upsert($chunk, ['code'], ['inviter_discord_id']);
+            }
+        }
+
+        return response()->json(['ok' => true, 'count' => count($records)]);
+    }
+
+    /**
      * Record that a member joined via a specific inviter.
      * POST /api/bot/invite/join   { discord_id, inviter_discord_id, is_fake }
      */

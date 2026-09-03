@@ -17,8 +17,9 @@ Route::post('/stats/boost',    [BotApiController::class, 'trackBoost']);
 Route::get('/stats/{discordId}', [BotApiController::class, 'getStats']);
 
 // Invite tracking
-Route::post('/invite/track',   [BotApiController::class, 'trackInvite']);
-Route::post('/invite/join',    [BotApiController::class, 'recordJoin']);
+Route::post('/invite/track',        [BotApiController::class, 'trackInvite']);
+Route::post('/invite/track-bulk',   [BotApiController::class, 'trackInvitesBulk']);
+Route::post('/invite/join',         [BotApiController::class, 'recordJoin']);
 Route::post('/invite/leave',   [BotApiController::class, 'recordLeave']);
 
 // Admin operations

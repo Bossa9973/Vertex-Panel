@@ -30,12 +30,18 @@ class Tracker(commands.Cog):
     async def _cache_guild_invites(self, guild: discord.Guild):
         try:
             invites = await guild.invites()
-            self.invites[guild.id] = {inv.code: inv.uses for inv in invites}
-            # Persist all invite codes to panel DB
-            for inv in invites:
-                if inv.inviter:  # vanity invites have no inviter
-                    await panel_api.track_invite_create(inv.code, str(inv.inviter.id))
-            print(f"[tracker] Cached {len(invites)} invites for {guild.name}")
+            self.invites[guild.id] = {inv.code: (inv.uses or 0) for inv in invites}
+            print(f"[tracker] Cached {len(invites)} invites in-memory for {guild.name}")
+
+            # Persist invite codes to panel DB asynchronously in one bulk request
+            to_sync = [
+                {"code": inv.code, "inviter_discord_id": str(inv.inviter.id)}
+                for inv in invites
+                if inv.inviter
+            ]
+            if to_sync:
+                import asyncio
+                asyncio.create_task(panel_api.track_invites_bulk(to_sync))
         except discord.Forbidden:
             print(f"[tracker] Missing Manage Guild permission in {guild.name} — invite tracking disabled.")
         except Exception as e:
@@ -49,7 +55,8 @@ class Tracker(commands.Cog):
             self.invites[invite.guild.id] = {}
         self.invites[invite.guild.id][invite.code] = invite.uses or 0
         if invite.inviter:
-            await panel_api.track_invite_create(invite.code, str(invite.inviter.id))
+            import asyncio
+            asyncio.create_task(panel_api.track_invite_create(invite.code, str(invite.inviter.id)))
 
     @commands.Cog.listener()
     async def on_invite_delete(self, invite: discord.Invite):
@@ -74,7 +81,7 @@ class Tracker(commands.Cog):
                     break
 
             # Update cache regardless
-            self.invites[guild.id] = {inv.code: inv.uses for inv in new_invites}
+            self.invites[guild.id] = {inv.code: (inv.uses or 0) for inv in new_invites}
 
         except discord.Forbidden:
             pass  # Can't track invites without Manage Guild
@@ -84,18 +91,20 @@ class Tracker(commands.Cog):
         if used_invite and used_invite.inviter:
             account_age = datetime.datetime.now(datetime.timezone.utc) - member.created_at
             is_fake = account_age.days < 90  # accounts < 90 days old = suspect
-            await panel_api.add_invited_user(
+            import asyncio
+            asyncio.create_task(panel_api.add_invited_user(
                 discord_id=str(member.id),
                 inviter_id=str(used_invite.inviter.id),
                 is_fake=is_fake,
-            )
+            ))
             print(f"[tracker] {member} joined via {used_invite.inviter} (fake={is_fake})")
 
     # ── Member leave ───────────────────────────────────────────────────────────
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
-        await panel_api.update_invited_user_status(str(member.id), "left")
+        import asyncio
+        asyncio.create_task(panel_api.update_invited_user_status(str(member.id), "left"))
 
     # ── Message counting ───────────────────────────────────────────────────────
 
@@ -106,7 +115,8 @@ class Tracker(commands.Cog):
         if message.channel.id in IGNORED_CHANNEL_IDS:
             return
 
-        await panel_api.add_message(str(message.author.id))
+        import asyncio
+        asyncio.create_task(panel_api.add_message(str(message.author.id)))
 
         # Showcase channel detection
         if SHOWCASE_CHANNEL_ID and message.channel.id == SHOWCASE_CHANNEL_ID:
@@ -119,7 +129,8 @@ class Tracker(commands.Cog):
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         # Fires when a member starts boosting (premium_since goes from None → datetime)
         if before.premium_since is None and after.premium_since is not None:
-            await panel_api.add_boost(str(after.id))
+            import asyncio
+            asyncio.create_task(panel_api.add_boost(str(after.id)))
             print(f"[tracker] {after} boosted the server.")
 
 

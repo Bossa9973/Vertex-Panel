@@ -250,6 +250,28 @@ class Abuse(commands.Cog):
         interaction: discord.Interaction,
         channel: Optional[discord.TextChannel] = None,
     ) -> None:
+        await self._handle_listabuse(interaction, channel)
+
+    @app_commands.command(
+        name="listabusers",
+        description="Admin: List users who abused reward claims (alias for /listabuse)",
+    )
+    @app_commands.describe(
+        channel="Optional text channel to publish the audit report into",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def listabusers(
+        self,
+        interaction: discord.Interaction,
+        channel: Optional[discord.TextChannel] = None,
+    ) -> None:
+        await self._handle_listabuse(interaction, channel)
+
+    async def _handle_listabuse(
+        self,
+        interaction: discord.Interaction,
+        channel: Optional[discord.TextChannel] = None,
+    ) -> None:
         await interaction.response.defer(ephemeral=True)
 
         res = await panel_api.get_abuse_list()

@@ -24,42 +24,50 @@ def _headers() -> dict:
         "Content-Type":  "application/json",
     }
 
+_client: httpx.AsyncClient | None = None
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=15.0, verify=False)
+    return _client
+
 async def _post(path: str, payload: dict, timeout: float = 15.0) -> dict:
     """POST to the panel bot API. Returns the JSON response or raises on error."""
-    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
-        r = await client.post(f"{BASE_URL}{path}", json=payload, headers=_headers())
-        if r.status_code >= 400:
-            try:
-                body = r.json()
-                err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}"
-                raise Exception(err_msg)
-            except Exception as e:
-                if not str(e).startswith("HTTP ") and "error" not in str(e).lower():
-                    raise e
-                raise Exception(f"HTTP {r.status_code}: {r.text}")
-        return r.json()
+    client = _get_client()
+    r = await client.post(f"{BASE_URL}{path}", json=payload, headers=_headers(), timeout=timeout)
+    if r.status_code >= 400:
+        try:
+            body = r.json()
+            err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}"
+            raise Exception(err_msg)
+        except Exception as e:
+            if not str(e).startswith("HTTP ") and "error" not in str(e).lower():
+                raise e
+            raise Exception(f"HTTP {r.status_code}: {r.text}")
+    return r.json()
 
 async def _get(path: str, timeout: float = 15.0) -> dict:
     """GET from the panel bot API. Returns the JSON response or raises on error."""
-    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
-        r = await client.get(f"{BASE_URL}{path}", headers=_headers())
-        if r.status_code >= 400:
-            try:
-                body = r.json()
-                err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}"
-                raise Exception(err_msg)
-            except Exception as e:
-                if not str(e).startswith("HTTP ") and "error" not in str(e).lower():
-                    raise e
-                raise Exception(f"HTTP {r.status_code}: {r.text}")
-        return r.json()
+    client = _get_client()
+    r = await client.get(f"{BASE_URL}{path}", headers=_headers(), timeout=timeout)
+    if r.status_code >= 400:
+        try:
+            body = r.json()
+            err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}"
+            raise Exception(err_msg)
+        except Exception as e:
+            if not str(e).startswith("HTTP ") and "error" not in str(e).lower():
+                raise e
+            raise Exception(f"HTTP {r.status_code}: {r.text}")
+    return r.json()
 
 # ─── Stats tracking ───────────────────────────────────────────────────────────
 
 async def add_message(discord_id: str) -> None:
     """Increment the message counter for a Discord user."""
     try:
-        await _post("/stats/message", {"discord_id": discord_id})
+        await _post("/stats/message", {"discord_id": discord_id}, timeout=3.0)
     except Exception as e:
         print(f"[panel_api] add_message failed for {discord_id}: {e}")
 
@@ -86,6 +94,15 @@ async def track_invite_create(code: str, inviter_id: str) -> None:
         await _post("/invite/track", {"code": code, "inviter_discord_id": inviter_id})
     except Exception as e:
         print(f"[panel_api] track_invite_create failed: {e}")
+
+async def track_invites_bulk(invites: list[dict]) -> None:
+    """Bulk store multiple invite codes and their creators in one HTTP request."""
+    if not invites:
+        return
+    try:
+        await _post("/invite/track-bulk", {"invites": invites}, timeout=10.0)
+    except Exception as e:
+        print(f"[panel_api] track_invites_bulk failed: {e}")
 
 async def add_invited_user(discord_id: str, inviter_id: str, is_fake: bool) -> None:
     """Record that discord_id joined via inviter_id's invite link."""
