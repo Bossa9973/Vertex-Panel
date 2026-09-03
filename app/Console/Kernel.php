@@ -40,21 +40,20 @@ class Kernel extends ConsoleKernel
         $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
         $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
 
-        // Automated cloud backups for PAID servers: runs every round hour (:00).
-        // --tier=paid  → only backs up servers marked as paid tier
-        // --force      → bypasses the 24h dedup guard so every hourly tick actually runs
-        // --prune-oldest → auto-rotates oldest unlocked backup if the backup slot limit is hit
-        // Note: --sync deliberately omitted to avoid blocking the process for N×180s per server.
-        //       UploadPendingBackupsCommand at :15 handles any missed cloud uploads as a safety net.
-        $schedule->command(RunScheduledBackupsCommand::class, ['--tier=paid', '--force', '--prune-oldest'])
+        // Automated cloud backups for all servers: runs every round hour (:00).
+        // --all          → backs up all servers regardless of plan tier
+        // --force        → bypasses the 24h dedup guard so every hourly tick runs
+        // --prune-oldest → auto-rotates oldest unlocked backup to prevent disk space stacking
+        $schedule->command(RunScheduledBackupsCommand::class, ['--all', '--force', '--prune-oldest'])
             ->cron('0 * * * *')
             ->withoutOverlapping()
             ->runInBackground();
 
-        // Safety-net sync: checks and uploads any un-uploaded archives to Google Drive at minute :15.
+        // Cloud upload sweep: checks and immediately streams any un-uploaded archives to Google Drive at :00.
         $schedule->command(UploadPendingBackupsCommand::class, ['--sync'])
-            ->cron('15 * * * *')
-            ->withoutOverlapping();
+            ->cron('0 * * * *')
+            ->withoutOverlapping()
+            ->runInBackground();
 
         // Poll sish admin API to update tunnel_port for any server whose tunnel came up since last run
         $schedule->call(function () {

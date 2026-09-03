@@ -95,6 +95,35 @@ class BackupMonitorService
         $server->update([
             'status' => null,
         ]);
+
+        // Clean up temporary restored archive from node storage to reclaim space
+        if (config('backups.delete_local_after_upload', true)) {
+            $node = $server->node;
+            $cloudBackups = $server->backups()->where('cloud_status', 'uploaded')->whereNotNull('file_name')->get();
+            if ($node && $cloudBackups->isNotEmpty() && !empty($node->ssh_private_key)) {
+                try {
+                    $rawKey = trim($node->ssh_private_key ?? '');
+                    if (file_exists($rawKey) && is_readable($rawKey)) {
+                        $rawKey = file_get_contents($rawKey);
+                    }
+                    if (!empty($rawKey)) {
+                        $key = \phpseclib3\Crypt\PublicKeyLoader::load(app(BackupUploadDiagnosticService::class)->normalizePrivateKey($rawKey));
+                        $sshHost = !empty($node->ssh_host) ? trim($node->ssh_host) : trim($node->fqdn ?? '');
+                        $sftp = new \phpseclib3\Net\SFTP($sshHost, (int)($node->ssh_port ?: 22), 10);
+                        if ($sftp->login(!empty($node->ssh_username) ? trim($node->ssh_username) : 'root', $key)) {
+                            $basePath = rtrim($node->getBackupBasePath(), '/');
+                            foreach ($cloudBackups as $cb) {
+                                $rem = $basePath . '/' . $cb->file_name;
+                                if ($sftp->stat($rem)) {
+                                    $sftp->delete($rem);
+                                    \Illuminate\Support\Facades\Log::info("[CloudRestore] Cleaned up temporary archive '{$rem}' from node after restoration.");
+                                }
+                            }
+                        }
+                    }
+                } catch (\Throwable) {}
+            }
+        }
     }
 }
 
