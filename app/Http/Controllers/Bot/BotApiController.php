@@ -1708,6 +1708,40 @@ class BotApiController extends Controller
                 });
             } catch (\Throwable $e) {}
         }
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('users')) {
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('users', 'suspended_until')) {
+                try {
+                    \Illuminate\Support\Facades\Schema::table('users', function (\Illuminate\Database\Schema\Blueprint $table) {
+                        $table->timestamp('suspended_until')->nullable()->after('remember_token');
+                        $table->string('suspension_reason', 255)->nullable()->after('suspended_until');
+                    });
+                } catch (\Throwable $e) {}
+            }
+        }
+
+        if (!\Illuminate\Support\Facades\Schema::hasTable('abuser_records')) {
+            try {
+                \Illuminate\Support\Facades\Schema::create('abuser_records', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->id();
+                    $table->unsignedBigInteger('user_id')->nullable()->index();
+                    $table->string('discord_id', 64)->nullable()->index();
+                    $table->string('username', 128)->nullable();
+                    $table->string('email', 191)->nullable();
+                    $table->text('reasons')->nullable();
+                    $table->string('status', 32)->default('flagged');
+                    $table->decimal('old_balance', 16, 2)->default(0.00);
+                    $table->decimal('new_balance', 16, 2)->default(0.00);
+                    $table->integer('servers_wiped')->default(0);
+                    $table->boolean('is_suspended')->default(false);
+                    $table->timestamp('suspended_until')->nullable();
+                    $table->string('suspension_reason', 255)->nullable();
+                    $table->string('action_by_admin', 64)->nullable();
+                    $table->text('notes')->nullable();
+                    $table->timestamps();
+                });
+            } catch (\Throwable $e) {}
+        }
     }
 
     // =========================================================================
@@ -2328,6 +2362,8 @@ class BotApiController extends Controller
             'discord_id'       => 'nullable|string',
             'admin_discord_id' => 'required|string',
             'wipe_servers'     => 'nullable|boolean',
+            'suspend_days'     => 'nullable|integer|min:0|max:365',
+            'reasons'          => 'nullable|array',
         ]);
 
         $userId = $validated['user_id'] ?? null;
@@ -2429,7 +2465,24 @@ class BotApiController extends Controller
             }
         }
 
-        $newBalance = min(8000.0, round(array_sum($maxPerCategory), 2));
+        // Check credit transactions if no claims or for additional promo/milestone claims
+        if (array_sum($maxPerCategory) <= 0) {
+            $rewardTxs = DB::table('credit_transactions')
+                ->where('user_id', $user->id)
+                ->where('amount', '>', 0)
+                ->where(function ($q) {
+                    $q->where('type', 'discord_reward')
+                      ->orWhere('description', 'LIKE', '%discord%')
+                      ->orWhere('description', 'LIKE', '%promo%')
+                      ->orWhereIn('type', ['bonus', 'admin_deposit', 'topup']);
+                })
+                ->get();
+
+            $maxTx = (float) ($rewardTxs->max('amount') ?? 0.0);
+            if ($maxTx > 0) {
+                $maxPerCategory['invites'] = min(5000.0, $maxTx);
+            }
+        }
 
         // Clean duplicate claims: retain only the highest claim per category
         foreach ($highestKeyPerCategory as $cat => $keepKey) {
@@ -2441,8 +2494,26 @@ class BotApiController extends Controller
                 ->delete();
         }
 
-        // 3. Reset User Balance in Database
+        // Calculate legitimate balance to restore:
+        // Capped at 8,000 hard limit.
+        // Even if user already spent balance on servers, servers are wiped and user is granted
+        // the legitimate reward amount they would have had without over-claiming.
+        $legitEarned = array_sum($maxPerCategory);
+        if ($legitEarned <= 0) {
+            // Default to biggest milestone reward (5,000) or historical balance up to 8,000
+            $legitEarned = min(5000.0, max(3000.0, $oldBalance));
+        }
+
+        $newBalance = min(8000.0, round($legitEarned, 2));
+
+        // 3. Reset User Balance & apply suspension if specified
         $user->credits = $newBalance;
+
+        $suspendDays = (int) ($validated['suspend_days'] ?? 0);
+        if ($suspendDays > 0) {
+            $user->suspended_until = now()->addDays($suspendDays);
+            $user->suspension_reason = "Suspended for {$suspendDays} days following abuse remediation";
+        }
         $user->save();
 
         $diff = round($newBalance - $oldBalance, 2);
@@ -2459,6 +2530,33 @@ class BotApiController extends Controller
             Log::warning("Credit transaction skipped in remediation: " . $t->getMessage());
         }
 
+        // 5. Persist to abuser_records database table
+        $reasons = $validated['reasons'] ?? ['Reward Claim Abuse / Policy Violation'];
+        try {
+            DB::table('abuser_records')->updateOrInsert(
+                ['user_id' => $user->id],
+                [
+                    'discord_id'        => $user->discord_id,
+                    'username'          => $user->name,
+                    'email'             => $user->email,
+                    'reasons'           => json_encode($reasons),
+                    'status'            => $suspendDays > 0 ? 'suspended' : 'remediated',
+                    'old_balance'       => $oldBalance,
+                    'new_balance'       => $newBalance,
+                    'servers_wiped'     => count($wipedServers),
+                    'is_suspended'      => $user->suspended_until && \Carbon\Carbon::parse($user->suspended_until)->isFuture(),
+                    'suspended_until'   => $user->suspended_until,
+                    'suspension_reason' => $user->suspension_reason,
+                    'action_by_admin'   => $adminDiscordId,
+                    'notes'             => "Remediated by <@{$adminDiscordId}> on " . now()->toDateTimeString(),
+                    'updated_at'        => now(),
+                    'created_at'        => now(),
+                ]
+            );
+        } catch (\Throwable $t) {
+            Log::warning("Could not persist to abuser_records: " . $t->getMessage());
+        }
+
         try {
             \Convoy\Facades\Activity::event('admin:abuse-remediate')
                 ->actor($user)
@@ -2470,6 +2568,7 @@ class BotApiController extends Controller
                     'old_balance'      => $oldBalance,
                     'new_balance'      => $newBalance,
                     'servers_wiped'    => count($wipedServers),
+                    'suspended_until'  => $user->suspended_until,
                 ])
                 ->withRequestMetadata()
                 ->log();
@@ -2479,15 +2578,185 @@ class BotApiController extends Controller
             'ok'              => true,
             'message'         => "Abuse remediation complete for {$user->name}. Wiped " . count($wipedServers) . " server(s) and set balance to {$newBalance} BOLTs.",
             'user'            => [
-                'id'         => $user->id,
-                'name'       => $user->name,
-                'email'      => $user->email,
-                'discord_id' => $user->discord_id,
+                'id'              => $user->id,
+                'name'            => $user->name,
+                'email'           => $user->email,
+                'discord_id'      => $user->discord_id,
+                'is_suspended'    => $user->suspended_until && \Carbon\Carbon::parse($user->suspended_until)->isFuture(),
+                'suspended_until' => $user->suspended_until,
             ],
             'old_balance'     => $oldBalance,
             'new_balance'     => $newBalance,
             'servers_wiped'   => count($wipedServers),
             'wiped_servers'   => $wipedServers,
+        ]);
+    }
+
+    /**
+     * Get all detected and recorded abusers, their history, and suspension status.
+     * GET /api/bot/admin/abusers
+     */
+    public function getAbusers(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $discordId = $request->query('discord_id');
+        $userId = $request->query('user_id');
+
+        $query = DB::table('abuser_records');
+        if ($discordId) {
+            $query->where('discord_id', $discordId);
+        }
+        if ($userId) {
+            $query->where('user_id', $userId);
+        }
+
+        $records = $query->orderByDesc('updated_at')->get();
+
+        $userMap = User::whereIn('id', $records->pluck('user_id')->filter())->get()->keyBy('id');
+
+        $formatted = $records->map(function ($rec) use ($userMap) {
+            $user = $userMap->get($rec->user_id);
+            $suspendedUntil = $user ? $user->suspended_until : $rec->suspended_until;
+            $isSuspended = $suspendedUntil && \Carbon\Carbon::parse($suspendedUntil)->isFuture();
+
+            return [
+                'id'                => $rec->id,
+                'user_id'           => $rec->user_id,
+                'discord_id'        => $rec->discord_id ?? ($user?->discord_id),
+                'username'          => $rec->username ?? ($user?->name),
+                'email'             => $rec->email ?? ($user?->email),
+                'status'            => $isSuspended ? 'suspended' : $rec->status,
+                'reasons'           => json_decode($rec->reasons, true) ?: [$rec->reasons],
+                'old_balance'       => (float) $rec->old_balance,
+                'new_balance'       => (float) $rec->new_balance,
+                'servers_wiped'     => (int) $rec->servers_wiped,
+                'is_suspended'      => (bool) $isSuspended,
+                'suspended_until'   => $suspendedUntil,
+                'suspension_reason' => $user?->suspension_reason ?? $rec->suspension_reason,
+                'action_by_admin'   => $rec->action_by_admin,
+                'notes'             => $rec->notes,
+                'created_at'        => $rec->created_at,
+                'updated_at'        => $rec->updated_at,
+            ];
+        });
+
+        return response()->json([
+            'ok'      => true,
+            'count'   => $formatted->count(),
+            'abusers' => $formatted,
+        ]);
+    }
+
+    /**
+     * Suspend a user account from earning rewards and deploying VPS servers.
+     * POST /api/bot/admin/user-suspend
+     */
+    public function suspendUser(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $validated = $request->validate([
+            'user_id'          => 'nullable',
+            'discord_id'       => 'nullable|string',
+            'admin_discord_id' => 'required|string',
+            'days'             => 'nullable|integer|min:1|max:365',
+            'reason'           => 'nullable|string|max:255',
+        ]);
+
+        $userId = $validated['user_id'] ?? null;
+        $discordId = $validated['discord_id'] ?? null;
+        $days = (int) ($validated['days'] ?? 14);
+        $reason = $validated['reason'] ?? "Suspended for {$days} days for policy violations";
+
+        /** @var User|null $user */
+        $user = User::query()
+            ->when($userId, fn($q) => $q->where('id', $userId))
+            ->when($discordId, fn($q) => $q->orWhere('discord_id', $discordId))
+            ->first();
+
+        if (!$user) {
+            return response()->json(['ok' => false, 'error' => 'User not found.'], 404);
+        }
+
+        $suspendedUntil = now()->addDays($days);
+        $user->suspended_until = $suspendedUntil;
+        $user->suspension_reason = $reason;
+        $user->save();
+
+        DB::table('abuser_records')->updateOrInsert(
+            ['user_id' => $user->id],
+            [
+                'discord_id'        => $user->discord_id,
+                'username'          => $user->name,
+                'email'             => $user->email,
+                'reasons'           => json_encode([$reason]),
+                'status'            => 'suspended',
+                'is_suspended'      => true,
+                'suspended_until'   => $suspendedUntil,
+                'suspension_reason' => $reason,
+                'action_by_admin'   => $validated['admin_discord_id'],
+                'notes'             => "Suspended for {$days} days by <@{$validated['admin_discord_id']}>",
+                'updated_at'        => now(),
+                'created_at'        => now(),
+            ]
+        );
+
+        return response()->json([
+            'ok'              => true,
+            'message'         => "User {$user->name} has been suspended until " . $suspendedUntil->toDateTimeString(),
+            'user_id'         => $user->id,
+            'discord_id'      => $user->discord_id,
+            'suspended_until' => $suspendedUntil->toDateTimeString(),
+            'reason'          => $reason,
+        ]);
+    }
+
+    /**
+     * Unsuspend a previously suspended user account.
+     * POST /api/bot/admin/user-unsuspend
+     */
+    public function unsuspendUser(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $validated = $request->validate([
+            'user_id'          => 'nullable',
+            'discord_id'       => 'nullable|string',
+            'admin_discord_id' => 'required|string',
+        ]);
+
+        $userId = $validated['user_id'] ?? null;
+        $discordId = $validated['discord_id'] ?? null;
+
+        /** @var User|null $user */
+        $user = User::query()
+            ->when($userId, fn($q) => $q->where('id', $userId))
+            ->when($discordId, fn($q) => $q->orWhere('discord_id', $discordId))
+            ->first();
+
+        if (!$user) {
+            return response()->json(['ok' => false, 'error' => 'User not found.'], 404);
+        }
+
+        $user->suspended_until = null;
+        $user->suspension_reason = null;
+        $user->save();
+
+        DB::table('abuser_records')->where('user_id', $user->id)->update([
+            'status'            => 'cleared',
+            'is_suspended'      => false,
+            'suspended_until'   => null,
+            'suspension_reason' => null,
+            'notes'             => "Unsuspended by <@{$validated['admin_discord_id']}> on " . now()->toDateTimeString(),
+            'updated_at'        => now(),
+        ]);
+
+        return response()->json([
+            'ok'         => true,
+            'message'    => "User {$user->name} has been unsuspended.",
+            'user_id'    => $user->id,
+            'discord_id' => $user->discord_id,
         ]);
     }
 }

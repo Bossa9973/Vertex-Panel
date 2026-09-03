@@ -409,20 +409,87 @@ async def remediate_abuse(
     user_id: int | None = None,
     discord_id: str | None = None,
     wipe_servers: bool = True,
+    suspend_days: int = 0,
+    reasons: list[str] | None = None,
 ) -> dict:
     """Remediate abusive user: wipe all VPS servers (Proxmox + DB) and reset balance to legitimate reward."""
     try:
         payload: dict = {
             "admin_discord_id": str(admin_discord_id),
             "wipe_servers": wipe_servers,
+            "suspend_days": suspend_days,
         }
         if user_id is not None:
             payload["user_id"] = user_id
         if discord_id is not None:
             payload["discord_id"] = str(discord_id)
+        if reasons is not None:
+            payload["reasons"] = reasons
 
         return await _post("/admin/abuse-remediate", payload, timeout=60.0)
     except Exception as e:
         print(f"[panel_api] remediate_abuse failed for user {user_id or discord_id}: {e}")
         return {"ok": False, "error": str(e)}
+
+
+async def get_abusers(discord_id: str | None = None, user_id: int | None = None) -> dict:
+    """Fetch saved abusers list and history (for AI support bot and dashboard)."""
+    try:
+        params = []
+        if discord_id:
+            params.append(f"discord_id={discord_id}")
+        if user_id:
+            params.append(f"user_id={user_id}")
+        query = f"?{'&'.join(params)}" if params else ""
+        return await _get(f"/admin/abusers{query}", timeout=20.0)
+    except Exception as e:
+        print(f"[panel_api] get_abusers failed: {e}")
+        return {"ok": False, "error": str(e), "abusers": []}
+
+
+async def suspend_user(
+    admin_discord_id: str,
+    discord_id: str | None = None,
+    user_id: int | None = None,
+    days: int = 14,
+    reason: str = "",
+) -> dict:
+    """Suspend a user from earning rewards and deploying VPS servers."""
+    try:
+        payload = {
+            "admin_discord_id": str(admin_discord_id),
+            "days": days,
+            "reason": reason,
+        }
+        if discord_id is not None:
+            payload["discord_id"] = str(discord_id)
+        if user_id is not None:
+            payload["user_id"] = user_id
+
+        return await _post("/admin/user-suspend", payload, timeout=20.0)
+    except Exception as e:
+        print(f"[panel_api] suspend_user failed: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+async def unsuspend_user(
+    admin_discord_id: str,
+    discord_id: str | None = None,
+    user_id: int | None = None,
+) -> dict:
+    """Unsuspend a user account."""
+    try:
+        payload = {
+            "admin_discord_id": str(admin_discord_id),
+        }
+        if discord_id is not None:
+            payload["discord_id"] = str(discord_id)
+        if user_id is not None:
+            payload["user_id"] = user_id
+
+        return await _post("/admin/user-unsuspend", payload, timeout=20.0)
+    except Exception as e:
+        print(f"[panel_api] unsuspend_user failed: {e}")
+        return {"ok": False, "error": str(e)}
+
 

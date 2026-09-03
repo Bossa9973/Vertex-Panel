@@ -114,7 +114,16 @@ rsync -a \
 
 success "Files updated successfully!"
 
-# 7. Clear Laravel caches so new routes & controllers take effect immediately
+# 7. Auto-configure local PANEL_URL in bot/.env to avoid Cloudflare hairpinning
+if [[ -f "${INSTALL_DIR}/bot/.env" ]]; then
+    if grep -q "dash\.vertexnodes\.top" "${INSTALL_DIR}/bot/.env" 2>/dev/null || grep -q "localhost:8000" "${INSTALL_DIR}/bot/.env" 2>/dev/null; then
+        info "Setting bot PANEL_URL to http://127.0.0.1 for fast local communication..."
+        sed -i 's|^PANEL_URL=https://dash\.vertexnodes\.top.*|PANEL_URL=http://127.0.0.1|' "${INSTALL_DIR}/bot/.env" 2>/dev/null || true
+        sed -i 's|^PANEL_URL=http://localhost:8000.*|PANEL_URL=http://127.0.0.1|' "${INSTALL_DIR}/bot/.env" 2>/dev/null || true
+    fi
+fi
+
+# 8. Clear Laravel caches so new routes & controllers take effect immediately
 if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
     info "Refreshing Laravel route and config caches..."
     (cd "$INSTALL_DIR" && php artisan route:clear >/dev/null 2>&1 || true)

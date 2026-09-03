@@ -49,6 +49,13 @@ class ServerCreationService
         $user = $userId ? \Convoy\Models\User::find($userId) : null;
         $planTier = Arr::get($data, 'plan_tier', 'free');
 
+        if ($user && !$user->root_admin) {
+            if ($user->suspended_until && \Carbon\Carbon::parse($user->suspended_until)->isFuture()) {
+                $until = \Carbon\Carbon::parse($user->suspended_until)->format('Y-m-d H:i');
+                throw new \Exception("User account is suspended from deploying VPS servers until {$until}.");
+            }
+        }
+
         if ($user && !$user->root_admin && $planTier !== 'paid') {
             $freeServers = Server::where('user_id', $user->id)
                 ->where(function ($q) {

@@ -190,6 +190,15 @@ class EarnBoltsController extends ApiController
 
         $taskKey = $request->input('task_key');
         $user = $request->user();
+
+        if ($user && $user->suspended_until && \Carbon\Carbon::parse($user->suspended_until)->isFuture()) {
+            $until = \Carbon\Carbon::parse($user->suspended_until)->format('Y-m-d H:i');
+            return response()->json([
+                'success' => false,
+                'message' => "Your account is currently suspended from claiming rewards until {$until} due to policy violations.",
+            ], 403);
+        }
+
         $discordId = trim($request->input('discord_id', $user->discord_id ?? ''));
 
         if (empty($discordId)) {

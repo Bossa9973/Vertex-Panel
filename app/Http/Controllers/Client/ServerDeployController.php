@@ -257,6 +257,13 @@ class ServerDeployController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        if ($user && $user->suspended_until && \Carbon\Carbon::parse($user->suspended_until)->isFuture()) {
+            $until = \Carbon\Carbon::parse($user->suspended_until)->format('Y-m-d H:i');
+            return response()->json([
+                'message' => "Your account is currently suspended from deploying VPS servers until {$until} due to policy violations.",
+            ], 403);
+        }
+
         // Enforce max VPS instances limit for non-admin users (limit = 2)
         if (!$user->root_admin) {
             $existingCount = Server::where('user_id', $user->id)->count();

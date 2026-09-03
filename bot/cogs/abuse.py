@@ -79,13 +79,24 @@ class RemediationConfirmView(discord.ui.View):
         self.admin = admin
         self.target_channel = target_channel
 
-    @discord.ui.button(label="⚡ Execute Instant Wipe & Reset", style=discord.ButtonStyle.danger, emoji="💥")
+    @discord.ui.button(label="⚡ Wipe VPS & Restore Balance", style=discord.ButtonStyle.danger, emoji="💥")
     async def confirm_remediation(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._execute(interaction, suspend_days=0)
+
+    @discord.ui.button(label="⛔ Wipe, Restore & Suspend (14d)", style=discord.ButtonStyle.danger, emoji="🔒")
+    async def confirm_remediation_suspend(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._execute(interaction, suspend_days=14)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.send_message("Remediation cancelled.", ephemeral=True)
+
+    async def _execute(self, interaction: discord.Interaction, suspend_days: int = 0):
         if interaction.user.id != self.admin.id:
             return await interaction.response.send_message("Only the command admin can confirm.", ephemeral=True)
 
         await interaction.response.defer(ephemeral=True)
-        button.disabled = True
         self.stop()
 
         res = await panel_api.remediate_abuse(
@@ -93,6 +104,8 @@ class RemediationConfirmView(discord.ui.View):
             user_id=self.abuser.get("user_id"),
             discord_id=self.abuser.get("discord_id"),
             wipe_servers=True,
+            suspend_days=suspend_days,
+            reasons=self.abuser.get("reasons", []),
         )
 
         if not res.get("ok"):
@@ -107,6 +120,7 @@ class RemediationConfirmView(discord.ui.View):
         servers_wiped = res.get("servers_wiped", 0)
         old_bal = res.get("old_balance", 0)
         new_bal = res.get("new_balance", 0)
+        susp_text = f"• **Account Suspended:** `Yes (14 Days)` — cannot claim rewards or deploy VPS\n" if suspend_days > 0 else ""
 
         success_embed = discord.Embed(
             title="🛡️ Abuse Remediation Complete",
@@ -115,12 +129,13 @@ class RemediationConfirmView(discord.ui.View):
                 f"Successfully remediated **{self.abuser.get('name')}** "
                 f"(<@{self.abuser.get('discord_id')}>):\n\n"
                 f"• **VPS Instances Wiped:** `{servers_wiped}` (Purged from Proxmox & DB)\n"
-                f"• **Balance Reset:** `{old_bal:,.2f}` ➔ **`{new_bal:,.2f}` BOLTs**\n"
+                f"• **Balance Restored:** `{old_bal:,.2f}` ➔ **`{new_bal:,.2f}` BOLTs** (highest earned reward)\n"
+                f"{susp_text}"
                 f"• **Duplicate Claims:** Cleaned & synchronized to highest reward tier\n"
                 f"• **Admin:** <@{self.admin.id}>"
             ),
         )
-        success_embed.set_footer(text="Actions logged to activity_log and credit_transactions audit.")
+        success_embed.set_footer(text="Logged to abuser_records and activity_log audit.")
 
         await interaction.followup.send(embed=success_embed, ephemeral=True)
 
@@ -130,11 +145,6 @@ class RemediationConfirmView(discord.ui.View):
                 await self.target_channel.send(embed=success_embed)
             except Exception as e:
                 print(f"[abuse] Failed to post remediation cert to channel: {e}")
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.stop()
-        await interaction.response.send_message("Remediation cancelled.", ephemeral=True)
 
 
 class AbuserSelect(discord.ui.Select):
@@ -169,33 +179,36 @@ class AbuserSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
         if interaction.user.id != self.admin.id:
-            return await interaction.response.send_message("Only the command admin can take action.", ephemeral=True)
+            return await interaction.followup.send("Only the command admin can take action.", ephemeral=True)
 
         selected_id = self.values[0]
         abuser = self.abusers_map.get(selected_id)
         if not abuser:
-            return await interaction.response.send_message("User record not found.", ephemeral=True)
+            return await interaction.followup.send("User record not found.", ephemeral=True)
 
         reasons = "\n".join(f"• {r}" for r in abuser.get("reasons", []))
         confirm_embed = discord.Embed(
-            title=f"⚠️ Confirm Remediation: {abuser.get('name')}",
+            title=f"⚠️ Inspect & Remediate: {abuser.get('name')}",
             color=WARNING,
             description=(
                 f"**User:** <@{abuser.get('discord_id')}> (`{abuser.get('email')}`)\n\n"
                 f"**Detected Violations:**\n{reasons}\n\n"
-                f"**Proposed Actions:**\n"
+                f"**Remediation Policy:**\n"
                 f"1. 💣 **Wipe all `{abuser.get('active_servers_count')}` active VPS instances** "
                 f"immediately from Proxmox VE and delete from panel database.\n"
-                f"2. ⚖️ **Reset Balance** from `{abuser.get('current_balance'):,.2f}` ➔ "
-                f"**`{abuser.get('legitimate_balance'):,.2f}` BOLTs** (highest legitimate tier + legitimate boost).\n"
-                f"3. 🧹 **Prune duplicate claim records** in the database.\n\n"
-                f"Are you sure you wish to proceed?"
+                f"2. ⚖️ **Restore Balance** from `{abuser.get('current_balance'):,.2f}` ➔ "
+                f"**`{abuser.get('legitimate_balance'):,.2f}` BOLTs** (highest claimed reward, capped at 8k).\n"
+                f"3. 🧹 **Prune duplicate claims** in the database.\n"
+                f"4. ⛔ **Optionally suspend user account** from earning or deploying servers.\n\n"
+                f"Choose a remediation action below:"
             ),
         )
 
         view = RemediationConfirmView(abuser=abuser, admin=self.admin, target_channel=self.target_channel)
-        await interaction.response.send_message(embed=confirm_embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=confirm_embed, view=view, ephemeral=True)
 
 
 class AbuseAuditView(discord.ui.View):
@@ -316,6 +329,133 @@ class Abuse(commands.Cog):
             view=view,
             ephemeral=True,
         )
+
+    @app_commands.command(
+        name="suspend",
+        description="Admin: Suspend a user from claiming rewards and deploying VPS servers",
+    )
+    @app_commands.describe(
+        user="Discord user to suspend",
+        days="Duration of suspension in days (default: 14)",
+        reason="Reason for suspension",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def suspend_cmd(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+        days: int = 14,
+        reason: str = "Reward abuse and policy violation",
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+
+        res = await panel_api.suspend_user(
+            admin_discord_id=str(interaction.user.id),
+            discord_id=str(user.id),
+            days=days,
+            reason=reason,
+        )
+
+        if not res.get("ok"):
+            err = res.get("error") or "Unknown error contacting panel."
+            return await interaction.followup.send(f"❌ Failed to suspend user: `{err}`", ephemeral=True)
+
+        until = res.get("suspended_until", f"{days} days")
+        embed = discord.Embed(
+            title="🔒 User Suspended",
+            color=DANGER,
+            description=(
+                f"**User:** {user.mention} (`{user.id}`)\n"
+                f"**Suspended Until:** `{until}` ({days} days)\n"
+                f"**Reason:** {reason}\n"
+                f"**Enforcement:** Blocked from claiming BOLTs and deploying new VPS instances.\n"
+                f"**Admin:** {interaction.user.mention}"
+            ),
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="unsuspend",
+        description="Admin: Remove suspension from a user account",
+    )
+    @app_commands.describe(
+        user="Discord user to unsuspend",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def unsuspend_cmd(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+
+        res = await panel_api.unsuspend_user(
+            admin_discord_id=str(interaction.user.id),
+            discord_id=str(user.id),
+        )
+
+        if not res.get("ok"):
+            err = res.get("error") or "Unknown error contacting panel."
+            return await interaction.followup.send(f"❌ Failed to unsuspend user: `{err}`", ephemeral=True)
+
+        embed = discord.Embed(
+            title="🔓 User Unsuspended",
+            color=SUCCESS,
+            description=(
+                f"**User:** {user.mention} (`{user.id}`)\n"
+                f"**Status:** Suspension lifted. User can now claim eligible rewards and deploy servers.\n"
+                f"**Admin:** {interaction.user.mention}"
+            ),
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="abusers",
+        description="Admin: View recorded abusers, history, and suspension status",
+    )
+    @app_commands.describe(
+        user="Optional user to filter",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def abusers_cmd(
+        self,
+        interaction: discord.Interaction,
+        user: Optional[discord.User] = None,
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+
+        discord_id = str(user.id) if user else None
+        res = await panel_api.get_abusers(discord_id=discord_id)
+
+        if not res.get("ok"):
+            err = res.get("error") or "Unknown error contacting panel."
+            return await interaction.followup.send(f"❌ Failed to fetch abuser history: `{err}`", ephemeral=True)
+
+        abusers = res.get("abusers", [])
+        if not abusers:
+            return await interaction.followup.send("✅ No recorded abuser records found.", ephemeral=True)
+
+        embed = discord.Embed(
+            title="📋 Abuser Records & History",
+            color=WARNING,
+            description=f"Showing **{len(abusers)}** abuser record(s):",
+        )
+
+        for a in abusers[:10]:
+            susp = f"🔒 Suspended until `{a.get('suspended_until')}`" if a.get("is_suspended") else "🟢 Active"
+            reasons = ", ".join(a.get("reasons", []))[:100]
+            embed.add_field(
+                name=f"{a.get('username')} (<@{a.get('discord_id')}>)",
+                value=(
+                    f"**Status:** `{a.get('status')}` | {susp}\n"
+                    f"**Balance:** `{a.get('old_balance'):,.0f}` ➔ `{a.get('new_balance'):,.0f}` BOLTs\n"
+                    f"**Servers Wiped:** `{a.get('servers_wiped')}`\n"
+                    f"**Reasons:** *{reasons}*"
+                ),
+                inline=False,
+            )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:
