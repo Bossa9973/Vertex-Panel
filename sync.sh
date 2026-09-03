@@ -122,21 +122,14 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
     success "Laravel cache cleared."
 fi
 
-# 8. Restart Discord Bot if running or script is present
+# 8. Restart Discord Bot with auto-healing
 info "Restarting Discord Bot..."
-if systemctl is-active --quiet vertex-bot 2>/dev/null; then
+if [[ -f "${INSTALL_DIR}/restart_bot.sh" ]]; then
+    (cd "$INSTALL_DIR" && bash restart_bot.sh || true)
+elif [[ -f "${INSTALL_DIR}/start_bot.sh" ]]; then
+    (cd "$INSTALL_DIR" && bash start_bot.sh || true)
+elif systemctl is-active --quiet vertex-bot 2>/dev/null; then
     systemctl restart vertex-bot
-    sleep 1
-    if systemctl is-active --quiet vertex-bot; then
-        success "Bot restarted via systemd (vertex-bot)!"
-    else
-        warn "Bot restarted, check status: systemctl status vertex-bot"
-    fi
-elif [[ -f "${INSTALL_DIR}/restart_bot.sh" ]]; then
-    (cd "$INSTALL_DIR" && bash restart_bot.sh >/dev/null 2>&1 || true)
-    success "Bot restarted via restart_bot.sh!"
-else
-    info "Bot service not running."
 fi
 
 printf "\n${GREEN}${BOLD}=======================================================\n"
