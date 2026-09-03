@@ -69,6 +69,8 @@ class BackupCreationService
                     $mode, $compressionType,
                 );
 
+                $backup->upid = $upid;
+
                 MonitorBackupJob::dispatch($backup->id, $upid);
 
                 return $backup;

@@ -32,8 +32,10 @@ class BackupSingleServerCommand extends Command
 
     protected $description = 'Trigger an immediate cloud backup for a single VM and upload to Google Drive.';
 
-    public function __construct(private BackupCreationService $backupCreationService)
-    {
+    public function __construct(
+        private BackupCreationService $backupCreationService,
+        private \Convoy\Services\Backups\BackupMonitorService $monitorService
+    ) {
         parent::__construct();
     }
 
@@ -73,8 +75,14 @@ class BackupSingleServerCommand extends Command
                 $this->line("⏳ [--sync] Waiting for Proxmox snapshot creation to complete...");
                 $startTime = time();
                 $completed = false;
+                $upid = $backup->upid ?? null;
 
                 while (time() - $startTime < 180) {
+                    if ($upid) {
+                        try {
+                            $this->monitorService->checkCreationProgress($backup, $upid);
+                        } catch (\Throwable) {}
+                    }
                     $freshBackup = $backup->fresh();
                     if ($freshBackup && $freshBackup->is_successful && !empty($freshBackup->file_name)) {
                         $completed = true;

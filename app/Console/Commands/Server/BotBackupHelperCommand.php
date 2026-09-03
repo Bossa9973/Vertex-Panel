@@ -11,6 +11,7 @@ use Convoy\Models\Node;
 use Convoy\Models\Server;
 use Convoy\Models\User;
 use Convoy\Services\Backups\BackupCreationService;
+use Convoy\Services\Backups\BackupMonitorService;
 use Convoy\Services\Backups\BackupUploadDiagnosticService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -46,6 +47,7 @@ class BotBackupHelperCommand extends Command
 
     public function __construct(
         private BackupCreationService $backupCreationService,
+        private BackupMonitorService $monitorService,
         private BackupUploadDiagnosticService $diagnosticService
     ) {
         parent::__construct();
@@ -218,8 +220,14 @@ class BotBackupHelperCommand extends Command
                     $result['cloud_sync_requested'] = true;
                     $startTime = time();
                     $completed = false;
+                    $upid = $backup->upid ?? null;
 
                     while (time() - $startTime < 180) {
+                        if ($upid) {
+                            try {
+                                $this->monitorService->checkCreationProgress($backup, $upid);
+                            } catch (Throwable) {}
+                        }
                         $freshBackup = $backup->fresh();
                         if ($freshBackup && $freshBackup->is_successful && !empty($freshBackup->file_name)) {
                             $completed = true;
@@ -323,7 +331,7 @@ class BotBackupHelperCommand extends Command
                     isLocked       : false,
                 );
 
-                $results[] = [
+                $item = [
                     'server_id'       => $server->id,
                     'server_hostname' => $server->hostname,
                     'vmid'            => $server->vmid,
@@ -331,11 +339,45 @@ class BotBackupHelperCommand extends Command
                     'plan_tier'       => $server->plan_tier ?? 'free',
                     'success'         => true,
                     'backup_id'       => $backup?->id,
+                    'cloud_status'    => 'pending',
                 ];
 
                 if ($sync && $backup) {
-                    UploadBackupToCloudJob::dispatch($backup->id);
+                    $item['cloud_sync_requested'] = true;
+                    $startTime = time();
+                    $completed = false;
+                    $upid = $backup->upid ?? null;
+
+                    while (time() - $startTime < 180) {
+                        if ($upid) {
+                            try {
+                                $this->monitorService->checkCreationProgress($backup, $upid);
+                            } catch (Throwable) {}
+                        }
+                        $freshBackup = $backup->fresh();
+                        if ($freshBackup && $freshBackup->is_successful && !empty($freshBackup->file_name)) {
+                            $completed = true;
+                            $backup = $freshBackup;
+                            break;
+                        }
+                        sleep(3);
+                    }
+
+                    if ($completed) {
+                        try {
+                            UploadBackupToCloudJob::dispatchSync($backup->id);
+                            $item['cloud_status'] = 'uploaded';
+                            $item['file_name']    = $backup->file_name;
+                        } catch (Throwable $ue) {
+                            $item['cloud_status'] = 'failed';
+                            $item['cloud_error']  = $ue->getMessage();
+                        }
+                    } else {
+                        $item['cloud_status'] = 'queued_in_background';
+                    }
                 }
+
+                $results[] = $item;
 
             } catch (Throwable $e) {
                 $results[] = [
