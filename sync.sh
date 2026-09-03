@@ -142,6 +142,13 @@ elif systemctl is-active --quiet vertex-bot 2>/dev/null; then
     systemctl restart vertex-bot
 fi
 
+# 9. Ensure Laravel scheduler cron is installed
+if ! crontab -l 2>/dev/null | grep -q "schedule:run"; then
+    info "Adding Laravel scheduler to crontab..."
+    (crontab -l 2>/dev/null || true; echo "* * * * * cd ${INSTALL_DIR} && php artisan schedule:run >> /dev/null 2>&1") | crontab -
+    success "Laravel scheduler added to crontab."
+fi
+
 printf "\n${GREEN}${BOLD}=======================================================\n"
 printf "  ✔  File Sync Complete! Everything is up to date.\n"
 printf "=======================================================${RESET}\n\n"
