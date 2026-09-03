@@ -338,40 +338,63 @@ class ResellerController extends Controller
             ], 422);
         }
 
-        $balance = ResellerCoinBalance::firstOrCreate(
-            ['user_id' => $user->id, 'coin' => $coin],
-            ['balance' => 0, 'locked_balance' => 0]
-        );
+        $withdrawal = null;
 
-        $available = (float) ($balance->balance - $balance->locked_balance);
+        try {
+            $withdrawal = \Illuminate\Support\Facades\DB::transaction(function () use ($user, $coin, $amount, $validated) {
+                // Ensure record exists then lock row for update
+                ResellerCoinBalance::firstOrCreate(
+                    ['user_id' => $user->id, 'coin' => $coin],
+                    ['balance' => 0, 'locked_balance' => 0]
+                );
 
-        if ($amount > $available) {
+                $balance = ResellerCoinBalance::where('user_id', $user->id)
+                    ->where('coin', $coin)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $available = (float) ($balance->balance - $balance->locked_balance);
+
+                if ($amount > $available) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(
+                        422,
+                        "Insufficient available {$coin} balance. Available: {$available} {$coin}."
+                    );
+                }
+
+                // Lock balance atomically
+                $balance->locked_balance += $amount;
+                $balance->save();
+
+                $w = ResellerWithdrawal::create([
+                    'uuid' => (string) Str::uuid(),
+                    'user_id' => $user->id,
+                    'coin' => $coin,
+                    'amount' => $amount,
+                    'wallet_address' => $validated['wallet_address'],
+                    'status' => 'pending',
+                ]);
+
+                ResellerTransaction::create([
+                    'user_id' => $user->id,
+                    'type' => 'withdrawal_locked',
+                    'coin' => $coin,
+                    'amount' => $amount,
+                    'reference_id' => $w->uuid,
+                    'description' => "Withdrawal request for {$amount} {$coin} to {$validated['wallet_address']}",
+                ]);
+
+                return $w;
+            });
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $he) {
             return response()->json([
-                'message' => "Insufficient available {$coin} balance. Available: {$available} {$coin}.",
-            ], 422);
+                'message' => $he->getMessage(),
+            ], $he->getStatusCode());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Failed to submit withdrawal request: ' . $e->getMessage(),
+            ], 500);
         }
-
-        // Lock balance
-        $balance->locked_balance += $amount;
-        $balance->save();
-
-        $withdrawal = ResellerWithdrawal::create([
-            'uuid' => (string) Str::uuid(),
-            'user_id' => $user->id,
-            'coin' => $coin,
-            'amount' => $amount,
-            'wallet_address' => $validated['wallet_address'],
-            'status' => 'pending',
-        ]);
-
-        ResellerTransaction::create([
-            'user_id' => $user->id,
-            'type' => 'withdrawal_locked',
-            'coin' => $coin,
-            'amount' => $amount,
-            'reference_id' => $withdrawal->uuid,
-            'description' => "Withdrawal request for {$amount} {$coin} to {$validated['wallet_address']}",
-        ]);
 
         return response()->json([
             'message' => 'Withdrawal request submitted! It is now pending admin approval.',

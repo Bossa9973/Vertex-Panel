@@ -12,6 +12,7 @@ use Convoy\Models\Template;
 use Convoy\Models\User;
 use Convoy\Models\VpsPlan;
 use Convoy\Services\Servers\ServerCreationService;
+use Convoy\Services\Servers\ServerDeletionService;
 use Convoy\Helpers\PasswordHelper;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -504,7 +505,7 @@ class ServerDeployController extends Controller
         }
     }
 
-    public function destroy(Request $request, string $uuid): JsonResponse
+    public function destroy(Request $request, string $uuid, ServerDeletionService $deletionService): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -520,7 +521,14 @@ class ServerDeployController extends Controller
         $serverName = $server->name;
         $vmid = $server->vmid;
 
-        $server->delete();
+        try {
+            $deletionService->handle($server);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Server deletion service failed for #{$server->id} (VMID: {$vmid}): " . $e->getMessage() . " - falling back to DB purge.");
+            $server->addresses()->update(['server_id' => null]);
+            $server->backups()->delete();
+            $server->delete();
+        }
 
         try {
             \Convoy\Facades\Activity::event('server:delete')

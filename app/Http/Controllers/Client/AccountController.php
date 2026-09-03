@@ -137,71 +137,86 @@ class AccountController extends ApiController
             ], 403);
         }
 
-        $promo = \Illuminate\Support\Facades\DB::table('promo_codes')
-            ->where('code', $code)
-            ->first();
+        $promoAmount = 0.0;
 
-        if (!$promo) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid code. Please check the code and try again.',
-            ], 404);
-        }
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($user, $code, &$promoAmount) {
+                // Lock promo row for update to prevent concurrent double-redemption
+                $promo = \Illuminate\Support\Facades\DB::table('promo_codes')
+                    ->where('code', $code)
+                    ->lockForUpdate()
+                    ->first();
 
-        if ($promo->used) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This code has already been redeemed.',
-            ], 409);
-        }
+                if (!$promo) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(404, 'Invalid code. Please check the code and try again.');
+                }
 
-        if (!empty($promo->revoked)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This promo code has been revoked by an administrator and can no longer be redeemed.',
-            ], 410);
-        }
+                if ($promo->used) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(409, 'This code has already been redeemed.');
+                }
 
-        if ($promo->discord_id !== $user->discord_id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This code was not issued for your Discord account.',
-            ], 403);
-        }
+                if (!empty($promo->revoked)) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(410, 'This promo code has been revoked by an administrator and can no longer be redeemed.');
+                }
 
-        // Credit the user and mark code used atomically
-        \Illuminate\Support\Facades\DB::transaction(function () use ($promo, $user, $code) {
-            $user->increment('credits', $promo->amount);
+                if ($promo->discord_id !== $user->discord_id) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(403, 'This code was not issued for your Discord account.');
+                }
 
-            $user->creditTransactions()->create([
-                'amount'       => $promo->amount,
-                'type'         => 'bonus',
-                'description'  => 'Promo Code Redemption',
-                'reference_id' => $code,
-            ]);
+                // Lock user row for update to prevent balance overflow race condition
+                $lockedUser = \Convoy\Models\User::lockForUpdate()->findOrFail($user->id);
 
-            \Illuminate\Support\Facades\DB::table('promo_codes')
-                ->where('code', $code)
-                ->update([
-                    'used'    => true,
-                    'user_id' => $user->id,
-                    'used_at' => now(),
+                if (($lockedUser->credits + (float) $promo->amount) > 8000) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(
+                        422,
+                        "Cannot redeem promo code: Resulting balance would exceed the 8,000 BOLTs hard cap (Current: " . number_format($lockedUser->credits, 2) . ", Code: " . number_format($promo->amount, 2) . ")."
+                    );
+                }
+
+                $promoAmount = (float) $promo->amount;
+                $lockedUser->credits += $promoAmount;
+                $lockedUser->save();
+
+                $lockedUser->creditTransactions()->create([
+                    'amount'       => $promoAmount,
+                    'type'         => 'bonus',
+                    'description'  => 'Promo Code Redemption',
+                    'reference_id' => $code,
                 ]);
-        });
+
+                \Illuminate\Support\Facades\DB::table('promo_codes')
+                    ->where('code', $code)
+                    ->update([
+                        'used'    => true,
+                        'user_id' => $lockedUser->id,
+                        'used_at' => now(),
+                    ]);
+            });
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $he) {
+            return response()->json([
+                'success' => false,
+                'message' => $he->getMessage(),
+            ], $he->getStatusCode());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while redeeming the code: ' . $e->getMessage(),
+            ], 500);
+        }
 
         try {
             \Convoy\Facades\Activity::event('bolts:redeem-promo')
                 ->actor($user)
-                ->description("Redeemed promo code '{$code}' (+{$promo->amount} BOLTs)")
-                ->property(['code' => $code, 'credits' => (float) $promo->amount])
+                ->description("Redeemed promo code '{$code}' (+{$promoAmount} BOLTs)")
+                ->property(['code' => $code, 'credits' => $promoAmount])
                 ->withRequestMetadata()
                 ->log();
         } catch (\Throwable $e) {}
 
         return response()->json([
             'success'     => true,
-            'message'     => "Code redeemed! {$promo->amount} credits have been added to your account.",
-            'amount'      => $promo->amount,
+            'message'     => "Code redeemed! {$promoAmount} credits have been added to your account.",
+            'amount'      => $promoAmount,
             'new_balance' => round($user->fresh()->credits, 2),
         ]);
     }

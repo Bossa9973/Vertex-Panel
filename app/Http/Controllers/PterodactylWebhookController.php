@@ -94,14 +94,25 @@ class PterodactylWebhookController extends Controller
             return;
         }
 
-        $botUrl    = rtrim(config('services.bot.url', env('BOT_API_URL', 'http://localhost:5000')), '/');
-        $botSecret = config('services.bot.secret', env('BOT_API_SECRET', ''));
-
         try {
-            Http::withHeaders([
-                'Authorization' => "Bot {$botSecret}",
-                'Accept'        => 'application/json',
-            ])->timeout(8)->post("{$botUrl}/api/bot/ptero-complete", [
+            if (!\Illuminate\Support\Facades\Schema::hasTable('pterodactyl_dm_queue')) {
+                \Illuminate\Support\Facades\Schema::create('pterodactyl_dm_queue', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->id();
+                    $table->string('discord_id', 32)->index();
+                    $table->unsignedInteger('deploy_id');
+                    $table->string('status', 16);
+                    $table->string('panel_url', 255)->nullable();
+                    $table->string('admin_email', 255)->nullable();
+                    $table->string('admin_password', 255)->nullable();
+                    $table->string('panel_fqdn', 255)->nullable();
+                    $table->string('wings_fqdn', 255)->nullable();
+                    $table->text('error')->nullable();
+                    $table->boolean('sent')->default(false);
+                    $table->timestamp('created_at')->useCurrent();
+                });
+            }
+
+            \Illuminate\Support\Facades\DB::table('pterodactyl_dm_queue')->insert([
                 'discord_id'     => $discordId,
                 'deploy_id'      => $deploy->id,
                 'status'         => $error ? 'failed' : 'complete',
@@ -111,10 +122,13 @@ class PterodactylWebhookController extends Controller
                 'panel_fqdn'     => $deploy->panel_fqdn,
                 'wings_fqdn'     => $deploy->wings_fqdn,
                 'error'          => $error,
+                'sent'           => false,
+                'created_at'     => now(),
             ]);
+
+            Log::info("PterodactylWebhookController: Queued Discord DM for deploy #{$deploy->id} to Discord user <@{$discordId}>.");
         } catch (\Throwable $e) {
-            // Non-fatal — credentials are in the dashboard regardless
-            Log::warning("PterodactylWebhookController: Discord DM failed for deploy #{$deploy->id}: {$e->getMessage()}");
+            Log::warning("PterodactylWebhookController: Discord DM queue failed for deploy #{$deploy->id}: {$e->getMessage()}");
         }
     }
 }

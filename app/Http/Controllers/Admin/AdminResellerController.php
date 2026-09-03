@@ -117,44 +117,60 @@ class AdminResellerController extends Controller
             'admin_notes' => 'nullable|string|max:1000',
         ]);
 
-        $withdrawal = ResellerWithdrawal::findOrFail($id);
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($id, $validated, $request, &$withdrawal) {
+                $withdrawal = ResellerWithdrawal::lockForUpdate()->findOrFail($id);
 
-        if ($withdrawal->status !== 'pending') {
+                if ($withdrawal->status !== 'pending') {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(
+                        400,
+                        "Withdrawal request is already {$withdrawal->status}."
+                    );
+                }
+
+                $coinBalance = ResellerCoinBalance::where('user_id', $withdrawal->user_id)
+                    ->where('coin', $withdrawal->coin)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $amount = (float) $withdrawal->amount;
+
+                // Deduct from both balance and locked_balance
+                $coinBalance->balance = max(0, (float) $coinBalance->balance - $amount);
+                $coinBalance->locked_balance = max(0, (float) $coinBalance->locked_balance - $amount);
+                $coinBalance->save();
+
+                $withdrawal->status = 'approved';
+                $withdrawal->tx_hash = $validated['tx_hash'];
+                $withdrawal->admin_notes = $validated['admin_notes'] ?? 'Payout verified and sent via company crypto wallet.';
+                $withdrawal->save();
+
+                ResellerTransaction::create([
+                    'user_id' => $withdrawal->user_id,
+                    'type' => 'withdrawal_completed',
+                    'coin' => $withdrawal->coin,
+                    'amount' => -$amount,
+                    'reference_id' => $withdrawal->uuid,
+                    'description' => "Payout completed! TxID: {$validated['tx_hash']}",
+                ]);
+            });
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $he) {
             return response()->json([
-                'message' => "Withdrawal request is already {$withdrawal->status}.",
-            ], 400);
+                'message' => $he->getMessage(),
+            ], $he->getStatusCode());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Failed to approve withdrawal: ' . $e->getMessage(),
+            ], 500);
         }
 
-        $coinBalance = ResellerCoinBalance::where('user_id', $withdrawal->user_id)
-            ->where('coin', $withdrawal->coin)
-            ->firstOrFail();
-
-        $amount = (float) $withdrawal->amount;
-
-        // Deduct from both balance and locked_balance
-        $coinBalance->balance = max(0, (float) $coinBalance->balance - $amount);
-        $coinBalance->locked_balance = max(0, (float) $coinBalance->locked_balance - $amount);
-        $coinBalance->save();
-
-        $withdrawal->status = 'approved';
-        $withdrawal->tx_hash = $validated['tx_hash'];
-        $withdrawal->admin_notes = $validated['admin_notes'] ?? 'Payout verified and sent via company crypto wallet.';
-        $withdrawal->save();
-
-        ResellerTransaction::create([
-            'user_id' => $withdrawal->user_id,
-            'type' => 'withdrawal_completed',
-            'coin' => $withdrawal->coin,
-            'amount' => -$amount,
-            'reference_id' => $withdrawal->uuid,
-            'description' => "Payout completed! TxID: {$validated['tx_hash']}",
-        ]);
-
-        \Convoy\Facades\Activity::event('admin:reseller_withdrawal_approved')
-            ->actor($request->user())
-            ->subject($withdrawal)
-            ->description("Approved payout of {$amount} {$withdrawal->coin} for user ID {$withdrawal->user_id}. TxID: {$validated['tx_hash']}")
-            ->log();
+        try {
+            \Convoy\Facades\Activity::event('admin:reseller_withdrawal_approved')
+                ->actor($request->user())
+                ->subject($withdrawal)
+                ->description("Approved payout of {$withdrawal->amount} {$withdrawal->coin} for user ID {$withdrawal->user_id}. TxID: {$validated['tx_hash']}")
+                ->log();
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'message' => 'Withdrawal approved successfully!',
@@ -171,36 +187,50 @@ class AdminResellerController extends Controller
             'admin_notes' => 'required|string|max:1000',
         ]);
 
-        $withdrawal = ResellerWithdrawal::findOrFail($id);
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($id, $validated, &$withdrawal) {
+                $withdrawal = ResellerWithdrawal::lockForUpdate()->findOrFail($id);
 
-        if ($withdrawal->status !== 'pending') {
+                if ($withdrawal->status !== 'pending') {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(
+                        400,
+                        "Withdrawal request is already {$withdrawal->status}."
+                    );
+                }
+
+                $coinBalance = ResellerCoinBalance::where('user_id', $withdrawal->user_id)
+                    ->where('coin', $withdrawal->coin)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $amount = (float) $withdrawal->amount;
+
+                // Unlock balance back to user's available balance
+                $coinBalance->locked_balance = max(0, (float) $coinBalance->locked_balance - $amount);
+                $coinBalance->save();
+
+                $withdrawal->status = 'rejected';
+                $withdrawal->admin_notes = $validated['admin_notes'];
+                $withdrawal->save();
+
+                ResellerTransaction::create([
+                    'user_id' => $withdrawal->user_id,
+                    'type' => 'withdrawal_refunded',
+                    'coin' => $withdrawal->coin,
+                    'amount' => $amount,
+                    'reference_id' => $withdrawal->uuid,
+                    'description' => "Withdrawal request rejected. Balance unlocked. Reason: {$validated['admin_notes']}",
+                ]);
+            });
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $he) {
             return response()->json([
-                'message' => "Withdrawal request is already {$withdrawal->status}.",
-            ], 400);
+                'message' => $he->getMessage(),
+            ], $he->getStatusCode());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Failed to reject withdrawal: ' . $e->getMessage(),
+            ], 500);
         }
-
-        $coinBalance = ResellerCoinBalance::where('user_id', $withdrawal->user_id)
-            ->where('coin', $withdrawal->coin)
-            ->firstOrFail();
-
-        $amount = (float) $withdrawal->amount;
-
-        // Unlock balance back to user's available balance
-        $coinBalance->locked_balance = max(0, (float) $coinBalance->locked_balance - $amount);
-        $coinBalance->save();
-
-        $withdrawal->status = 'rejected';
-        $withdrawal->admin_notes = $validated['admin_notes'];
-        $withdrawal->save();
-
-        ResellerTransaction::create([
-            'user_id' => $withdrawal->user_id,
-            'type' => 'withdrawal_refunded',
-            'coin' => $withdrawal->coin,
-            'amount' => $amount,
-            'reference_id' => $withdrawal->uuid,
-            'description' => "Withdrawal request rejected. Balance unlocked. Reason: {$validated['admin_notes']}",
-        ]);
 
         return response()->json([
             'message' => 'Withdrawal request rejected and balance unlocked.',

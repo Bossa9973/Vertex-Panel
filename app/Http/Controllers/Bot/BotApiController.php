@@ -793,48 +793,50 @@ class BotApiController extends Controller
 
         $code      = strtoupper(trim($request->input('code')));
         $discordId = $request->input('discord_id');
-
-        $promo = DB::table('promo_codes')->where('code', $code)->first();
-
-        if (!$promo) {
-            return response()->json(['ok' => false, 'error' => 'Invalid code. Please check and try again.'], 404);
-        }
-
-        if ($promo->used) {
-            return response()->json(['ok' => false, 'error' => 'This code has already been redeemed.'], 409);
-        }
-
-        if (!empty($promo->revoked)) {
-            return response()->json(['ok' => false, 'error' => 'This promo code has been revoked by an administrator and can no longer be redeemed.'], 410);
-        }
-
-        if ((string) $promo->discord_id !== (string) $discordId) {
-            return response()->json(['ok' => false, 'error' => 'This code was not issued for your Discord account.'], 403);
-        }
-
-        $user = User::where('discord_id', $discordId)->first();
-
-        if (!$user) {
-            return response()->json([
-                'ok'    => false,
-                'error' => 'Your Discord account is not linked to a Vertex panel account. Please sign in at the panel and link your Discord first.',
-            ], 404);
-        }
-
-        if (($user->credits + $promo->amount) > 8000) {
-            return response()->json([
-                'ok'    => false,
-                'error' => 'Cannot redeem promo code: Resulting balance would exceed the 8,000 BOLTs hard cap (Current: ' . number_format($user->credits, 2) . ', Code: ' . number_format($promo->amount, 2) . ').',
-            ], 400);
-        }
+        $promoAmount = 0.0;
+        $newBalance = 0.0;
 
         try {
-            DB::transaction(function () use ($promo, $user, $code) {
-                DB::table('users')->where('id', $user->id)->increment('credits', $promo->amount);
+            DB::transaction(function () use ($code, $discordId, &$promoAmount, &$newBalance) {
+                // Lock promo row for update to prevent concurrent double-redemption
+                $promo = DB::table('promo_codes')->where('code', $code)->lockForUpdate()->first();
+
+                if (!$promo) {
+                    throw new \Exception('Invalid code. Please check and try again.');
+                }
+
+                if ($promo->used) {
+                    throw new \Exception('This code has already been redeemed.');
+                }
+
+                if (!empty($promo->revoked)) {
+                    throw new \Exception('This promo code has been revoked by an administrator and can no longer be redeemed.');
+                }
+
+                if ((string) $promo->discord_id !== (string) $discordId) {
+                    throw new \Exception('This code was not issued for your Discord account.');
+                }
+
+                // Lock user row for update to prevent race conditions on balance updates
+                $user = User::where('discord_id', $discordId)->lockForUpdate()->first();
+
+                if (!$user) {
+                    throw new \Exception('Your Discord account is not linked to a Vertex panel account. Please sign in at the panel and link your Discord first.');
+                }
+
+                $promoAmount = (float) $promo->amount;
+
+                if (($user->credits + $promoAmount) > 8000) {
+                    throw new \Exception('Cannot redeem promo code: Resulting balance would exceed the 8,000 BOLTs hard cap (Current: ' . number_format($user->credits, 2) . ', Code: ' . number_format($promoAmount, 2) . ').');
+                }
+
+                $user->credits += $promoAmount;
+                $user->save();
+                $newBalance = (float) $user->credits;
 
                 try {
                     $user->creditTransactions()->create([
-                        'amount'       => $promo->amount,
+                        'amount'       => $promoAmount,
                         'type'         => 'bonus',
                         'description'  => 'Promo Code Redemption',
                         'reference_id' => $code,
@@ -853,17 +855,15 @@ class BotApiController extends Controller
             \Illuminate\Support\Facades\Log::error("Failed to redeem promo code: " . $e->getMessage(), ['exception' => $e]);
             return response()->json([
                 'ok'    => false,
-                'error' => 'An error occurred while redeeming the code.',
-            ], 500);
+                'error' => $e->getMessage(),
+            ], 400);
         }
-
-        $newBalance = DB::table('users')->where('id', $user->id)->value('credits') ?? 0;
 
         return response()->json([
             'ok'          => true,
-            'amount'      => $promo->amount,
-            'new_balance' => round((float) $newBalance, 2),
-            'message'     => "✅ Code redeemed! **{$promo->amount} credits** added to your Vertex account.",
+            'amount'      => $promoAmount,
+            'new_balance' => round($newBalance, 2),
+            'message'     => "✅ Code redeemed! **{$promoAmount} credits** added to your Vertex account.",
         ]);
     }
 
