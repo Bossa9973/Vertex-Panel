@@ -40,11 +40,11 @@ class Kernel extends ConsoleKernel
         $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
         $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
 
-        // Automated cloud backups for all servers: runs every round hour (:00).
-        // --all          → backs up all servers regardless of plan tier
+        // Automated cloud backups for PAID servers: runs every round hour (:00).
+        // --tier=paid    → only backs up servers marked as paid tier
         // --force        → bypasses the 24h dedup guard so every hourly tick runs
         // --prune-oldest → auto-rotates oldest unlocked backup to prevent disk space stacking
-        $schedule->command(RunScheduledBackupsCommand::class, ['--all', '--force', '--prune-oldest'])
+        $schedule->command(RunScheduledBackupsCommand::class, ['--tier=paid', '--force', '--prune-oldest'])
             ->cron('0 * * * *')
             ->withoutOverlapping()
             ->runInBackground();
