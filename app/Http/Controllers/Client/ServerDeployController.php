@@ -270,6 +270,48 @@ class ServerDeployController extends Controller
         /** @var VpsPlan $plan */
         $plan = VpsPlan::findOrFail($validated['plan_id']);
 
+        // Enforce resource quotas for free tier servers:
+        // Free users across non-paid instances cannot exceed: 16 CPU cores, 96 GB RAM, 800 GB SSD
+        $freeServers = Server::where('user_id', $user->id)
+            ->where(function ($q) {
+                $q->where('plan_tier', '!=', 'paid')->orWhereNull('plan_tier');
+            })
+            ->get();
+
+        $currentCores = $freeServers->sum(fn($s) => (float) $s->cpu);
+        $currentRamBytes = $freeServers->sum(fn($s) => $s->memory > 100000 ? (int) $s->memory : (int) $s->memory * 1024 * 1024);
+        $currentDiskBytes = $freeServers->sum(fn($s) => $s->disk > 100000 ? (int) $s->disk : (int) $s->disk * 1024 * 1024 * 1024);
+
+        $planCores = (float) $plan->cpu;
+        $planRamBytes = (int) $plan->ram * 1024 * 1024;           // MB -> bytes
+        $planDiskBytes = (int) $plan->disk * 1024 * 1024 * 1024;  // GB -> bytes
+
+        $maxCores = 16.0;
+        $maxRamBytes = 96 * 1024 * 1024 * 1024;    // 96 GB in bytes
+        $maxDiskBytes = 800 * 1024 * 1024 * 1024;  // 800 GB in bytes
+
+        if (($currentCores + $planCores) > $maxCores) {
+            return response()->json([
+                'message' => "Free resource allocation limit exceeded: Maximum CPU core limit is 16 cores (Currently used: {$currentCores} cores, Requested: {$planCores} cores).",
+            ], 422);
+        }
+
+        if (($currentRamBytes + $planRamBytes) > $maxRamBytes) {
+            $usedRamGb = round($currentRamBytes / (1024 * 1024 * 1024), 1);
+            $reqRamGb = round($planRamBytes / (1024 * 1024 * 1024), 1);
+            return response()->json([
+                'message' => "Free resource allocation limit exceeded: Maximum RAM limit is 96 GB (Currently used: {$usedRamGb} GB, Requested: {$reqRamGb} GB).",
+            ], 422);
+        }
+
+        if (($currentDiskBytes + $planDiskBytes) > $maxDiskBytes) {
+            $usedDiskGb = round($currentDiskBytes / (1024 * 1024 * 1024), 1);
+            $reqDiskGb = round($planDiskBytes / (1024 * 1024 * 1024), 1);
+            return response()->json([
+                'message' => "Free resource allocation limit exceeded: Maximum SSD storage limit is 800 GB (Currently used: {$usedDiskGb} GB, Requested: {$reqDiskGb} GB).",
+            ], 422);
+        }
+
         /** @var Node $node */
         $node = Node::with('location')->findOrFail($validated['node_id']);
 

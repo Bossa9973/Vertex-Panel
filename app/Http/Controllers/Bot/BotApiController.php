@@ -213,6 +213,13 @@ class BotApiController extends Controller
         $adminDiscordId = (string) $request->input('admin_discord_id');
         $amount = (float) $request->input('amount');
 
+        if ($amount > 8000) {
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Cannot generate promo code for more than 8,000 BOLTs. Hard cap is 8,000 BOLTs.',
+            ], 422);
+        }
+
         try {
             DB::table('promo_codes')->insert([
                 'code'                  => $code,
@@ -328,6 +335,13 @@ class BotApiController extends Controller
 
         $oldBalance = round((float) ($user->credits ?? 0), 2);
         $newBalance = round($oldBalance + $amount, 2);
+
+        if ($newBalance > 8000) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Cannot add balance: Resulting balance ({$newBalance} BOLTs) would exceed the 8,000 BOLTs hard cap.",
+            ], 422);
+        }
 
         try {
             DB::transaction(function () use ($user, $amount, $newBalance, $reason, $adminDiscordId, $discordId) {
@@ -498,6 +512,13 @@ class BotApiController extends Controller
         $adminDiscordId = (string) $request->input('admin_discord_id');
         $targetBalance = round((float) $request->input('amount'), 2);
         $reason = $request->input('reason') ?: 'Staff Hard Ledger Override';
+
+        if ($targetBalance > 8000) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Cannot set balance: Target amount ({$targetBalance} BOLTs) exceeds the 8,000 BOLTs hard cap.",
+            ], 422);
+        }
 
         /** @var User|null $user */
         $user = User::where('discord_id', $discordId)->first();
@@ -766,6 +787,13 @@ class BotApiController extends Controller
                 'ok'    => false,
                 'error' => 'Your Discord account is not linked to a Vertex panel account. Please sign in at the panel and link your Discord first.',
             ], 404);
+        }
+
+        if (($user->credits + $promo->amount) > 8000) {
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Cannot redeem promo code: Resulting balance would exceed the 8,000 BOLTs hard cap (Current: ' . number_format($user->credits, 2) . ', Code: ' . number_format($promo->amount, 2) . ').',
+            ], 400);
         }
 
         try {
@@ -2067,6 +2095,333 @@ class BotApiController extends Controller
             Log::error('[BotAPI] setServerTier error: ' . $e->getMessage(), ['exception' => $e]);
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Inspect users who abused multiple tier claims or duplicate staff promo + dashboard claims.
+     * GET /api/bot/admin/abuse-list
+     */
+    public function getAbuseList(): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $taskDefinitions = [
+            'invites_15'   => ['category' => 'invites', 'target' => 15, 'reward' => 3000.0, 'title' => '15 Discord Invites'],
+            'invites_25'   => ['category' => 'invites', 'target' => 25, 'reward' => 5000.0, 'title' => '25 Discord Invites'],
+            'boost_1'      => ['category' => 'boosts',  'target' => 1,  'reward' => 3000.0, 'title' => '1 Server Boost'],
+            'boost_2'      => ['category' => 'boosts',  'target' => 2,  'reward' => 5000.0, 'title' => '2 Server Boosts'],
+            'messages_200' => ['category' => 'messages','target' => 200,'reward' => 3000.0,'title' => '200 Messages Sent'],
+            'messages_300' => ['category' => 'messages','target' => 300,'reward' => 3000.0,'title' => '300 Messages Sent'],
+        ];
+
+        // 1. Gather candidate user IDs
+        $allClaimUsers = DB::table('discord_claims')
+            ->select('user_id')
+            ->distinct()
+            ->pluck('user_id')
+            ->toArray();
+
+        $usersWithTx = DB::table('credit_transactions')
+            ->select('user_id')
+            ->distinct()
+            ->pluck('user_id')
+            ->toArray();
+
+        $candidateUserIds = array_unique(array_merge($allClaimUsers, $usersWithTx));
+        $abusers = [];
+
+        foreach ($candidateUserIds as $userId) {
+            /** @var User|null $user */
+            $user = User::with(['servers.node'])->find($userId);
+            if (!$user) {
+                continue;
+            }
+
+            $claims = DB::table('discord_claims')
+                ->where('user_id', $user->id)
+                ->get();
+
+            $reasons = [];
+
+            // A) Check double claims within each category (e.g. invites_15 AND invites_25)
+            $claimsByCategory = [
+                'invites'  => [],
+                'boosts'   => [],
+                'messages' => [],
+            ];
+
+            foreach ($claims as $claim) {
+                $task = $taskDefinitions[$claim->task_key] ?? null;
+                $cat = $task['category'] ?? 'other';
+                if (isset($claimsByCategory[$cat])) {
+                    $claimsByCategory[$cat][] = [
+                        'task_key'     => $claim->task_key,
+                        'reward_bolts' => (float) $claim->reward_bolts,
+                        'title'        => $task['title'] ?? $claim->task_key,
+                    ];
+                }
+            }
+
+            if (count($claimsByCategory['invites']) > 1) {
+                $titles = implode(' & ', array_column($claimsByCategory['invites'], 'title'));
+                $reasons[] = "Duplicate Invites Claim: Claimed both {$titles}";
+            }
+            if (count($claimsByCategory['messages']) > 1) {
+                $titles = implode(' & ', array_column($claimsByCategory['messages'], 'title'));
+                $reasons[] = "Duplicate Messages Claim: Claimed both {$titles}";
+            }
+            if (count($claimsByCategory['boosts']) > 1) {
+                $titles = implode(' & ', array_column($claimsByCategory['boosts'], 'title'));
+                $reasons[] = "Duplicate Boosts Claim: Claimed both {$titles}";
+            }
+
+            // B) Check staff promo + dashboard claim collision
+            $txs = DB::table('credit_transactions')
+                ->where('user_id', $user->id)
+                ->where('amount', '>', 0)
+                ->get();
+
+            $promoTxs = $txs->filter(function ($t) {
+                return in_array($t->type, ['bonus', 'admin_deposit', 'topup'])
+                    || str_starts_with($t->reference_id ?? '', 'LMN-')
+                    || str_starts_with($t->reference_id ?? '', 'ADMIN-')
+                    || str_contains(strtolower($t->description ?? ''), 'promo');
+            });
+
+            $dashTxs = $txs->filter(function ($t) {
+                return $t->type === 'discord_reward' || str_contains(strtolower($t->description ?? ''), 'discord task');
+            });
+
+            foreach ($promoTxs as $pTx) {
+                $matchedDash = $dashTxs->first(fn($d) => abs((float)$d->amount - (float)$pTx->amount) < 0.01);
+                if ($matchedDash) {
+                    $reasons[] = "Promo & Dashboard Collision: Duplicate " . number_format($pTx->amount, 0) . " BOLTs claimed via staff promo and dashboard task ({$matchedDash->reference_id})";
+                    break;
+                }
+            }
+
+            // C) Check if user balance exceeds hard cap 8,000 BOLTs
+            if ((float) $user->credits > 8000) {
+                $reasons[] = "Balance Cap Violation: Current balance (" . number_format($user->credits, 2) . " BOLTs) exceeds 8,000 hard cap";
+            }
+
+            if (!empty($reasons)) {
+                // Calculate legitimate highest balance:
+                $legitInvites = !empty($claimsByCategory['invites']) ? max(array_column($claimsByCategory['invites'], 'reward_bolts')) : 0.0;
+                $legitBoosts  = !empty($claimsByCategory['boosts'])  ? max(array_column($claimsByCategory['boosts'], 'reward_bolts'))  : 0.0;
+                $legitMessages= !empty($claimsByCategory['messages'])? max(array_column($claimsByCategory['messages'], 'reward_bolts')): 0.0;
+
+                $legitimateBalance = min(8000.0, round($legitInvites + $legitBoosts + $legitMessages, 2));
+
+                $servers = $user->servers->map(fn($s) => [
+                    'id'        => $s->id,
+                    'vmid'      => $s->vmid,
+                    'name'      => $s->name,
+                    'hostname'  => $s->hostname,
+                    'node_id'   => $s->node_id,
+                    'node_name' => $s->node?->name ?? "Node #{$s->node_id}",
+                    'plan_tier' => $s->plan_tier ?? 'free',
+                    'status'    => $s->status,
+                ]);
+
+                $abusers[] = [
+                    'user_id'                    => $user->id,
+                    'name'                       => $user->name,
+                    'email'                      => $user->email,
+                    'discord_id'                 => $user->discord_id,
+                    'discord_username'           => $user->discord_username,
+                    'current_balance'            => (float) $user->credits,
+                    'legitimate_balance'         => $legitimateBalance,
+                    'excess_balance'             => max(0.0, round((float) $user->credits - $legitimateBalance, 2)),
+                    'reasons'                    => $reasons,
+                    'active_servers_count'       => $servers->count(),
+                    'servers'                    => $servers->values(),
+                    'claims_count'               => $claims->count(),
+                ];
+            }
+        }
+
+        return response()->json([
+            'ok'      => true,
+            'total'   => count($abusers),
+            'abusers' => $abusers,
+        ]);
+    }
+
+    /**
+     * Remediate abusive user: wipe all VPS instances (Proxmox + DB) and reset balance to legitimate reward.
+     * POST /api/bot/admin/abuse-remediate
+     */
+    public function remediateAbuse(Request $request): JsonResponse
+    {
+        $this->ensureTablesExist();
+
+        $validated = $request->validate([
+            'user_id'          => 'nullable',
+            'discord_id'       => 'nullable|string',
+            'admin_discord_id' => 'required|string',
+            'wipe_servers'     => 'nullable|boolean',
+        ]);
+
+        $userId = $validated['user_id'] ?? null;
+        $discordId = $validated['discord_id'] ?? null;
+        $adminDiscordId = $validated['admin_discord_id'];
+        $wipeServers = (bool) ($validated['wipe_servers'] ?? true);
+
+        /** @var User|null $user */
+        $user = User::query()
+            ->when($userId, fn($q) => $q->where('id', $userId))
+            ->when($discordId, fn($q) => $q->orWhere('discord_id', $discordId))
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "User not found for ID: '{$userId}' / Discord: '{$discordId}'.",
+            ], 404);
+        }
+
+        $oldBalance = (float) $user->credits;
+        $wipedServers = [];
+
+        // 1. Wipe all VPS instances (both Proxmox hypervisor & Database)
+        if ($wipeServers) {
+            $servers = Server::with('node')->where('user_id', $user->id)->get();
+
+            foreach ($servers as $server) {
+                $srvInfo = [
+                    'id'        => $server->id,
+                    'vmid'      => $server->vmid,
+                    'name'      => $server->name,
+                    'hostname'  => $server->hostname,
+                    'node_name' => $server->node?->name ?? "Node #{$server->node_id}",
+                    'proxmox_deleted' => false,
+                ];
+
+                // Direct Proxmox hypervisor delete
+                try {
+                    if ($server->node && $server->vmid) {
+                        try {
+                            app(\Convoy\Repositories\Proxmox\Server\ProxmoxPowerRepository::class)
+                                ->setServer($server)
+                                ->send(\Convoy\Enums\Server\PowerAction::KILL);
+                        } catch (\Throwable) {}
+
+                        app(\Convoy\Repositories\Proxmox\Server\ProxmoxServerRepository::class)
+                            ->setServer($server)
+                            ->delete();
+
+                        $srvInfo['proxmox_deleted'] = true;
+                    }
+                } catch (\Throwable $pe) {
+                    Log::warning("[AbuseRemediation] Proxmox direct delete warning for server #{$server->id}: " . $pe->getMessage());
+                }
+
+                // Disassociate IPs, purge backups, and forcefully wipe from database immediately
+                try {
+                    $server->addresses()->update(['server_id' => null]);
+                    $server->backups()->delete();
+                    $server->delete();
+                } catch (\Throwable $de) {
+                    Log::error("[AbuseRemediation] Database delete error for server #{$server->id}: " . $de->getMessage());
+                }
+
+                $wipedServers[] = $srvInfo;
+            }
+        }
+
+        // 2. Calculate legitimate highest balance
+        $claims = DB::table('discord_claims')->where('user_id', $user->id)->get();
+        $taskDefinitions = [
+            'invites_15'   => ['category' => 'invites', 'reward' => 3000.0],
+            'invites_25'   => ['category' => 'invites', 'reward' => 5000.0],
+            'boost_1'      => ['category' => 'boosts',  'reward' => 3000.0],
+            'boost_2'      => ['category' => 'boosts',  'reward' => 5000.0],
+            'messages_200' => ['category' => 'messages','reward' => 3000.0],
+            'messages_300' => ['category' => 'messages','reward' => 3000.0],
+        ];
+
+        $maxPerCategory = [
+            'invites'  => 0.0,
+            'boosts'   => 0.0,
+            'messages' => 0.0,
+        ];
+
+        $highestKeyPerCategory = [];
+
+        foreach ($claims as $claim) {
+            $def = $taskDefinitions[$claim->task_key] ?? null;
+            $cat = $def['category'] ?? null;
+            $rew = (float) ($def['reward'] ?? $claim->reward_bolts);
+
+            if ($cat && isset($maxPerCategory[$cat])) {
+                if ($rew >= $maxPerCategory[$cat]) {
+                    $maxPerCategory[$cat] = $rew;
+                    $highestKeyPerCategory[$cat] = $claim->task_key;
+                }
+            }
+        }
+
+        $newBalance = min(8000.0, round(array_sum($maxPerCategory), 2));
+
+        // Clean duplicate claims: retain only the highest claim per category
+        foreach ($highestKeyPerCategory as $cat => $keepKey) {
+            $catKeys = array_keys(array_filter($taskDefinitions, fn($d) => $d['category'] === $cat));
+            DB::table('discord_claims')
+                ->where('user_id', $user->id)
+                ->whereIn('task_key', $catKeys)
+                ->where('task_key', '!=', $keepKey)
+                ->delete();
+        }
+
+        // 3. Reset User Balance in Database
+        $user->credits = $newBalance;
+        $user->save();
+
+        $diff = round($newBalance - $oldBalance, 2);
+
+        // 4. Record Audit Transaction
+        try {
+            $user->creditTransactions()->create([
+                'amount'       => $diff,
+                'type'         => 'admin_remediation',
+                'description'  => "Anti-Abuse Remediation: Servers wiped and balance reset from {$oldBalance} to {$newBalance} BOLTs (Admin: <@{$adminDiscordId}>)",
+                'reference_id' => 'ABUSE-FIX-' . strtoupper(Str::random(6)),
+            ]);
+        } catch (\Throwable $t) {
+            Log::warning("Credit transaction skipped in remediation: " . $t->getMessage());
+        }
+
+        try {
+            \Convoy\Facades\Activity::event('admin:abuse-remediate')
+                ->actor($user)
+                ->description("Admin <@{$adminDiscordId}> remediated user {$user->name} (<@{$user->discord_id}>). Wiped " . count($wipedServers) . " servers and reset balance to {$newBalance} BOLTs.")
+                ->property([
+                    'admin_discord_id' => $adminDiscordId,
+                    'user_id'          => $user->id,
+                    'discord_id'       => $user->discord_id,
+                    'old_balance'      => $oldBalance,
+                    'new_balance'      => $newBalance,
+                    'servers_wiped'    => count($wipedServers),
+                ])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $t) {}
+
+        return response()->json([
+            'ok'              => true,
+            'message'         => "Abuse remediation complete for {$user->name}. Wiped " . count($wipedServers) . " server(s) and set balance to {$newBalance} BOLTs.",
+            'user'            => [
+                'id'         => $user->id,
+                'name'       => $user->name,
+                'email'      => $user->email,
+                'discord_id' => $user->discord_id,
+            ],
+            'old_balance'     => $oldBalance,
+            'new_balance'     => $newBalance,
+            'servers_wiped'   => count($wipedServers),
+            'wiped_servers'   => $wipedServers,
+        ]);
     }
 }
 

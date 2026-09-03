@@ -44,6 +44,49 @@ class ServerCreationService
 
         $nodeId = Arr::get($data, 'node_id');
 
+        // Free tier resource quota check (16 cores, 96 GB RAM, 800 GB SSD)
+        $userId = Arr::get($data, 'user_id');
+        $user = $userId ? \Convoy\Models\User::find($userId) : null;
+        $planTier = Arr::get($data, 'plan_tier', 'free');
+
+        if ($user && !$user->root_admin && $planTier !== 'paid') {
+            $freeServers = Server::where('user_id', $user->id)
+                ->where(function ($q) {
+                    $q->where('plan_tier', '!=', 'paid')->orWhereNull('plan_tier');
+                })
+                ->get();
+
+            $currentCores = $freeServers->sum(fn($s) => (float) $s->cpu);
+            $currentRamBytes = $freeServers->sum(fn($s) => $s->memory > 100000 ? (int) $s->memory : (int) $s->memory * 1024 * 1024);
+            $currentDiskBytes = $freeServers->sum(fn($s) => $s->disk > 100000 ? (int) $s->disk : (int) $s->disk * 1024 * 1024 * 1024);
+
+            $newCores = (float) Arr::get($data, 'limits.cpu', 0);
+            $newRamBytes = (int) Arr::get($data, 'limits.memory', 0);
+            $newDiskBytes = (int) Arr::get($data, 'limits.disk', 0);
+
+            if (($currentCores + $newCores) > 16.0) {
+                throw new \Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException(
+                    "Free resource quota exceeded: Maximum CPU core limit is 16 cores (Currently used: {$currentCores}, Requested: {$newCores})."
+                );
+            }
+
+            if (($currentRamBytes + $newRamBytes) > (96 * 1024 * 1024 * 1024)) {
+                $usedGb = round($currentRamBytes / (1024 * 1024 * 1024), 1);
+                $reqGb = round($newRamBytes / (1024 * 1024 * 1024), 1);
+                throw new \Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException(
+                    "Free resource quota exceeded: Maximum RAM limit is 96 GB (Currently used: {$usedGb} GB, Requested: {$reqGb} GB)."
+                );
+            }
+
+            if (($currentDiskBytes + $newDiskBytes) > (800 * 1024 * 1024 * 1024)) {
+                $usedGb = round($currentDiskBytes / (1024 * 1024 * 1024), 1);
+                $reqGb = round($newDiskBytes / (1024 * 1024 * 1024), 1);
+                throw new \Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException(
+                    "Free resource quota exceeded: Maximum SSD storage limit is 800 GB (Currently used: {$usedGb} GB, Requested: {$reqGb} GB)."
+                );
+            }
+        }
+
         $server = Server::create([
             'uuid' => $uuid,
             'uuid_short' => substr($uuid, 0, 8),

@@ -358,3 +358,40 @@ async def set_server_tier(server_id: int | str, tier: str) -> dict:
     except Exception as e:
         print(f"[panel_api] set_server_tier failed for #{server_id}: {e}")
         return {"ok": False, "error": str(e)}
+
+
+# =========================================================================
+# Abuse Operations
+# =========================================================================
+
+async def get_abuse_list() -> dict:
+    """Fetch all users detected for reward claim or promo abuse."""
+    try:
+        return await _get("/admin/abuse-list", timeout=30.0)
+    except Exception as e:
+        print(f"[panel_api] get_abuse_list failed: {e}")
+        return {"ok": False, "error": str(e), "abusers": []}
+
+
+async def remediate_abuse(
+    admin_discord_id: str,
+    user_id: int | None = None,
+    discord_id: str | None = None,
+    wipe_servers: bool = True,
+) -> dict:
+    """Remediate abusive user: wipe all VPS servers (Proxmox + DB) and reset balance to legitimate reward."""
+    try:
+        payload: dict = {
+            "admin_discord_id": str(admin_discord_id),
+            "wipe_servers": wipe_servers,
+        }
+        if user_id is not None:
+            payload["user_id"] = user_id
+        if discord_id is not None:
+            payload["discord_id"] = str(discord_id)
+
+        return await _post("/admin/abuse-remediate", payload, timeout=60.0)
+    except Exception as e:
+        print(f"[panel_api] remediate_abuse failed for user {user_id or discord_id}: {e}")
+        return {"ok": False, "error": str(e)}
+

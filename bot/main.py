@@ -49,6 +49,7 @@ class LumenHelper(commands.Bot):
         await self.load_extension("cogs.tracker")
         await self.load_extension("cogs.panel")
         await self.load_extension("cogs.backup")
+        await self.load_extension("cogs.abuse")
         self.add_view(StatsView())  # Restore persistent views on restart
         pterodactyl_dm_task.start()  # Start Pterodactyl DM delivery loop
         print("Cogs loaded.")

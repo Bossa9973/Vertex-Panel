@@ -49,6 +49,11 @@ class AdminUserBalanceController extends Controller
         $description = $request->description ?: 'Admin Credit Adjustment';
 
         if ($action === 'add') {
+            if (($user->credits + $amount) > 8000) {
+                return response()->json([
+                    'message' => "Cannot add balance: Resulting balance would exceed the 8,000 BOLTs hard cap (Current: {$user->credits}, Adding: {$amount}).",
+                ], 422);
+            }
             $user->credits += $amount;
             $user->creditTransactions()->create([
                 'amount' => $amount,
@@ -65,6 +70,11 @@ class AdminUserBalanceController extends Controller
                 'reference_id' => 'ADMIN-SUB-' . Str::upper(Str::random(6)),
             ]);
         } elseif ($action === 'set') {
+            if ($amount > 8000) {
+                return response()->json([
+                    'message' => "Cannot set balance: Amount ({$amount} BOLTs) exceeds the 8,000 BOLTs hard cap.",
+                ], 422);
+            }
             $diff = $amount - $user->credits;
             $user->credits = $amount;
             $user->creditTransactions()->create([

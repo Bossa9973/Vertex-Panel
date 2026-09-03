@@ -7,6 +7,7 @@ import DiscordBoostIcon from '@/components/elements/DiscordBoostIcon'
 import ConnectDiscordModal from '@/components/dashboard/ConnectDiscordModal'
 import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
 import { motion } from 'framer-motion'
+import { Modal } from '@mantine/core'
 import {
     UserGroupIcon,
     ChatBubbleLeftRightIcon,
@@ -15,6 +16,8 @@ import {
     LinkIcon,
     GiftIcon,
     SparklesIcon,
+    ExclamationTriangleIcon,
+    XMarkIcon,
 } from '@heroicons/react/24/outline'
 
 interface EarnTask {
@@ -67,7 +70,9 @@ export const EarnBoltsContainer: React.FC = () => {
         fetchStatus()
     }, [])
 
-    const handleClaim = async (task: EarnTask) => {
+    const [warningTask, setWarningTask] = useState<EarnTask | null>(null)
+
+    const onInitiateClaim = (task: EarnTask) => {
         if (task.is_claimed || claimingKey) return
 
         if (!discordId) {
@@ -75,6 +80,13 @@ export const EarnBoltsContainer: React.FC = () => {
             return
         }
 
+        // Always warn user that claiming will reset their requirement counter to 0,
+        // especially if there is a higher tier or if they have more progress.
+        setWarningTask(task)
+    }
+
+    const executeClaim = async (task: EarnTask) => {
+        setWarningTask(null)
         setClaimingKey(task.key)
         try {
             const res = await http.post('/api/client/earn/claim', {
@@ -328,7 +340,7 @@ export const EarnBoltsContainer: React.FC = () => {
                                                     ) : task.is_eligible ? (
                                                         <button
                                                             type='button'
-                                                            onClick={() => handleClaim(task)}
+                                                            onClick={() => onInitiateClaim(task)}
                                                             disabled={isClaiming}
                                                             className='text-blue-400 hover:text-blue-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer py-1 transition-colors'
                                                         >
@@ -349,6 +361,110 @@ export const EarnBoltsContainer: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Requirement Reset & Staff Policy Warning Modal */}
+                {warningTask && (
+                    <Modal
+                        opened={!!warningTask}
+                        onClose={() => setWarningTask(null)}
+                        title={null}
+                        size='lg'
+                        centered
+                        withCloseButton={false}
+                        padding={0}
+                        radius={24}
+                        styles={{
+                            modal: {
+                                backgroundColor: '#0c0f18',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                boxShadow: '0px 0px 80px 0px rgba(239, 68, 68, 0.25)',
+                                overflow: 'hidden',
+                            },
+                            inner: { padding: 0 },
+                            body: { padding: 0 },
+                            overlay: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                                backdropFilter: 'blur(16px)',
+                            },
+                        }}
+                    >
+                        <div className='relative bg-[#0c0f18] text-white rounded-[24px] overflow-hidden p-6 md:p-8 font-sans'>
+                            <button
+                                onClick={() => setWarningTask(null)}
+                                className='absolute top-5 right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center text-gray-300 hover:text-white transition cursor-pointer z-20'
+                            >
+                                <XMarkIcon className='w-4 h-4' />
+                            </button>
+
+                            <div className='relative z-10'>
+                                <div className='w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-4'>
+                                    <ExclamationTriangleIcon className='w-6 h-6' />
+                                </div>
+
+                                <h2 className='text-2xl font-bold text-white tracking-tight mb-2'>
+                                    Requirement Counter Reset Warning
+                                </h2>
+
+                                <p className='text-xs text-gray-300 leading-relaxed mb-4'>
+                                    You are about to claim <strong className='text-white'>{warningTask.title}</strong> for{' '}
+                                    <span className='text-amber-400 font-bold'>+{warningTask.reward_bolts.toLocaleString()} BOLTs</span>.
+                                </p>
+
+                                {(() => {
+                                    const higherTier = tasks.find(
+                                        t => t.category === warningTask.category && t.target_count > warningTask.target_count && !t.is_claimed
+                                    )
+                                    const cur = warningTask.current_count || 0
+                                    const qualifiesForHigher = higherTier && cur >= higherTier.target_count
+
+                                    return (
+                                        <div className='space-y-3 mb-6'>
+                                            {qualifiesForHigher ? (
+                                                <div className='p-4 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs leading-relaxed'>
+                                                    <strong className='font-bold text-amber-300 block mb-1'>
+                                                        ⚠️ Higher Reward Available: You have {cur} {warningTask.category}!
+                                                    </strong>
+                                                    You already meet the requirement for{' '}
+                                                    <strong className='text-white'>{higherTier.title}</strong> (+{higherTier.reward_bolts.toLocaleString()} BOLTs).{' '}
+                                                    If you claim the smaller reward now, your {warningTask.category} will immediately be{' '}
+                                                    <strong className='text-white underline'>reset to 0</strong> and you will <strong>NOT</strong> receive the higher reward without starting over.
+                                                </div>
+                                            ) : (
+                                                <div className='p-3.5 rounded-xl bg-neutral-900 border border-neutral-800 text-gray-300 text-xs leading-relaxed'>
+                                                    Notice: Claiming this reward will immediately reset your{' '}
+                                                    <strong className='text-white'>{warningTask.category}</strong> count to{' '}
+                                                    <strong className='text-white'>0</strong>.
+                                                </div>
+                                            )}
+
+                                            <div className='p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[11px] leading-relaxed'>
+                                                <strong className='font-bold text-rose-400 block mb-0.5'>🛡️ Staff Support Policy</strong>
+                                                Staff will <strong>NOT</strong> provide manual balance changes, refunds, or compensation if you claim a smaller reward instead of saving for the higher tier.
+                                            </div>
+                                        </div>
+                                    )
+                                })()}
+
+                                <div className='flex items-center justify-end gap-3 pt-2 border-t border-white/10'>
+                                    <button
+                                        type='button'
+                                        onClick={() => setWarningTask(null)}
+                                        className='px-4 py-2.5 rounded-xl text-xs font-bold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition cursor-pointer'
+                                    >
+                                        Wait / Keep My Progress
+                                    </button>
+                                    <button
+                                        type='button'
+                                        onClick={() => executeClaim(warningTask)}
+                                        className='px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-t from-red-600 to-rose-600 border border-rose-500 text-white shadow-lg shadow-rose-950/40 transition cursor-pointer active:scale-95'
+                                    >
+                                        I Understand, Claim & Reset to 0
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </Modal>
+                )}
 
                 {/* Connect Discord Modal */}
                 <ConnectDiscordModal

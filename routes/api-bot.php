@@ -74,3 +74,8 @@ Route::get('/nodes',               [BotApiController::class, 'getNodes']);
 Route::post('/backup/trigger',     [BotApiController::class, 'triggerBackups']);
 Route::post('/backup/set-tier',    [BotApiController::class, 'setServerTier']);
 
+// ── Anti-Abuse Inspection & Remediation (for /listabuse command) ───────────
+Route::get('/admin/abuse-list',        [BotApiController::class, 'getAbuseList']);
+Route::post('/admin/abuse-remediate',  [BotApiController::class, 'remediateAbuse']);
+
+

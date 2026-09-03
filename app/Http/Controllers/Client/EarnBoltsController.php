@@ -244,12 +244,37 @@ class EarnBoltsController extends ApiController
 
         $rewardBolts = (float) $task['reward_bolts'];
 
+        // Hard cap: User balance cannot exceed 8,000 BOLTs
+        if (($user->credits + $rewardBolts) > 8000) {
+            return response()->json([
+                'success' => false,
+                'message' => "Cannot claim reward: Your balance cannot exceed the 8,000 BOLTs limit (Current: " . number_format($user->credits, 2) . ", Reward: " . number_format($rewardBolts, 2) . ").",
+            ], 400);
+        }
+
         if (!$user->discord_id) {
             $user->discord_id = $discordId;
         }
 
         $user->credits += $rewardBolts;
         $user->save();
+
+        // RESET REQUIREMENTS ON CLAIM:
+        // When claiming invites, reset invited users so they cannot immediately claim higher tiers.
+        // When claiming boosts or messages, reset respective counters.
+        if ($task['category'] === 'invites') {
+            \Illuminate\Support\Facades\DB::table('discord_invited_users')
+                ->where('inviter_discord_id', $discordId)
+                ->delete();
+        } elseif ($task['category'] === 'boosts') {
+            \Illuminate\Support\Facades\DB::table('discord_stats')
+                ->where('discord_id', $discordId)
+                ->update(['boosts' => 0, 'updated_at' => now()]);
+        } elseif ($task['category'] === 'messages') {
+            \Illuminate\Support\Facades\DB::table('discord_stats')
+                ->where('discord_id', $discordId)
+                ->update(['messages' => 0, 'updated_at' => now()]);
+        }
 
         DiscordClaim::create([
             'user_id' => $user->id,
