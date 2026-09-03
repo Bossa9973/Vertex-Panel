@@ -128,7 +128,8 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
     info "Refreshing Laravel route and config caches..."
     (cd "$INSTALL_DIR" && php artisan route:clear >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan config:clear >/dev/null 2>&1 || true)
-    success "Laravel cache cleared."
+    (cd "$INSTALL_DIR" && php artisan queue:restart >/dev/null 2>&1 || true)
+    success "Laravel cache cleared and queue restarted."
 fi
 
 # 8. Restart Discord Bot with auto-healing

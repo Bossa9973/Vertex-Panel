@@ -10,8 +10,10 @@ use Convoy\Models\Server;
 use Convoy\Models\ServerRelocation;
 use Convoy\Models\Template;
 use Convoy\Models\User;
+use Convoy\Repositories\Proxmox\Server\ProxmoxActivityRepository;
 use Convoy\Repositories\Proxmox\Server\ProxmoxBackupRepository;
-use Convoy\Repositories\Proxmox\Server\ProxmoxTaskRepository;
+use Convoy\Repositories\Proxmox\Server\ProxmoxPowerRepository;
+use Convoy\Repositories\Proxmox\Server\ProxmoxServerRepository;
 use Convoy\Services\Backups\BackupCreationService;
 use Convoy\Services\Backups\RestoreFromBackupService;
 use Illuminate\Support\Carbon;
@@ -190,6 +192,69 @@ class ServerRelocationService
             $newServer->plan_tier   = $planTier;
             $newServer->description = $oldDesc ?: "Relocated VPS from {$sourceNode?->name} to {$targetNode->name}";
             $newServer->save();
+
+            // Actively verify and build the VM on the target hypervisor
+            try {
+                $buildService = app(\Convoy\Services\Servers\ServerBuildService::class);
+                $targetTemplate = Template::where('uuid', $templateUuid)->first();
+
+                // Wait up to 30s to see if queue worker started or finished creation
+                $created = false;
+                $start = time();
+                while ((time() - $start) < 30) {
+                    if ($buildService->isVmCreated($newServer)) {
+                        $created = true;
+                        break;
+                    }
+                    sleep(2);
+                }
+
+                // If not created yet via background queue, trigger clone directly
+                if (!$created && $targetTemplate) {
+                    try {
+                        $buildService->build($newServer, $targetTemplate);
+                        $start2 = time();
+                        while ((time() - $start2) < 45) {
+                            if ($buildService->isVmCreated($newServer)) {
+                                $created = true;
+                                break;
+                            }
+                            sleep(2);
+                        }
+                    } catch (\Throwable $directBuildEx) {
+                        Log::warning("Direct build attempt note: " . $directBuildEx->getMessage());
+                    }
+                }
+
+                if ($created) {
+                    // Sync network, memory, and disks
+                    try {
+                        app(\Convoy\Services\Servers\SyncBuildService::class)->handle($newServer);
+                    } catch (\Throwable $syncEx) {
+                        Log::warning("SyncBuildService warning for new server #{$newServer->id}: " . $syncEx->getMessage());
+                    }
+
+                    // Apply root password
+                    try {
+                        app(\Convoy\Services\Servers\ServerAuthService::class)->updatePassword($newServer, $newPassword);
+                    } catch (\Throwable $pwEx) {
+                        Log::warning("ServerAuthService warning for new server #{$newServer->id}: " . $pwEx->getMessage());
+                    }
+
+                    // Start the new VM on Proxmox
+                    try {
+                        app(\Convoy\Repositories\Proxmox\Server\ProxmoxPowerRepository::class)
+                            ->setServer($newServer)
+                            ->send(\Convoy\Enums\Server\PowerAction::START);
+                    } catch (\Throwable $pwrEx) {
+                        Log::warning("Power start warning for new server #{$newServer->id}: " . $pwrEx->getMessage());
+                    }
+
+                    $newServer->update(['status' => null]);
+                }
+            } catch (\Throwable $buildPipelineEx) {
+                Log::warning("Proxmox build pipeline completed with warning: " . $buildPipelineEx->getMessage());
+            }
         } catch (\Throwable $createEx) {
             Log::error("Relocation VM creation failed on target node {$targetNode->name}: " . $createEx->getMessage());
 
@@ -229,11 +294,32 @@ class ServerRelocationService
             }
         }
 
-        // STEP 4: Decommission / Wipe Old VM from Source Node
-        // Immediate UI and DB wipe so user never has orphan / quota lock, async hypervisor delete
+        // STEP 4: Decommission & Delete Old VM from Source Hypervisor
         try {
+            // First send kill signal to old VM on Proxmox
+            try {
+                app(\Convoy\Repositories\Proxmox\Server\ProxmoxPowerRepository::class)
+                    ->setServer($oldServer)
+                    ->send(\Convoy\Enums\Server\PowerAction::KILL);
+            } catch (\Throwable $powerKillEx) {
+                Log::warning("Old server power kill note: " . $powerKillEx->getMessage());
+            }
+
+            // Sleep 2 seconds for hypervisor power state to update
+            sleep(2);
+
+            // Delete old VM from Proxmox hypervisor
+            try {
+                app(\Convoy\Repositories\Proxmox\Server\ProxmoxServerRepository::class)
+                    ->setServer($oldServer)
+                    ->delete();
+            } catch (\Throwable $pveDeleteEx) {
+                Log::warning("Old server Proxmox deletion note: " . $pveDeleteEx->getMessage());
+            }
+
+            // Detach IP addresses and delete DB record immediately
             $oldServer->addresses()->update(['server_id' => null]);
-            $this->deletionService->handle($oldServer, true); // noPurge = true performs instant wipe
+            $oldServer->delete();
         } catch (\Throwable $delEx) {
             Log::warning("Old server standard deletion failed during relocation: " . $delEx->getMessage() . " — wiping DB record.");
             $oldServer->addresses()->update(['server_id' => null]);
@@ -289,34 +375,32 @@ class ServerRelocationService
      */
     private function resolveTemplateUuid(Server $oldServer, Node $targetNode): string
     {
-        // Try finding matching template on target node by name/group
-        $oldTemplate = null;
-        if (!empty($oldServer->template_id)) {
-            $oldTemplate = Template::find($oldServer->template_id);
+        // 1. Fetch all templates available on the target node
+        $targetTemplates = Template::whereHas('group', function ($q) use ($targetNode) {
+            $q->where('node_id', $targetNode->id);
+        })->get();
+
+        if ($targetTemplates->isEmpty()) {
+            throw new \RuntimeException("No VM OS templates configured on destination node '{$targetNode->name}'. Please configure a template on this node before relocating.");
         }
 
-        if ($oldTemplate) {
-            $matchingTargetTemplate = Template::whereHas('group', function ($q) use ($targetNode) {
-                $q->where('node_id', $targetNode->id);
-            })->where('name', $oldTemplate->name)->first();
+        // 2. Try to match the OS based on the old server's name, hostname, or description
+        $keywords = ['ubuntu', 'debian', 'almalinux', 'rocky', 'centos', 'alpine', 'windows', 'arch'];
+        $oldSearchString = strtolower($oldServer->name . ' ' . $oldServer->hostname . ' ' . $oldServer->description);
 
-            if ($matchingTargetTemplate) {
-                return $matchingTargetTemplate->uuid;
+        foreach ($keywords as $keyword) {
+            if (str_contains($oldSearchString, $keyword)) {
+                $matched = $targetTemplates->first(function ($tmpl) use ($keyword) {
+                    return str_contains(strtolower($tmpl->name), $keyword);
+                });
+                if ($matched) {
+                    return $matched->uuid;
+                }
             }
         }
 
-        // Fallback 1: pick any active template for the target node
-        $fallbackTemplate = Template::whereHas('group', function ($q) use ($targetNode) {
-            $q->where('node_id', $targetNode->id);
-        })->first();
-
-        if ($fallbackTemplate) {
-            return $fallbackTemplate->uuid;
-        }
-
-        // Fallback 2: Global fallback to any template in the system
-        $anyTemplate = Template::firstOrFail();
-        return $anyTemplate->uuid;
+        // 3. Fallback: pick the first available template on the target node
+        return $targetTemplates->first()->uuid;
     }
 
     /**
@@ -326,15 +410,15 @@ class ServerRelocationService
     {
         if (!$node) return false;
 
-        $taskRepo = app(ProxmoxTaskRepository::class);
-        $taskRepo->setNode($node);
+        $activityRepo = app(ProxmoxActivityRepository::class);
+        $activityRepo->setNode($node);
 
         $start = time();
         while ((time() - $start) < $maxSeconds) {
             try {
-                $status = $taskRepo->getTaskStatus($upid);
+                $status = $activityRepo->getStatus($upid);
                 if (isset($status['status']) && $status['status'] === 'stopped') {
-                    return isset($status['exitstatus']) && $status['exitstatus'] === 'OK';
+                    return isset($status['exitstatus']) && strtolower($status['exitstatus']) === 'ok';
                 }
             } catch (\Throwable $e) {
                 // Continue waiting
