@@ -53,6 +53,11 @@ Route::get('/transaction/{identifier}', [BotApiController::class, 'getTransactio
 // VM Deletion (for /vm-delete interactive workflow)
 Route::post('/admin/delete-vm',       [BotApiController::class, 'deleteVm']);
 
+// VM Relocation (for /relocate and /relocate_node commands)
+Route::get('/relocation-nodes',              [BotApiController::class, 'getRelocationNodes']);
+Route::post('/admin/relocate-vm',            [BotApiController::class, 'relocateVm']);
+Route::post('/admin/toggle-node-relocation', [BotApiController::class, 'toggleNodeRelocation']);
+
 // Pterodactyl deploy completion — panel calls this, bot sends a DM to the user
 Route::post('/ptero-complete',             [BotApiController::class, 'pterodactylComplete']);
 

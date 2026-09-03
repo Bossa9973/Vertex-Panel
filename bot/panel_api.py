@@ -280,6 +280,52 @@ async def delete_vm(server_id: str, admin_discord_id: str, user_discord_id: str,
         print(f"[panel_api] delete_vm failed for server {server_id}: {e}")
         return {"ok": False, "error": str(e)}
 
+# ─── VM Relocation & Node Controls ───────────────────────────────────────────
+
+async def get_relocation_nodes(include_all: bool = False) -> list[dict]:
+    """
+    Fetch eligible destination nodes for VM relocation.
+    If include_all=True, returns all nodes with their allow_relocation boolean status.
+    """
+    try:
+        query = "?include_all=1" if include_all else ""
+        res = await _get(f"/relocation-nodes{query}")
+        return res.get("nodes", []) if res.get("ok") else []
+    except Exception as e:
+        print(f"[panel_api] get_relocation_nodes failed: {e}")
+        return []
+
+async def relocate_vm(server_id: str, target_node_id: int, admin_discord_id: str, user_discord_id: str) -> dict:
+    """
+    Request the panel to relocate a VM to a target node.
+    Preserves exact expiration date, attempts backup/restore with fresh OS fallback,
+    and updates IP / credentials.
+    """
+    try:
+        return await _post("/admin/relocate-vm", {
+            "server_id": str(server_id).strip(),
+            "target_node_id": int(target_node_id),
+            "admin_discord_id": str(admin_discord_id).strip(),
+            "user_discord_id": str(user_discord_id).strip(),
+        })
+    except Exception as e:
+        print(f"[panel_api] relocate_vm failed: {e}")
+        return {"ok": False, "error": str(e)}
+
+async def toggle_node_relocation(node_identifier: str, enabled: bool, admin_discord_id: str) -> dict:
+    """
+    Enable or disable inbound VM relocations for a specific node.
+    """
+    try:
+        return await _post("/admin/toggle-node-relocation", {
+            "node_identifier": str(node_identifier).strip(),
+            "enabled": bool(enabled),
+            "admin_discord_id": str(admin_discord_id).strip(),
+        })
+    except Exception as e:
+        print(f"[panel_api] toggle_node_relocation failed: {e}")
+        return {"ok": False, "error": str(e)}
+
 # ─── Pterodactyl Deploy DM Queue ──────────────────────────────────────────────
 
 async def poll_pterodactyl_dm_queue() -> list:

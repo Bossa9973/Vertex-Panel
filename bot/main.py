@@ -2256,6 +2256,503 @@ async def vm_delete_cmd(interaction: discord.Interaction, user: Union[discord.Me
     await interaction.followup.send(embed=overview_embed, view=admin_view, ephemeral=True)
 
 
+# ─── Admin: /relocate & /relocate_node (Staff VM Relocation Workflow) ────────
+
+RELOCATION_ADMIN_ROLE_ID = 1354830881537396796
+
+def can_manage_relocation_nodes(interaction: discord.Interaction) -> bool:
+    return (
+        interaction.user.guild_permissions.administrator
+        or any(getattr(r, 'id', None) == RELOCATION_ADMIN_ROLE_ID for r in getattr(interaction.user, 'roles', []))
+    )
+
+
+class UserRelocationConfirmView(discord.ui.View):
+    """
+    Public confirmation card posted in the current channel tagging the VM owner.
+    """
+    def __init__(
+        self,
+        admin: Union[discord.Member, discord.User],
+        target_user: Union[discord.Member, discord.User],
+        server: dict,
+        target_node: dict,
+        channel: discord.abc.Messageable
+    ):
+        super().__init__(timeout=600)
+        self.admin = admin
+        self.target_user = target_user
+        self.server = server
+        self.target_node = target_node
+        self.channel = channel
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.target_user.id:
+            await interaction.response.send_message(
+                f"❌ This confirmation prompt is strictly for the VM owner, {self.target_user.mention}.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="✅ Authorize & Relocate VM", style=discord.ButtonStyle.success, emoji="🌐")
+    async def btn_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children:
+            child.disabled = True
+
+        srv_name = safe_str(self.server.get("name") or "VPS Instance")
+        vmid = safe_str(self.server.get("vmid") or self.server.get("id") or "N/A")
+        target_node_name = safe_str(self.target_node.get("name") or "Target Node")
+
+        progress_embed = discord.Embed(
+            title="⏳ Relocation In Progress...",
+            description=(
+                f"**Owner:** {self.target_user.mention}\n"
+                f"**VM:** **{srv_name}** (`#{vmid}`)\n"
+                f"**Destination:** `{target_node_name}`\n\n"
+                f"• Proxmox snapshot backup & volume streaming initiated.\n"
+                f"• New instance provisioning on destination node.\n"
+                f"• Expiration date will be strictly preserved.\n\n"
+                f"Please stand by. This process takes 1–3 minutes."
+            ),
+            color=0x3B82F6
+        )
+        await interaction.response.edit_message(embed=progress_embed, view=self)
+
+        srv_id = str(self.server.get("id") or self.server.get("vmid"))
+        target_node_id = int(self.target_node.get("id"))
+
+        res = await panel_api.relocate_vm(
+            server_id=srv_id,
+            target_node_id=target_node_id,
+            admin_discord_id=str(self.admin.id),
+            user_discord_id=str(self.target_user.id)
+        )
+
+        if not res.get("ok"):
+            err_msg = res.get("error", "Unknown hypervisor or database error occurred.")
+            fail_embed = discord.Embed(
+                title="❌ VM Relocation Failed",
+                description=f"An error occurred during migration: `{err_msg}`\nPlease contact administrator.",
+                color=0xEF4444
+            )
+            try:
+                await interaction.edit_original_response(embed=fail_embed, view=None)
+            except Exception:
+                await self.channel.send(embed=fail_embed)
+            return
+
+        new_ip = res.get("new_ip", "N/A")
+        old_ip = res.get("old_ip", "N/A")
+        reused_ip = bool(res.get("reused_ip", False))
+        backup_success = bool(res.get("backup_success", False))
+        restore_success = bool(res.get("restore_success", False))
+        expires_at = res.get("expires_at", "N/A")
+        new_password = res.get("new_password")
+
+        ip_note = f"`{new_ip}` (Reused IP ✅)" if reused_ip else f"`{new_ip}` (New IP Allocated ⚠️)"
+        backup_note = "Restored from Backup ✅" if (backup_success and restore_success) else "Fresh OS Installed (Backup skipped/fallback) ⚠️"
+
+        done_embed = discord.Embed(
+            title="🎉 Virtual Machine Relocated Successfully!",
+            description=(
+                f"Virtual machine **{srv_name}** has been successfully relocated for {self.target_user.mention}.\n\n"
+                f"• **Source Node:** `{res.get('source_node_name', 'Node A')}` (`{old_ip}`)\n"
+                f"• **Destination Node:** `{target_node_name}`\n"
+                f"• **Active IP:** {ip_note}\n"
+                f"• **Data Migration:** `{backup_note}`\n"
+                f"• **Expiration Date:** `{expires_at}` *(Strictly Preserved)*\n"
+            ),
+            color=0x22C55E
+        )
+        done_embed.set_footer(text="Vertex Cloud • Relocation Engine")
+
+        try:
+            await interaction.edit_original_response(embed=done_embed, view=None)
+        except Exception:
+            await self.channel.send(embed=done_embed)
+
+        # Dispatch DM to user
+        try:
+            dm_desc = (
+                f"Your virtual machine **{srv_name}** has been relocated to node **{target_node_name}**.\n\n"
+                f"• **IP Address:** {ip_note}\n"
+                f"• **Expiration Date:** `{expires_at}` *(Preserved from old server)*\n"
+                f"• **Migration Status:** `{backup_note}`\n"
+            )
+            if not reused_ip:
+                dm_desc += (
+                    f"\n⚠️ **Notice:** Your server received a new IP address (`{new_ip}`). "
+                    f"Please update any DNS A-records, SSH configurations, or bookmarks pointing to `{old_ip}`."
+                )
+            if new_password:
+                dm_desc += (
+                    f"\n🔑 **New OS Root Password:** ||`{new_password}`||\n"
+                    f"*(Because the backup was skipped or storage was isolated, a fresh OS template was applied. Please sign in and set your preferred password).* "
+                )
+
+            dm_embed = discord.Embed(
+                title="🌐 Cloud VPS Relocation Complete",
+                description=dm_desc,
+                color=0x22C55E
+            )
+            dm_embed.set_footer(text="Vertex Cloud Infrastructure")
+            await self.target_user.send(embed=dm_embed)
+        except Exception as dm_err:
+            print(f"[relocate] Could not send DM to {self.target_user.id}: {dm_err}")
+
+        # Dispatch Log Channel Embed
+        log_embed = discord.Embed(
+            title="🌐 [Audit Log] Virtual Machine Relocated",
+            description=(
+                f"**VM Name:** `{srv_name}`\n"
+                f"**Owner:** {self.target_user.mention} (`{self.target_user.id}`)\n"
+                f"**Staff Admin:** {self.admin.mention} (`{self.admin.id}`)\n"
+                f"**From Node:** `{res.get('source_node_name', 'Node A')}` (`{old_ip}`)\n"
+                f"**To Node:** `{target_node_name}` (`{new_ip}`)\n"
+                f"**Reused IP:** `{reused_ip}`\n"
+                f"**Backup Succeeded:** `{backup_success}`\n"
+                f"**Preserved Expiry:** `{expires_at}`\n"
+            ),
+            color=0x3B82F6,
+            timestamp=discord.utils.utcnow()
+        )
+        log_embed.set_footer(text="Vertex Audit Logger • VM Relocation")
+        await log_to_channel(log_embed)
+
+    @discord.ui.button(label="❌ Decline Relocation", style=discord.ButtonStyle.secondary, emoji="🛑")
+    async def btn_decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children:
+            child.disabled = True
+        decline_embed = discord.Embed(
+            title="🛑 Relocation Request Declined",
+            description=f"VM owner {self.target_user.mention} declined the relocation request.",
+            color=0x6B7280
+        )
+        await interaction.response.edit_message(embed=decline_embed, view=self)
+
+
+class AdminRelocateSelectView(discord.ui.View):
+    """
+    Staff interactive view: Selects VM, then selects target node (filtered by allow_relocation).
+    """
+    def __init__(
+        self,
+        admin: Union[discord.Member, discord.User],
+        target_user: Union[discord.Member, discord.User],
+        servers: list[dict],
+        available_nodes: list[dict],
+        channel: discord.abc.Messageable
+    ):
+        super().__init__(timeout=300)
+        self.admin = admin
+        self.target_user = target_user
+        self.servers = servers
+        self.available_nodes = available_nodes
+        self.channel = channel
+        self.selected_server = None
+        self.selected_node = None
+
+        # Server selection menu
+        srv_options = []
+        for srv in servers[:25]:
+            s_name = safe_str(srv.get("name") or "VPS")
+            vmid = safe_str(srv.get("vmid") or srv.get("id") or "N/A")
+            node = safe_str(srv.get("node_name") or "Node")
+            srv_options.append(discord.SelectOption(
+                label=f"{s_name} (VMID: {vmid})"[:100],
+                description=f"Current Node: {node}"[:100],
+                value=str(srv.get("id") or srv.get("vmid"))
+            ))
+
+        self.server_select = discord.ui.Select(
+            placeholder="1. Select the Virtual Machine to relocate...",
+            options=srv_options,
+            min_values=1,
+            max_values=1,
+            row=0
+        )
+        self.server_select.callback = self.on_server_chosen
+        self.add_item(self.server_select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.admin.id:
+            await interaction.response.send_message("❌ This admin session belongs to another administrator.", ephemeral=True)
+            return False
+        return True
+
+    async def on_server_chosen(self, interaction: discord.Interaction):
+        chosen_id = self.server_select.values[0]
+        self.selected_server = next((s for s in self.servers if str(s.get("id")) == chosen_id or str(s.get("vmid")) == chosen_id), None)
+        if not self.selected_server:
+            return await interaction.response.send_message("❌ Selected server not found.", ephemeral=True)
+
+        current_node_id = self.selected_server.get("node_id")
+
+        # Filter target nodes:
+        # 1. Target node must have allow_relocation == true
+        # 2. Target node cannot be the exact current hosting node
+        # (Scenario 2 supported: if current node has relocations disabled, it still allows moving to eligible target nodes!)
+        eligible = [
+            n for n in self.available_nodes
+            if n.get("allow_relocation", True) is not False
+            and str(n.get("id")) != str(current_node_id)
+        ]
+
+        if not eligible:
+            return await interaction.response.send_message(
+                "❌ No eligible destination nodes available with relocations enabled. "
+                "Please enable inbound relocations on a destination node first via `/relocate_node`.",
+                ephemeral=True
+            )
+
+        # Clear existing items and build target node selector
+        self.clear_items()
+
+        node_options = []
+        for n in eligible[:25]:
+            n_name = safe_str(n.get("name") or f"Node-{n.get('id')}")
+            free_ips = safe_int(n.get("free_ips_count", 0))
+            loc = safe_str(n.get("location") or "Cloud")
+            node_options.append(discord.SelectOption(
+                label=f"{n_name} ({loc})"[:100],
+                description=f"Free IPs: {free_ips} | Cluster: {n.get('cluster', 'PVE')}"[:100],
+                value=str(n.get("id"))
+            ))
+
+        self.node_select = discord.ui.Select(
+            placeholder="2. Select Destination Node (Target)...",
+            options=node_options,
+            min_values=1,
+            max_values=1,
+            row=0
+        )
+        self.node_select.callback = self.on_node_chosen
+        self.add_item(self.node_select)
+
+        srv_name = safe_str(self.selected_server.get("name"))
+        curr_node = safe_str(self.selected_server.get("node_name") or "Current Node")
+
+        update_embed = discord.Embed(
+            title="🌐 Step 2: Select Target Node",
+            description=(
+                f"**Relocating:** **{srv_name}**\n"
+                f"**Current Node:** `{curr_node}`\n\n"
+                f"Choose an eligible destination node from the dropdown below to proceed:"
+            ),
+            color=0x3B82F6
+        )
+        await interaction.response.edit_message(embed=update_embed, view=self)
+
+    async def on_node_chosen(self, interaction: discord.Interaction):
+        chosen_node_id = self.node_select.values[0]
+        self.selected_node = next((n for n in self.available_nodes if str(n.get("id")) == chosen_node_id), None)
+        if not self.selected_node:
+            return await interaction.response.send_message("❌ Selected target node not found.", ephemeral=True)
+
+        self.clear_items()
+
+        srv = self.selected_server
+        srv_name = safe_str(srv.get("name") or "VPS")
+        vmid = safe_str(srv.get("vmid") or srv.get("id") or "N/A")
+        src_node = safe_str(srv.get("node_name") or "Current Node")
+        dst_node = safe_str(self.selected_node.get("name") or "Target Node")
+        expiry = format_date(srv.get("expires_at"), default="Identical (Preserved)")
+
+        summary_embed = discord.Embed(
+            title="🛡️ Admin Relocation Review // Ready to Dispatch",
+            description=(
+                f"You have prepared a relocation request for **{self.target_user.mention}**.\n\n"
+                f"• **Virtual Machine:** **{srv_name}** (`#{vmid}`)\n"
+                f"• **Source Node:** `{src_node}`\n"
+                f"• **Destination Node:** `{dst_node}` *(Relocations Allowed ✅)*\n"
+                f"• **Expiration Date:** `{expiry}` *(Strictly Preserved)*\n\n"
+                f"Click **Dispatch to Channel** below to post the authorization prompt in {self.channel.mention} for the user to confirm:"
+            ),
+            color=0x3B82F6
+        )
+        summary_embed.set_footer(text="Admin Step 3: Confirm before dispatching to user")
+
+        parent = self
+
+        class DispatchView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+
+            async def interaction_check(self, i: discord.Interaction) -> bool:
+                return i.user.id == parent.admin.id
+
+            @discord.ui.button(label="🚀 Dispatch Relocation Request to Channel", style=discord.ButtonStyle.primary, emoji="📤")
+            async def btn_dispatch(self, i: discord.Interaction, btn: discord.ui.Button):
+                await i.response.edit_message(
+                    embed=discord.Embed(
+                        title="✅ Relocation Request Dispatched",
+                        description=f"Relocation confirmation prompt has been posted in {parent.channel.mention} for {parent.target_user.mention}.",
+                        color=0x22C55E
+                    ),
+                    view=None
+                )
+
+                prompt_embed = discord.Embed(
+                    title="🌐 Virtual Machine Relocation Request // Authorization Required",
+                    description=(
+                        f"Staff member {parent.admin.mention} has requested to relocate your virtual machine to a different hypervisor node.\n\n"
+                        f"**Relocation Details:**\n"
+                        f"• **Server:** **{srv_name}** (`#{vmid}`)\n"
+                        f"• **Current Location:** `{src_node}`\n"
+                        f"• **Target Location:** `{dst_node}`\n"
+                        f"• **Expiration Date:** `{expiry}` *(Strictly Preserved)*\n\n"
+                        f"**What to Expect:**\n"
+                        f"1. A Proxmox snapshot backup will be generated.\n"
+                        f"2. A replacement VM will be created on `{dst_node}` with the exact same plan, OS, and expiration date.\n"
+                        f"3. Your backup will be restored. *(If backup is isolated, fresh OS credentials will be sent to your DMs)*.\n"
+                        f"4. Your old instance will be safely decommissioned.\n\n"
+                        f"Please click below to authorize this relocation:"
+                    ),
+                    color=0x3B82F6
+                )
+                prompt_embed.set_footer(text="Vertex Cloud • Infrastructure Migration")
+
+                user_confirm_view = UserRelocationConfirmView(
+                    admin=parent.admin,
+                    target_user=parent.target_user,
+                    server=parent.selected_server,
+                    target_node=parent.selected_node,
+                    channel=parent.channel
+                )
+
+                await parent.channel.send(
+                    content=f"🔔 {parent.target_user.mention} A server relocation request requires your authorization.",
+                    embed=prompt_embed,
+                    view=user_confirm_view
+                )
+
+        await interaction.response.edit_message(embed=summary_embed, view=DispatchView())
+
+
+@bot.tree.command(name="relocate", description="Staff tool: Relocate a user's VM to another node with owner authorization (Admin Only)")
+async def relocate_cmd(interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True)
+
+    user_history_data = await panel_api.get_user_history(str(user.id))
+    if not user_history_data.get("ok"):
+        return await interaction.followup.send(
+            embed=discord.Embed(
+                title="❌ User Not Found",
+                description=f"Could not find panel account or activity records for {user.mention} (`{user.id}`).",
+                color=0xEF4444
+            ),
+            ephemeral=True
+        )
+
+    servers = user_history_data.get("owned_servers") or []
+    if not servers:
+        return await interaction.followup.send(
+            embed=discord.Embed(
+                title="❌ No Virtual Machines Found",
+                description=f"User {user.mention} does not own any active virtual machine instances on Vertex Cloud.",
+                color=0xEF4444
+            ),
+            ephemeral=True
+        )
+
+    available_nodes = await panel_api.get_relocation_nodes(include_all=True)
+    if not available_nodes:
+        return await interaction.followup.send(
+            embed=discord.Embed(
+                title="❌ No Nodes Configured",
+                description="No hypervisor nodes were returned by the panel.",
+                color=0xEF4444
+            ),
+            ephemeral=True
+        )
+
+    admin_view = AdminRelocateSelectView(
+        admin=interaction.user,
+        target_user=user,
+        servers=servers,
+        available_nodes=available_nodes,
+        channel=interaction.channel
+    )
+
+    overview_embed = discord.Embed(
+        title=f"🌐 Staff VM Relocation // User: {user.display_name}",
+        description=(
+            f"User {user.mention} currently has **{len(servers)} virtual machine{'s' if len(servers) != 1 else ''}**.\n\n"
+            f"**Select a VM from the dropdown below to begin the relocation workflow:**"
+        ),
+        color=0x3B82F6
+    )
+
+    for s in servers[:6]:
+        s_name = safe_str(s.get("name") or "VPS")
+        vmid = safe_str(s.get("vmid") or s.get("id") or "N/A")
+        node = safe_str(s.get("node_name") or "Node")
+        ip = safe_str(s.get("ip") or "N/A")
+        overview_embed.add_field(
+            name=f"🖥️ {s_name} (VMID: `#{vmid}`)",
+            value=f"• **Node:** `{node}` (`{ip}`)",
+            inline=True
+        )
+
+    overview_embed.set_footer(text="Admin Step 1: Visible only to staff • Select VM to proceed")
+    await interaction.followup.send(embed=overview_embed, view=admin_view, ephemeral=True)
+
+
+@bot.tree.command(name="relocate_node", description="Enable or disable inbound VM relocations for a node (Relocation Role Only)")
+@discord.app_commands.describe(
+    node="Node name, ID, or FQDN",
+    action="Whether to enable or disable inbound relocations to this node"
+)
+@discord.app_commands.choices(action=[
+    discord.app_commands.Choice(name="Enable Relocations", value="enable"),
+    discord.app_commands.Choice(name="Disable Relocations", value="disable"),
+])
+async def relocate_node_cmd(interaction: discord.Interaction, node: str, action: discord.app_commands.Choice[str]):
+    if not can_manage_relocation_nodes(interaction):
+        return await interaction.response.send_message(
+            f"❌ Access Denied. Managing node relocation status requires role <@&{RELOCATION_ADMIN_ROLE_ID}> or Administrator permissions.",
+            ephemeral=True
+        )
+
+    await interaction.response.defer(ephemeral=True)
+
+    enabled = (action.value == "enable")
+    res = await panel_api.toggle_node_relocation(
+        node_identifier=node,
+        enabled=enabled,
+        admin_discord_id=str(interaction.user.id)
+    )
+
+    if not res.get("ok"):
+        return await interaction.followup.send(
+            embed=discord.Embed(
+                title="❌ Failed to Update Node",
+                description=f"Error: `{res.get('error', 'Unknown error occurred')}`",
+                color=0xEF4444
+            ),
+            ephemeral=True
+        )
+
+    node_name = res.get("node_name", node)
+    embed = discord.Embed(
+        title="🌐 Node Relocation Availability Updated",
+        description=(
+            f"Node **{node_name}** has been updated.\n\n"
+            f"• **Inbound Relocations:** " + ("`✅ ENABLED`" if enabled else "`❌ DISABLED`") + "\n"
+            f"• **Updated By:** {interaction.user.mention}\n"
+        ),
+        color=0x22C55E if enabled else 0xEF4444,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="Vertex Infrastructure • Relocation Control")
+    await interaction.followup.send(embed=embed, ephemeral=True)
+    await log_to_channel(embed)
+
+
 # ─── Admin: /add_bolts (Interactive History Preview, Presets & Modals) ────────
 
 class CustomAmountModal(discord.ui.Modal, title="Custom BOLT Amount"):

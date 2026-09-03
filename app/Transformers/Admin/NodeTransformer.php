@@ -33,6 +33,7 @@ class NodeTransformer extends TransformerAbstract
             'cluster'             => $node->cluster,
             'verify_tls'          => $node->verify_tls,
             'hidden'              => (bool) $node->hidden,
+            'allow_relocation'    => (bool) ($node->allow_relocation ?? true),
             'fqdn'                => $node->fqdn,
             'port'                => $node->port,
             'memory'              => $node->memory,

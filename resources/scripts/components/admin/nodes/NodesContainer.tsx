@@ -55,6 +55,11 @@ const NodesContainer = () => {
                             Hidden
                         </span>
                     )}
+                    {row.allowRelocation === false && (
+                        <span className='px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20'>
+                            Relocations Disabled
+                        </span>
+                    )}
                 </div>
             ),
         },
@@ -89,6 +94,43 @@ const NodesContainer = () => {
                     cluster: node.cluster,
                     verifyTls: node.verifyTls,
                     hidden: !node.hidden,
+                    fqdn: node.fqdn,
+                    port: node.port,
+                    memory: node.memory,
+                    memoryOverallocate: node.memoryOverallocate,
+                    disk: node.disk,
+                    diskOverallocate: node.diskOverallocate,
+                    vmStorage: node.vmStorage,
+                    backupStorage: node.backupStorage,
+                    isoStorage: node.isoStorage,
+                    network: node.network,
+                })
+
+                mutate(
+                    mutateData =>
+                        ({
+                            ...mutateData,
+                            items: mutateData!.items.map(n =>
+                                n.id === node.id ? updated : n
+                            ),
+                        }) as NodeResponse,
+                    false
+                )
+            } catch (error) {
+                clearAndAddHttpError(error as Error)
+            }
+        }
+
+        const handleToggleRelocation = async () => {
+            clearFlashes()
+            try {
+                const updated = await updateNode(node.id, {
+                    locationId: node.locationId,
+                    name: node.name,
+                    cluster: node.cluster,
+                    verifyTls: node.verifyTls,
+                    hidden: node.hidden,
+                    allowRelocation: node.allowRelocation === false ? true : false,
                     fqdn: node.fqdn,
                     port: node.port,
                     memory: node.memory,
@@ -151,6 +193,9 @@ const NodesContainer = () => {
                 </Menu.Item>
                 <Menu.Item onClick={handleToggleHidden}>
                     {node.hidden ? 'Show in Deploy Menu' : 'Hide from Deploy Menu'}
+                </Menu.Item>
+                <Menu.Item onClick={handleToggleRelocation}>
+                    {node.allowRelocation === false ? 'Enable Inbound Relocations' : 'Disable Inbound Relocations'}
                 </Menu.Item>
                 <Menu.Divider />
                 <Menu.Item

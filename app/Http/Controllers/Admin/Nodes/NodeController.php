@@ -132,5 +132,27 @@ class NodeController extends ApiController
             'message' => "Successfully updated PVE password for {$userid} on {$node->name}.",
         ]);
     }
+
+    /**
+     * Toggles whether inbound VM relocations are permitted to this node.
+     */
+    public function toggleRelocation(Request $request, Node $node)
+    {
+        $current = $node->allow_relocation ?? true;
+        $newVal  = $request->has('allow_relocation') ? $request->boolean('allow_relocation') : !$current;
+
+        $node->update(['allow_relocation' => $newVal]);
+
+        \Convoy\Facades\Activity::event('node:toggle-relocation')
+            ->subject($node)
+            ->property(['node_id' => $node->id, 'node_name' => $node->name, 'allow_relocation' => $newVal])
+            ->log(($newVal ? 'Enabled' : 'Disabled') . " inbound VM relocations for node {$node->name}");
+
+        return response()->json([
+            'success'          => true,
+            'allow_relocation' => (bool) $newVal,
+            'message'          => "Inbound relocations to {$node->name} are now " . ($newVal ? 'ENABLED' : 'DISABLED') . '.',
+        ]);
+    }
 }
 

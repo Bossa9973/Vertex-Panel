@@ -7,6 +7,7 @@ export interface Node {
     cluster: string
     verifyTls: boolean
     hidden: boolean
+    allowRelocation?: boolean
     fqdn: string
     port: number
     memory: number
@@ -36,6 +37,7 @@ export const rawDataToNode = (data: any): Node => ({
     cluster: data.cluster,
     verifyTls: data.verify_tls,
     hidden: Boolean(data.hidden),
+    allowRelocation: data.allow_relocation !== undefined ? Boolean(data.allow_relocation) : true,
     fqdn: data.fqdn,
     port: data.port,
     memory: data.memory,

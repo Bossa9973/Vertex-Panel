@@ -28,12 +28,13 @@ class Node extends Model
      * Cast values to correct type.
      */
     protected $casts = [
-        'verify_tls'     => 'boolean',
-        'hidden'         => 'boolean',
-        'memory'         => MebibytesToAndFromBytes::class,
-        'disk'           => MebibytesToAndFromBytes::class,
-        'secret'         => 'encrypted',
-        'ssh_private_key' => 'encrypted',
+        'verify_tls'       => 'boolean',
+        'hidden'           => 'boolean',
+        'allow_relocation' => 'boolean',
+        'memory'           => MebibytesToAndFromBytes::class,
+        'disk'             => MebibytesToAndFromBytes::class,
+        'secret'           => 'encrypted',
+        'ssh_private_key'  => 'encrypted',
     ];
 
     /**
@@ -47,6 +48,7 @@ class Node extends Model
         'cluster'             => 'required|string|max:191',
         'verify_tls'          => 'sometimes|boolean',
         'hidden'              => 'sometimes|boolean',
+        'allow_relocation'    => 'sometimes|boolean',
         'fqdn'                => 'required|string|max:191',
         'token_id'            => 'required|string|max:191',
         'secret'              => 'required|string|max:191',

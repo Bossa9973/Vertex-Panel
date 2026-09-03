@@ -2759,5 +2759,158 @@ class BotApiController extends Controller
             'discord_id' => $user->discord_id,
         ]);
     }
+
+    // =========================================================================
+    // VM RELOCATION & NODE RELOCATION CONTROLS
+    // =========================================================================
+
+    /**
+     * List eligible nodes for VM relocation.
+     * GET /api/bot/relocation-nodes
+     */
+    public function getRelocationNodes(Request $request): JsonResponse
+    {
+        $includeAll = $request->boolean('include_all', false);
+
+        $nodes = \Convoy\Models\Node::query()
+            ->when(!$includeAll, function ($q) {
+                $q->where(function ($sub) {
+                    $sub->where('allow_relocation', true)
+                        ->orWhereNull('allow_relocation');
+                });
+            })
+            ->withCount(['servers'])
+            ->get()
+            ->map(function (\Convoy\Models\Node $node) {
+                $freeIps = \Convoy\Models\Address::whereNull('server_id')
+                    ->whereIn('address_pool_id', function ($sub) use ($node) {
+                        $sub->select('address_pool_id')
+                            ->from('address_pool_to_node')
+                            ->where('node_id', $node->id);
+                    })
+                    ->count();
+
+                return [
+                    'id'               => $node->id,
+                    'name'             => $node->name,
+                    'fqdn'             => $node->fqdn,
+                    'cluster'          => $node->cluster,
+                    'allow_relocation' => (bool) ($node->allow_relocation ?? true),
+                    'free_ips_count'   => $freeIps,
+                    'servers_count'    => (int) $node->servers_count,
+                    'location'         => $node->location ? $node->location->description : $node->name,
+                ];
+            });
+
+        return response()->json([
+            'ok'    => true,
+            'nodes' => $nodes,
+        ]);
+    }
+
+    /**
+     * Admin tool: Relocate a user's VM from one node to another.
+     * POST /api/bot/admin/relocate-vm   { server_id, target_node_id, admin_discord_id, user_discord_id }
+     */
+    public function relocateVm(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'server_id'        => 'required',
+            'target_node_id'   => 'required|integer|exists:nodes,id',
+            'admin_discord_id' => 'required|string|max:32',
+            'user_discord_id'  => 'required|string|max:32',
+        ]);
+
+        $serverIdentifier = trim((string) $validated['server_id']);
+        $targetNodeId     = (int) $validated['target_node_id'];
+        $adminDiscordId   = trim((string) $validated['admin_discord_id']);
+        $userDiscordId    = trim((string) $validated['user_discord_id']);
+
+        /** @var \Convoy\Models\Server|null $server */
+        $server = \Convoy\Models\Server::with(['user', 'node', 'addresses'])
+            ->where(function ($q) use ($serverIdentifier) {
+                if (is_numeric($serverIdentifier)) {
+                    $q->where('id', (int) $serverIdentifier)
+                      ->orWhere('vmid', (int) $serverIdentifier);
+                } else {
+                    $q->where('uuid', $serverIdentifier)
+                      ->orWhere('uuid_short', $serverIdentifier);
+                }
+            })
+            ->first();
+
+        if (!$server) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Server '{$serverIdentifier}' was not found in the database.",
+            ], 404);
+        }
+
+        /** @var \Convoy\Models\Node $targetNode */
+        $targetNode = \Convoy\Models\Node::findOrFail($targetNodeId);
+
+        try {
+            /** @var \Convoy\Services\Servers\ServerRelocationService $relocationService */
+            $relocationService = app(\Convoy\Services\Servers\ServerRelocationService::class);
+            $result = $relocationService->handle($server, $targetNode, $adminDiscordId, $userDiscordId);
+
+            return response()->json($result);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Relocation failed for server #{$server->id}: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'ok'    => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Admin tool: Toggle whether inbound relocations are allowed for a node.
+     * POST /api/bot/admin/toggle-node-relocation   { node_identifier, enabled, admin_discord_id }
+     */
+    public function toggleNodeRelocation(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'node_identifier'  => 'required',
+            'enabled'          => 'required|boolean',
+            'admin_discord_id' => 'required|string|max:32',
+        ]);
+
+        $identifier = trim((string) $validated['node_identifier']);
+        $enabled    = (bool) $validated['enabled'];
+
+        /** @var \Convoy\Models\Node|null $node */
+        $node = \Convoy\Models\Node::query()
+            ->when(is_numeric($identifier), fn($q) => $q->where('id', (int) $identifier))
+            ->when(!is_numeric($identifier), function ($q) use ($identifier) {
+                $q->where('name', $identifier)
+                  ->orWhere('fqdn', $identifier)
+                  ->orWhere('name', 'LIKE', "%{$identifier}%");
+            })
+            ->first();
+
+        if (!$node) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Node '{$identifier}' was not found.",
+            ], 404);
+        }
+
+        $node->update(['allow_relocation' => $enabled]);
+
+        \Convoy\Facades\Activity::event('node:toggle-relocation')
+            ->subject($node)
+            ->property(['node_id' => $node->id, 'node_name' => $node->name, 'allow_relocation' => $enabled, 'admin_discord_id' => $validated['admin_discord_id']])
+            ->log(($enabled ? 'Enabled' : 'Disabled') . " inbound relocations for node {$node->name} via Discord Bot");
+
+        return response()->json([
+            'ok'               => true,
+            'node_id'          => $node->id,
+            'node_name'        => $node->name,
+            'allow_relocation' => (bool) $node->allow_relocation,
+            'message'          => "Inbound relocations to **{$node->name}** are now " . ($enabled ? '✅ ENABLED' : '❌ DISABLED') . '.',
+        ]);
+    }
 }
 
