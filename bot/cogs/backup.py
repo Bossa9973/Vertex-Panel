@@ -14,6 +14,7 @@ Subcommands:
 All subcommands require Administrator permission.
 Files upload to Google Drive immediately after each Proxmox snapshot completes.
 """
+from __future__ import annotations
 
 import discord
 from discord import app_commands

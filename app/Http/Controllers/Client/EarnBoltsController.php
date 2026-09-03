@@ -165,6 +165,18 @@ class EarnBoltsController extends ApiController
         $discordId = trim($request->input('discord_id'));
         $discordUsername = trim($request->input('discord_username', $discordId));
 
+        // Prevent Discord ID hijacking: check if another user already has this discord_id
+        $existingOtherUser = \Convoy\Models\User::where('discord_id', $discordId)
+            ->where('id', '!=', $user->id)
+            ->first();
+
+        if ($existingOtherUser) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This Discord account is already linked to another Vertex Panel account.',
+            ], 422);
+        }
+
         $user->discord_id = $discordId;
         $user->discord_username = $discordUsername;
         $user->save();
@@ -199,7 +211,8 @@ class EarnBoltsController extends ApiController
             ], 403);
         }
 
-        $discordId = trim($request->input('discord_id', $user->discord_id ?? ''));
+        // Security: enforce authenticated user's own linked Discord ID only (prevent spoofing via request body)
+        $discordId = $user->discord_id;
 
         if (empty($discordId)) {
             return response()->json([
@@ -224,8 +237,11 @@ class EarnBoltsController extends ApiController
             ], 403);
         }
 
-        $existingClaim = DiscordClaim::where('user_id', $user->id)
-            ->where('task_key', $taskKey)
+        // Check if either this user OR this discord_id has already claimed this task
+        $existingClaim = DiscordClaim::where('task_key', $taskKey)
+            ->where(function ($q) use ($user, $discordId) {
+                $q->where('user_id', $user->id)->orWhere('discord_id', $discordId);
+            })
             ->first();
 
         if ($existingClaim) {
@@ -253,53 +269,64 @@ class EarnBoltsController extends ApiController
 
         $rewardBolts = (float) $task['reward_bolts'];
 
-        // Hard cap: User balance cannot exceed 8,000 BOLTs
-        if (($user->credits + $rewardBolts) > 8000) {
-            return response()->json([
-                'success' => false,
-                'message' => "Cannot claim reward: Your balance cannot exceed the 8,000 BOLTs limit (Current: " . number_format($user->credits, 2) . ", Reward: " . number_format($rewardBolts, 2) . ").",
-            ], 400);
-        }
+        \Illuminate\Support\Facades\DB::transaction(function () use ($user, $task, $taskKey, $discordId, $rewardBolts) {
+            // Lock user row for update to prevent concurrent double-claim race condition
+            $lockedUser = \Convoy\Models\User::lockForUpdate()->find($user->id);
 
-        if (!$user->discord_id) {
-            $user->discord_id = $discordId;
-        }
+            // Re-check hard cap with locked fresh balance
+            if (($lockedUser->credits + $rewardBolts) > 8000) {
+                throw new \Symfony\Component\HttpKernel\Exception\HttpException(
+                    400,
+                    "Cannot claim reward: Your balance cannot exceed the 8,000 BOLTs limit (Current: " . number_format($lockedUser->credits, 2) . ", Reward: " . number_format($rewardBolts, 2) . ")."
+                );
+            }
 
-        $user->credits += $rewardBolts;
-        $user->save();
+            // Re-check existing claim within transaction
+            $alreadyClaimed = DiscordClaim::where('task_key', $taskKey)
+                ->where(function ($q) use ($lockedUser, $discordId) {
+                    $q->where('user_id', $lockedUser->id)->orWhere('discord_id', $discordId);
+                })
+                ->exists();
 
-        // RESET REQUIREMENTS ON CLAIM:
-        // When claiming invites, reset invited users so they cannot immediately claim higher tiers.
-        // When claiming boosts or messages, reset respective counters.
-        if ($task['category'] === 'invites') {
-            \Illuminate\Support\Facades\DB::table('discord_invited_users')
-                ->where('inviter_discord_id', $discordId)
-                ->delete();
-        } elseif ($task['category'] === 'boosts') {
-            \Illuminate\Support\Facades\DB::table('discord_stats')
-                ->where('discord_id', $discordId)
-                ->update(['boosts' => 0, 'updated_at' => now()]);
-        } elseif ($task['category'] === 'messages') {
-            \Illuminate\Support\Facades\DB::table('discord_stats')
-                ->where('discord_id', $discordId)
-                ->update(['messages' => 0, 'updated_at' => now()]);
-        }
+            if ($alreadyClaimed) {
+                throw new \Symfony\Component\HttpKernel\Exception\HttpException(400, 'You have already claimed the reward for this task.');
+            }
 
-        DiscordClaim::create([
-            'user_id' => $user->id,
-            'task_key' => $taskKey,
-            'discord_id' => $discordId,
-            'reward_bolts' => $rewardBolts,
-            'claimed_at' => now(),
-        ]);
+            $lockedUser->credits += $rewardBolts;
+            $lockedUser->save();
+            $user->credits = $lockedUser->credits;
 
-        CreditTransaction::create([
-            'user_id' => $user->id,
-            'amount' => $rewardBolts,
-            'type' => 'discord_reward',
-            'description' => "Earned {$rewardBolts} BOLTs for completing Discord Task: {$task['title']} ({$discordId})",
-            'reference_id' => $taskKey,
-        ]);
+            // RESET REQUIREMENTS ON CLAIM:
+            if ($task['category'] === 'invites') {
+                \Illuminate\Support\Facades\DB::table('discord_invited_users')
+                    ->where('inviter_discord_id', $discordId)
+                    ->delete();
+            } elseif ($task['category'] === 'boosts') {
+                \Illuminate\Support\Facades\DB::table('discord_stats')
+                    ->where('discord_id', $discordId)
+                    ->update(['boosts' => 0, 'updated_at' => now()]);
+            } elseif ($task['category'] === 'messages') {
+                \Illuminate\Support\Facades\DB::table('discord_stats')
+                    ->where('discord_id', $discordId)
+                    ->update(['messages' => 0, 'updated_at' => now()]);
+            }
+
+            DiscordClaim::create([
+                'user_id' => $user->id,
+                'task_key' => $taskKey,
+                'discord_id' => $discordId,
+                'reward_bolts' => $rewardBolts,
+                'claimed_at' => now(),
+            ]);
+
+            CreditTransaction::create([
+                'user_id' => $user->id,
+                'amount' => $rewardBolts,
+                'type' => 'discord_reward',
+                'description' => "Earned {$rewardBolts} BOLTs for completing Discord Task: {$task['title']} ({$discordId})",
+                'reference_id' => $taskKey,
+            ]);
+        });
 
         try {
             \Convoy\Facades\Activity::event('bolts:earn-claim')

@@ -11,8 +11,9 @@ Features:
   and resets balance to the highest legitimate reward (adding legitimate boosts).
 - Optional publication of the audit report to a selected staff channel.
 """
+from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 import discord
 from discord import app_commands
 from discord.ext import commands

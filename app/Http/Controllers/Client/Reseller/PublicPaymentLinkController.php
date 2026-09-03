@@ -128,12 +128,14 @@ class PublicPaymentLinkController extends Controller
             'should_create_server' => true,
             'template_uuid' => $template->uuid,
             'start_on_completion' => true,
+            'plan_tier' => 'paid',
         ];
 
         $server = null;
         try {
             /** @var Server $server */
             $server = $creationService->handle($serverData);
+            $server->plan_tier = 'paid';
             $server->description = "Plan: {$plan->name} | OS: {$template->name} (Reseller Partner VPS)";
             $server->expires_at = Carbon::now()->addDays(30);
             $server->save();
@@ -149,6 +151,7 @@ class PublicPaymentLinkController extends Controller
                 'uuid' => $uuid,
                 'uuid_short' => substr($uuid, 0, 8),
                 'status' => null,
+                'plan_tier' => 'paid',
                 'description' => "Plan: {$plan->name} | OS: {$template->name} (Reseller Partner VPS)",
                 'cpu' => (int) $plan->cpu,
                 'memory' => $memoryBytes,

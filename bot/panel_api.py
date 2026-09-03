@@ -7,6 +7,8 @@ All functions are async and use httpx under the hood.
 The bot sends:  Authorization: Bot <BOT_API_SECRET>
 """
 
+from __future__ import annotations
+
 import os
 import httpx
 from dotenv import load_dotenv
