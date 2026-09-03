@@ -38,6 +38,8 @@ class ServerRelocationService
         string $adminDiscordId,
         string $userDiscordId
     ): array {
+        @set_time_limit(240);
+
         // Pre-flight validation
         if ($oldServer->node_id === $targetNode->id) {
             throw new \InvalidArgumentException("Target node '{$targetNode->name}' is identical to the current hosting node.");

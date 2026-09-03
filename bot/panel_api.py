@@ -307,7 +307,7 @@ async def relocate_vm(server_id: str, target_node_id: int, admin_discord_id: str
             "target_node_id": int(target_node_id),
             "admin_discord_id": str(admin_discord_id).strip(),
             "user_discord_id": str(user_discord_id).strip(),
-        })
+        }, timeout=180.0)
     except Exception as e:
         print(f"[panel_api] relocate_vm failed: {e}")
         return {"ok": False, "error": str(e)}
