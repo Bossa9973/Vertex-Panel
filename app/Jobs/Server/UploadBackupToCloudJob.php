@@ -220,6 +220,37 @@ class UploadBackupToCloudJob implements ShouldQueue
 
             Log::info("[UploadBackup] Backup #{$this->backupId} ({$backup->file_name}) successfully uploaded to Drive at: {$drivePath}");
 
+            // --- Purge local backup archive from Proxmox node to reclaim disk space ---
+            $shouldDeleteLocal = config('backups.delete_local_after_upload', true);
+            if ($shouldDeleteLocal) {
+                try {
+                    if ($sftp->stat($remotePath)) {
+                        $sftp->delete($remotePath);
+                        Log::info("[UploadBackup] Deleted local archive '{$remotePath}' from node #{$node->id} via SFTP ({$fileSizeFormatted} freed).");
+                        if (app()->runningInConsole()) {
+                            echo "   🗑️  Cleaned up local archive on Proxmox node ({$fileSizeFormatted} freed).\n";
+                        }
+                    }
+
+                    // Also delete matching .log file if it exists
+                    $logPath = preg_replace('/\.(?:vma|tar)(?:\.[a-z0-9]+)?$/i', '.log', $remotePath);
+                    if ($logPath !== $remotePath && $sftp->stat($logPath)) {
+                        $sftp->delete($logPath);
+                    }
+                } catch (Throwable $delEx) {
+                    Log::warning("[UploadBackup] SFTP local deletion note for node #{$node->id}: " . $delEx->getMessage());
+                }
+
+                // Also notify Proxmox storage index to unregister the local volume
+                try {
+                    app(\Convoy\Repositories\Proxmox\Server\ProxmoxBackupRepository::class)
+                        ->setServer($server)
+                        ->delete($backup);
+                } catch (Throwable $pveEx) {
+                    // Non-critical if already unlinked via SFTP
+                }
+            }
+
         } catch (Throwable $e) {
             // Reset to pending so the next retry attempt can try again.
             // If all retries are exhausted, failed() will set cloud_status=failed.

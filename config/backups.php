@@ -14,4 +14,11 @@ return [
         'limit' => env('BACKUP_THROTTLE_LIMIT', 2),
         'period' => env('BACKUP_THROTTLE_PERIOD', 600),
     ],
+
+    // Automatically delete the local .vma.zst archive from the Proxmox node's disk
+    // via SFTP immediately after successfully streaming to Google Drive.
+    'delete_local_after_upload' => env('BACKUP_DELETE_LOCAL_AFTER_UPLOAD', true),
+
+    // Number of backups to retain per server on the hypervisor during automated backup runs
+    'retention' => env('BACKUP_RETENTION', 1),
 ];

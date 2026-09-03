@@ -320,6 +320,15 @@ class ServerRelocationService
                 Log::warning("Old server Proxmox deletion note: " . $pveDeleteEx->getMessage());
             }
 
+            // Purge temporary relocation backup from source node if one was created
+            if (!empty($backupModel)) {
+                try {
+                    app(\Convoy\Services\Backups\BackupDeletionService::class)->handle($backupModel);
+                } catch (\Throwable $bdelEx) {
+                    Log::warning("Relocation backup purge note: " . $bdelEx->getMessage());
+                }
+            }
+
             // Detach IP addresses and delete DB record immediately
             $oldServer->addresses()->update(['server_id' => null]);
             $oldServer->delete();

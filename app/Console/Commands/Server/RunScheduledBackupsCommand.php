@@ -94,7 +94,28 @@ class RunScheduledBackupsCommand extends Command
         foreach ($servers as $server) {
             $this->line("-> Processing server #{$server->id} ({$server->hostname}, tier: {$server->plan_tier})...");
 
-            $backup = null;
+            // Proactively prune older unlocked backups if retention limit reached to prevent disk space stacking
+            if ($prune) {
+                $maxAllowed = max(1, (int) ($server->backup_limit ?: config('backups.retention', 1)));
+                $unlockedBackups = $server->backups()
+                    ->where('is_locked', false)
+                    ->orderBy('id', 'asc')
+                    ->get();
+
+                if ($unlockedBackups->count() >= $maxAllowed) {
+                    $excessCount = ($unlockedBackups->count() - $maxAllowed) + 1;
+                    $toPrune = $unlockedBackups->take($excessCount);
+                    foreach ($toPrune as $old) {
+                        $this->line("   [PRUNE] Rotating oldest backup #{$old->id} ({$old->file_name}) to reclaim space...");
+                        try {
+                            $this->backupDeletionService->handle($old);
+                        } catch (Throwable $pe) {
+                            $this->warn("   [WARN] Pruning old backup note: " . $pe->getMessage());
+                        }
+                    }
+                }
+            }
+
             try {
                 $backup = $this->backupCreationService->create(
                     server         : $server,
