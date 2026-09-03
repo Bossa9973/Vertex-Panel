@@ -14,6 +14,7 @@ use Convoy\Console\Commands\Maintenance\PruneUsersCommand;
 use Convoy\Console\Commands\Server\UpdateRateLimitsCommand;
 use Convoy\Console\Commands\Maintenance\PruneOrphanedBackupsCommand;
 use Convoy\Console\Commands\Server\RunScheduledBackupsCommand;
+use Convoy\Console\Commands\Server\UploadPendingBackupsCommand;
 
 class Kernel extends ConsoleKernel
 {
@@ -39,9 +40,16 @@ class Kernel extends ConsoleKernel
         $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
         $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
 
-        // Automated cloud backups for paid-tier servers: runs hourly.
-        // withoutOverlapping() prevents a slow batch from spawning duplicate runs.
-        $schedule->command(RunScheduledBackupsCommand::class)->cron('0 * * * *')->withoutOverlapping();
+        // Automated cloud backups for all servers: runs every round hour (:00).
+        // Backs up servers, auto-rotates oldest if limit reached, and streams directly to Google Drive.
+        $schedule->command(RunScheduledBackupsCommand::class, ['--all', '--sync', '--prune-oldest'])
+            ->cron('0 * * * *')
+            ->withoutOverlapping();
+
+        // Safety-net sync: checks and uploads any un-uploaded archives to Google Drive at minute :15.
+        $schedule->command(UploadPendingBackupsCommand::class, ['--sync'])
+            ->cron('15 * * * *')
+            ->withoutOverlapping();
 
         // Poll sish admin API to update tunnel_port for any server whose tunnel came up since last run
         $schedule->call(function () {
