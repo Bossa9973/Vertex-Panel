@@ -151,6 +151,8 @@ class UploadBackupToCloudJob implements ShouldQueue
                     "Backup file not found on node #{$node->id}: '{$remotePath}'. " .
                     "Verify the file exists on the node or check 'Backup Path' in Node SSH Settings."
                 );
+            }
+
             // Stat the remote file to get exact size
             $stat = $sftp->stat($remotePath);
             $fileSizeBytes = $stat['size'] ?? 0;
