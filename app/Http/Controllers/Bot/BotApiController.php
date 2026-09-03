@@ -2146,32 +2146,71 @@ class BotApiController extends Controller
             'messages_300' => ['category' => 'messages','target' => 300,'reward' => 3000.0,'title' => '300 Messages Sent'],
         ];
 
-        // 1. Gather candidate user IDs
-        $allClaimUsers = DB::table('discord_claims')
+        // 1. Gather candidate user IDs efficiently using targeted criteria
+        $duplicateClaimUsers = DB::table('discord_claims')
             ->select('user_id')
+            ->groupBy('user_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->pluck('user_id')
+            ->toArray();
+
+        $promoUsers = DB::table('credit_transactions')
+            ->select('user_id')
+            ->where(function ($q) {
+                $q->whereIn('type', ['bonus', 'admin_deposit', 'topup'])
+                  ->orWhere('reference_id', 'LIKE', 'LMN-%')
+                  ->orWhere('reference_id', 'LIKE', 'ADMIN-%')
+                  ->orWhere('description', 'LIKE', '%promo%');
+            })
             ->distinct()
             ->pluck('user_id')
             ->toArray();
 
-        $usersWithTx = DB::table('credit_transactions')
+        $rewardUsers = DB::table('credit_transactions')
             ->select('user_id')
+            ->where('type', 'discord_reward')
+            ->orWhere('description', 'LIKE', '%discord task%')
             ->distinct()
             ->pluck('user_id')
             ->toArray();
 
-        $candidateUserIds = array_unique(array_merge($allClaimUsers, $usersWithTx));
+        $promoRewardCollisionUsers = array_values(array_intersect($promoUsers, $rewardUsers));
+
+        $capViolationUsers = User::where('credits', '>', 8000)->pluck('id')->toArray();
+
+        $candidateUserIds = array_unique(array_merge($duplicateClaimUsers, $promoRewardCollisionUsers, $capViolationUsers));
+
+        if (empty($candidateUserIds)) {
+            return response()->json([
+                'ok'      => true,
+                'count'   => 0,
+                'abusers' => [],
+            ]);
+        }
+
+        // Bulk pre-load all users, claims, and transactions for candidate IDs (3 fast queries total)
+        $users = User::with(['servers.node'])->whereIn('id', $candidateUserIds)->get()->keyBy('id');
+        $allClaims = DB::table('discord_claims')
+            ->whereIn('user_id', $candidateUserIds)
+            ->get()
+            ->groupBy('user_id');
+        $allTxs = DB::table('credit_transactions')
+            ->whereIn('user_id', $candidateUserIds)
+            ->where('amount', '>', 0)
+            ->get()
+            ->groupBy('user_id');
+
         $abusers = [];
 
         foreach ($candidateUserIds as $userId) {
             /** @var User|null $user */
-            $user = User::with(['servers.node'])->find($userId);
+            $user = $users->get($userId);
             if (!$user) {
                 continue;
             }
 
-            $claims = DB::table('discord_claims')
-                ->where('user_id', $user->id)
-                ->get();
+            $claims = $allClaims->get($user->id, collect());
+            $txs = $allTxs->get($user->id, collect());
 
             $reasons = [];
 
@@ -2208,10 +2247,6 @@ class BotApiController extends Controller
             }
 
             // B) Check staff promo + dashboard claim collision
-            $txs = DB::table('credit_transactions')
-                ->where('user_id', $user->id)
-                ->where('amount', '>', 0)
-                ->get();
 
             $promoTxs = $txs->filter(function ($t) {
                 return in_array($t->type, ['bonus', 'admin_deposit', 'topup'])

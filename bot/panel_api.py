@@ -35,31 +35,45 @@ def _get_client() -> httpx.AsyncClient:
 async def _post(path: str, payload: dict, timeout: float = 15.0) -> dict:
     """POST to the panel bot API. Returns the JSON response or raises on error."""
     client = _get_client()
-    r = await client.post(f"{BASE_URL}{path}", json=payload, headers=_headers(), timeout=timeout)
+    try:
+        r = await client.post(f"{BASE_URL}{path}", json=payload, headers=_headers(), timeout=timeout)
+    except httpx.TimeoutException:
+        raise Exception(f"Connection to {BASE_URL}{path} timed out after {timeout}s (check PANEL_URL in bot/.env)")
+    except httpx.ConnectError as ce:
+        raise Exception(f"Cannot connect to panel at {BASE_URL} ({ce or 'Connection refused'})")
+    except Exception as ex:
+        raise Exception(f"POST to {path} failed: {type(ex).__name__}: {ex or repr(ex)}")
+
     if r.status_code >= 400:
+        err_msg = f"HTTP {r.status_code}"
         try:
             body = r.json()
-            err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}"
-            raise Exception(err_msg)
-        except Exception as e:
-            if not str(e).startswith("HTTP ") and "error" not in str(e).lower():
-                raise e
-            raise Exception(f"HTTP {r.status_code}: {r.text}")
+            err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}: {r.text[:200]}"
+        except Exception:
+            err_msg = f"HTTP {r.status_code}: {r.text[:200]}"
+        raise Exception(err_msg)
     return r.json()
 
 async def _get(path: str, timeout: float = 15.0) -> dict:
     """GET from the panel bot API. Returns the JSON response or raises on error."""
     client = _get_client()
-    r = await client.get(f"{BASE_URL}{path}", headers=_headers(), timeout=timeout)
+    try:
+        r = await client.get(f"{BASE_URL}{path}", headers=_headers(), timeout=timeout)
+    except httpx.TimeoutException:
+        raise Exception(f"Connection to {BASE_URL}{path} timed out after {timeout}s (check PANEL_URL in bot/.env)")
+    except httpx.ConnectError as ce:
+        raise Exception(f"Cannot connect to panel at {BASE_URL} ({ce or 'Connection refused'})")
+    except Exception as ex:
+        raise Exception(f"GET from {path} failed: {type(ex).__name__}: {ex or repr(ex)}")
+
     if r.status_code >= 400:
+        err_msg = f"HTTP {r.status_code}"
         try:
             body = r.json()
-            err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}"
-            raise Exception(err_msg)
-        except Exception as e:
-            if not str(e).startswith("HTTP ") and "error" not in str(e).lower():
-                raise e
-            raise Exception(f"HTTP {r.status_code}: {r.text}")
+            err_msg = body.get("error") or body.get("message") or f"HTTP {r.status_code}: {r.text[:200]}"
+        except Exception:
+            err_msg = f"HTTP {r.status_code}: {r.text[:200]}"
+        raise Exception(err_msg)
     return r.json()
 
 # ─── Stats tracking ───────────────────────────────────────────────────────────
