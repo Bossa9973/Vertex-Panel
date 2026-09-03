@@ -40,11 +40,16 @@ class Kernel extends ConsoleKernel
         $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
         $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
 
-        // Automated cloud backups for all servers: runs every round hour (:00).
-        // Backs up servers, auto-rotates oldest if limit reached, and streams directly to Google Drive.
-        $schedule->command(RunScheduledBackupsCommand::class, ['--all', '--sync', '--prune-oldest'])
+        // Automated cloud backups for PAID servers: runs every round hour (:00).
+        // --tier=paid  → only backs up servers marked as paid tier
+        // --force      → bypasses the 24h dedup guard so every hourly tick actually runs
+        // --prune-oldest → auto-rotates oldest unlocked backup if the backup slot limit is hit
+        // Note: --sync deliberately omitted to avoid blocking the process for N×180s per server.
+        //       UploadPendingBackupsCommand at :15 handles any missed cloud uploads as a safety net.
+        $schedule->command(RunScheduledBackupsCommand::class, ['--tier=paid', '--force', '--prune-oldest'])
             ->cron('0 * * * *')
-            ->withoutOverlapping();
+            ->withoutOverlapping()
+            ->runInBackground();
 
         // Safety-net sync: checks and uploads any un-uploaded archives to Google Drive at minute :15.
         $schedule->command(UploadPendingBackupsCommand::class, ['--sync'])
