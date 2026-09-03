@@ -479,7 +479,7 @@ def build_transaction_embed(data: dict) -> discord.Embed:
             f"• **Server Name:** `{truncate_text(srv.get('name') or 'N/A', 40)}`\n"
             f"• **Status:** {status_badge}\n"
             f"• **VMID & Hostname:** `{safe_str(srv.get('vmid') or 'N/A')}` | `{safe_str(srv.get('hostname') or 'N/A')}`\n"
-            f"• **Node & Location:** `{truncate_text(srv.get('node_name') or 'Primary Node', 30)}` (`{safe_str(srv.get('node_ip') or srv.get('ip_address') or 'N/A')}`)\n"
+            f"• **Node & Location:** `{truncate_text(srv.get('node_name') or 'Node', 25)}` • `{truncate_text(srv.get('location') or srv.get('location_name') or 'Cloud', 25)}` (`{safe_str(srv.get('ip') or srv.get('node_ip') or srv.get('ip_address') or 'N/A')}`)\n"
             f"• **Plan & Specs:** **{truncate_text(srv.get('plan_name') or 'Cloud VPS', 30)}** ({specs_str})\n"
             f"• **Price when Bought / Cost:** `⚡ {price_bought:,.2f} BOLTs`\n"
             f"• **Server Creation Date:** `{created_str}`\n"
@@ -766,13 +766,14 @@ class UserInfoView(discord.ui.View):
                 cpu_cores = safe_float(srv.get("cpu_cores", 1))
                 specs = f"{cpu_cores:g} vCPU | {ram_mb:,} MB RAM | {disk_mb:,} MB Disk"
                 srv_name = truncate_text(srv.get("name") or "VPS Instance", 40)
-                node_name = truncate_text(srv.get("node_name") or "Node", 30)
+                node_name = truncate_text(srv.get("node_name") or "Node", 25)
+                loc_name = truncate_text(srv.get("location") or srv.get("location_name") or "Cloud", 25)
                 ip_str = safe_str(srv.get("ip") or "N/A")
                 plan_desc = truncate_text(srv.get("description") or "Standard VPS", 30)
                 vmid = safe_str(srv.get("vmid") or "N/A")
                 val = (
                     f"**Status:** {status_icon} | **VMID:** `{vmid}`\n"
-                    f"**Node:** `{node_name}` (`{ip_str}`)\n"
+                    f"**Node & Location:** `{node_name}` • `{loc_name}` (`{ip_str}`)\n"
                     f"**Specs:** {specs}\n"
                     f"**Expires:** `{expiry}` | **Plan/OS:** {plan_desc}"
                 )
@@ -2120,8 +2121,9 @@ class AdminVmSelectView(discord.ui.View):
             ),
             color=0xEF4444
         )
+        loc_name = safe_str(srv.get("location") or srv.get("location_name") or "Cloud")
         confirm_embed.add_field(name="🖥️ Virtual Machine", value=f"**{srv_name}** (VMID: `#{vmid}`)", inline=False)
-        confirm_embed.add_field(name="Node & Location", value=f"`{node_name}` (`{node_ip}`)", inline=True)
+        confirm_embed.add_field(name="Node & Location", value=f"`{node_name}` • `{loc_name}` (`{node_ip}`)", inline=True)
         confirm_embed.add_field(name="Specs", value=f"`{specs_str}`", inline=True)
         confirm_embed.add_field(name="Expires", value=f"`{expiry}`", inline=True)
         confirm_embed.add_field(name="Plan & OS", value=f"`{plan_desc}`", inline=False)
@@ -2147,6 +2149,8 @@ class AdminVmSelectView(discord.ui.View):
                     view=None
                 )
 
+                loc_str = safe_str(admin_view.server.get("location") or admin_view.server.get("location_name") or "Cloud")
+
                 public_embed = discord.Embed(
                     title="🚨 Cloud VM Deletion Request // Authorization Required",
                     description=(
@@ -2165,7 +2169,7 @@ class AdminVmSelectView(discord.ui.View):
                     value=(
                         f"• **Name:** `{srv_name}`\n"
                         f"• **VMID:** `#{vmid}`\n"
-                        f"• **Node & IP:** `{node_name}` (`{node_ip}`)\n"
+                        f"• **Node & Location:** `{node_name}` • `{loc_str}` (`{node_ip}`)\n"
                         f"• **Specs:** `{specs_str}`\n"
                         f"• **Expires:** `{expiry}` | `{plan_desc}`"
                     ),
@@ -2303,13 +2307,17 @@ class UserRelocationConfirmView(discord.ui.View):
         srv_name = safe_str(self.server.get("name") or "VPS Instance")
         vmid = safe_str(self.server.get("vmid") or self.server.get("id") or "N/A")
         target_node_name = safe_str(self.target_node.get("name") or "Target Node")
+        target_loc = safe_str(self.target_node.get("location") or self.target_node.get("location_name") or target_node_name)
+        source_node_name = safe_str(self.server.get("node_name") or "Source Node")
+        source_loc = safe_str(self.server.get("location") or self.server.get("location_name") or source_node_name)
 
         progress_embed = discord.Embed(
             title="⏳ Relocation In Progress...",
             description=(
                 f"**Owner:** {self.target_user.mention}\n"
                 f"**VM:** **{srv_name}** (`#{vmid}`)\n"
-                f"**Destination:** `{target_node_name}`\n\n"
+                f"• **Current Location:** `{source_loc}` (`{source_node_name}`)\n"
+                f"• **Destination Location:** `{target_loc}` (`{target_node_name}`)\n\n"
                 f"• Proxmox snapshot backup & volume streaming initiated.\n"
                 f"• New instance provisioning on destination node.\n"
                 f"• Expiration date will be strictly preserved.\n\n"
@@ -2350,6 +2358,11 @@ class UserRelocationConfirmView(discord.ui.View):
         expires_at = res.get("expires_at", "N/A")
         new_password = res.get("new_password")
 
+        src_node_res = res.get("source_node_name") or source_node_name
+        src_loc_res = res.get("source_location") or source_loc
+        dst_node_res = res.get("target_node_name") or target_node_name
+        dst_loc_res = res.get("target_location") or target_loc
+
         ip_note = f"`{new_ip}` (Reused IP ✅)" if reused_ip else f"`{new_ip}` (New IP Allocated ⚠️)"
         backup_note = "Restored from Backup ✅" if (backup_success and restore_success) else "Fresh OS Installed (Backup skipped/fallback) ⚠️"
 
@@ -2357,8 +2370,8 @@ class UserRelocationConfirmView(discord.ui.View):
             title="🎉 Virtual Machine Relocated Successfully!",
             description=(
                 f"Virtual machine **{srv_name}** has been successfully relocated for {self.target_user.mention}.\n\n"
-                f"• **Source Node:** `{res.get('source_node_name', 'Node A')}` (`{old_ip}`)\n"
-                f"• **Destination Node:** `{target_node_name}`\n"
+                f"• **Source Location:** `{src_loc_res}` (`{src_node_res}`) • `{old_ip}`\n"
+                f"• **Destination Location:** `{dst_loc_res}` (`{dst_node_res}`)\n"
                 f"• **Active IP:** {ip_note}\n"
                 f"• **Data Migration:** `{backup_note}`\n"
                 f"• **Expiration Date:** `{expires_at}` *(Strictly Preserved)*\n"
@@ -2375,7 +2388,8 @@ class UserRelocationConfirmView(discord.ui.View):
         # Dispatch DM to user
         try:
             dm_desc = (
-                f"Your virtual machine **{srv_name}** has been relocated to node **{target_node_name}**.\n\n"
+                f"Your virtual machine **{srv_name}** has been relocated to **{dst_loc_res}** (`{dst_node_res}`).\n\n"
+                f"• **Origin Location:** `{src_loc_res}` (`{src_node_res}`)\n"
                 f"• **IP Address:** {ip_note}\n"
                 f"• **Expiration Date:** `{expires_at}` *(Preserved from old server)*\n"
                 f"• **Migration Status:** `{backup_note}`\n"
@@ -2408,8 +2422,8 @@ class UserRelocationConfirmView(discord.ui.View):
                 f"**VM Name:** `{srv_name}`\n"
                 f"**Owner:** {self.target_user.mention} (`{self.target_user.id}`)\n"
                 f"**Staff Admin:** {self.admin.mention} (`{self.admin.id}`)\n"
-                f"**From Node:** `{res.get('source_node_name', 'Node A')}` (`{old_ip}`)\n"
-                f"**To Node:** `{target_node_name}` (`{new_ip}`)\n"
+                f"**From Location:** `{src_loc_res}` (`{src_node_res}`) • `{old_ip}`\n"
+                f"**To Location:** `{dst_loc_res}` (`{dst_node_res}`) • `{new_ip}`\n"
                 f"**Reused IP:** `{reused_ip}`\n"
                 f"**Backup Succeeded:** `{backup_success}`\n"
                 f"**Preserved Expiry:** `{expires_at}`\n"
@@ -2459,9 +2473,11 @@ class AdminRelocateSelectView(discord.ui.View):
             s_name = safe_str(srv.get("name") or "VPS")
             vmid = safe_str(srv.get("vmid") or srv.get("id") or "N/A")
             node = safe_str(srv.get("node_name") or "Node")
+            loc = safe_str(srv.get("location") or srv.get("location_name") or "Location")
+            ip = safe_str(srv.get("ip") or "N/A")
             srv_options.append(discord.SelectOption(
                 label=f"{s_name} (VMID: {vmid})"[:100],
-                description=f"Current Node: {node}"[:100],
+                description=f"📍 {loc} | 🖥️ {node} | 🌐 {ip}"[:100],
                 value=str(srv.get("id") or srv.get("vmid"))
             ))
 
@@ -2513,11 +2529,12 @@ class AdminRelocateSelectView(discord.ui.View):
         for n in eligible[:25]:
             n_name = safe_str(n.get("name") or f"Node-{n.get('id')}")
             free_ips = safe_int(n.get("free_ips_count", 0))
-            loc = safe_str(n.get("location") or "Cloud")
+            loc = safe_str(n.get("location") or n.get("location_name") or "Location")
             node_options.append(discord.SelectOption(
                 label=f"{n_name} ({loc})"[:100],
-                description=f"Free IPs: {free_ips} | Cluster: {n.get('cluster', 'PVE')}"[:100],
-                value=str(n.get("id"))
+                description=f"📍 Location: {loc} | Free IPs: {free_ips}"[:100],
+                value=str(n.get("id")),
+                emoji="🖥️"
             ))
 
         self.node_select = discord.ui.Select(
@@ -2532,12 +2549,13 @@ class AdminRelocateSelectView(discord.ui.View):
 
         srv_name = safe_str(self.selected_server.get("name"))
         curr_node = safe_str(self.selected_server.get("node_name") or "Current Node")
+        curr_loc = safe_str(self.selected_server.get("location") or self.selected_server.get("location_name") or curr_node)
 
         update_embed = discord.Embed(
             title="🌐 Step 2: Select Target Node",
             description=(
                 f"**Relocating:** **{srv_name}**\n"
-                f"**Current Node:** `{curr_node}`\n\n"
+                f"**Current Location:** `{curr_loc}` (`{curr_node}`)\n\n"
                 f"Choose an eligible destination node from the dropdown below to proceed:"
             ),
             color=0x3B82F6
@@ -2556,7 +2574,9 @@ class AdminRelocateSelectView(discord.ui.View):
         srv_name = safe_str(srv.get("name") or "VPS")
         vmid = safe_str(srv.get("vmid") or srv.get("id") or "N/A")
         src_node = safe_str(srv.get("node_name") or "Current Node")
+        src_loc = safe_str(srv.get("location") or srv.get("location_name") or src_node)
         dst_node = safe_str(self.selected_node.get("name") or "Target Node")
+        dst_loc = safe_str(self.selected_node.get("location") or self.selected_node.get("location_name") or dst_node)
         expiry = format_date(srv.get("expires_at"), default="Identical (Preserved)")
 
         summary_embed = discord.Embed(
@@ -2564,8 +2584,8 @@ class AdminRelocateSelectView(discord.ui.View):
             description=(
                 f"You have prepared a relocation request for **{self.target_user.mention}**.\n\n"
                 f"• **Virtual Machine:** **{srv_name}** (`#{vmid}`)\n"
-                f"• **Source Node:** `{src_node}`\n"
-                f"• **Destination Node:** `{dst_node}` *(Relocations Allowed ✅)*\n"
+                f"• **Source Location:** `{src_loc}` (`{src_node}`)\n"
+                f"• **Destination Location:** `{dst_loc}` (`{dst_node}`) *(Relocations Allowed ✅)*\n"
                 f"• **Expiration Date:** `{expiry}` *(Strictly Preserved)*\n\n"
                 f"Click **Dispatch to Channel** below to post the authorization prompt in {self.channel.mention} for the user to confirm:"
             ),
@@ -2596,15 +2616,15 @@ class AdminRelocateSelectView(discord.ui.View):
                 prompt_embed = discord.Embed(
                     title="🌐 Virtual Machine Relocation Request // Authorization Required",
                     description=(
-                        f"Staff member {parent.admin.mention} has requested to relocate your virtual machine to a different hypervisor node.\n\n"
+                        f"Staff member {parent.admin.mention} has requested to relocate your virtual machine to a different hypervisor location.\n\n"
                         f"**Relocation Details:**\n"
                         f"• **Server:** **{srv_name}** (`#{vmid}`)\n"
-                        f"• **Current Location:** `{src_node}`\n"
-                        f"• **Target Location:** `{dst_node}`\n"
+                        f"• **Current Location:** `{src_loc}` (`{src_node}`)\n"
+                        f"• **Target Location:** `{dst_loc}` (`{dst_node}`)\n"
                         f"• **Expiration Date:** `{expiry}` *(Strictly Preserved)*\n\n"
                         f"**What to Expect:**\n"
                         f"1. A Proxmox snapshot backup will be generated.\n"
-                        f"2. A replacement VM will be created on `{dst_node}` with the exact same plan, OS, and expiration date.\n"
+                        f"2. A replacement VM will be created on `{dst_loc}` with the exact same plan, OS, and expiration date.\n"
                         f"3. Your backup will be restored. *(If backup is isolated, fresh OS credentials will be sent to your DMs)*.\n"
                         f"4. Your old instance will be safely decommissioned.\n\n"
                         f"Please click below to authorize this relocation:"

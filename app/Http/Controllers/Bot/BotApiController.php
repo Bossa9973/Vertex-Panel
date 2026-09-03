@@ -1015,7 +1015,7 @@ class BotApiController extends Controller
         // Owned Active Servers
         $ownedServers = collect();
         if ($user) {
-            $servers = \Convoy\Models\Server::with('node')
+            $servers = \Convoy\Models\Server::with(['node.location', 'addresses'])
                 ->where('user_id', $user->id)
                 ->orderBy('id', 'desc')
                 ->get();
@@ -1029,21 +1029,32 @@ class BotApiController extends Controller
                 $ramMb = $srv->memory > 100000 ? (int) round($srv->memory / (1024 * 1024)) : (int) $srv->memory;
                 $diskMb = $srv->disk > 100000 ? (int) round($srv->disk / (1024 * 1024)) : (int) $srv->disk;
 
+                $node = $srv->node;
+                $location = $node?->location;
+                $locationName = $location ? ($location->description ?: $location->short_code) : ($node?->name ?? 'Default Location');
+                $locationCode = $location ? strtoupper($location->short_code) : 'N/A';
+                $realIp = $srv->addresses->first()?->address ?? ($node?->fqdn ?? 'N/A');
+
                 return [
-                    'id'          => $srv->id,
-                    'uuid_short'  => $srv->uuid_short,
-                    'vmid'        => $srv->vmid,
-                    'name'        => $srv->name,
-                    'hostname'    => $srv->hostname,
-                    'status'      => $status, // 'in_use', 'installing', 'suspended', 'expired', 'deleting'
-                    'node_name'   => $srv->node?->name ?? 'Primary Node',
-                    'ip'          => $srv->node?->fqdn ?? 'N/A',
-                    'memory_mb'   => $ramMb,
-                    'cpu_cores'   => (float) $srv->cpu,
-                    'disk_mb'     => $diskMb,
-                    'description' => $srv->description,
-                    'expires_at'  => $srv->expires_at ? Carbon::parse($srv->expires_at)->toIso8601String() : null,
-                    'created_at'  => $srv->created_at ? Carbon::parse($srv->created_at)->toIso8601String() : null,
+                    'id'            => $srv->id,
+                    'uuid_short'    => $srv->uuid_short,
+                    'vmid'          => $srv->vmid,
+                    'name'          => $srv->name,
+                    'hostname'      => $srv->hostname,
+                    'status'        => $status, // 'in_use', 'installing', 'suspended', 'expired', 'deleting'
+                    'node_id'       => $srv->node_id,
+                    'node_name'     => $node?->name ?? 'Primary Node',
+                    'location'      => $locationName,
+                    'location_name' => $locationName,
+                    'location_code' => $locationCode,
+                    'location_id'   => $node?->location_id,
+                    'ip'            => $realIp,
+                    'memory_mb'     => $ramMb,
+                    'cpu_cores'     => (float) $srv->cpu,
+                    'disk_mb'       => $diskMb,
+                    'description'   => $srv->description,
+                    'expires_at'    => $srv->expires_at ? Carbon::parse($srv->expires_at)->toIso8601String() : null,
+                    'created_at'    => $srv->created_at ? Carbon::parse($srv->created_at)->toIso8601String() : null,
                 ];
             });
         }
@@ -2773,6 +2784,7 @@ class BotApiController extends Controller
         $includeAll = $request->boolean('include_all', false);
 
         $nodes = \Convoy\Models\Node::query()
+            ->with(['location'])
             ->when(!$includeAll, function ($q) {
                 $q->where(function ($sub) {
                     $sub->where('allow_relocation', true)
@@ -2790,15 +2802,22 @@ class BotApiController extends Controller
                     })
                     ->count();
 
+                $loc = $node->location;
+                $locationDesc = $loc ? ($loc->description ?: $loc->short_code) : ($node->name ?? 'Default Location');
+                $locationCode = $loc ? strtoupper($loc->short_code) : 'N/A';
+
                 return [
-                    'id'               => $node->id,
-                    'name'             => $node->name,
-                    'fqdn'             => $node->fqdn,
-                    'cluster'          => $node->cluster,
-                    'allow_relocation' => (bool) ($node->allow_relocation ?? true),
-                    'free_ips_count'   => $freeIps,
-                    'servers_count'    => (int) $node->servers_count,
-                    'location'         => $node->location ? $node->location->description : $node->name,
+                    'id'                    => $node->id,
+                    'name'                  => $node->name,
+                    'fqdn'                  => $node->fqdn,
+                    'cluster'               => $node->cluster,
+                    'allow_relocation'      => (bool) ($node->allow_relocation ?? true),
+                    'free_ips_count'        => $freeIps,
+                    'servers_count'         => (int) $node->servers_count,
+                    'location'              => $locationDesc,
+                    'location_name'         => $locationDesc,
+                    'location_code'         => $locationCode,
+                    'location_id'           => $node->location_id,
                 ];
             });
 
@@ -2827,7 +2846,7 @@ class BotApiController extends Controller
         $userDiscordId    = trim((string) $validated['user_discord_id']);
 
         /** @var \Convoy\Models\Server|null $server */
-        $server = \Convoy\Models\Server::with(['user', 'node', 'addresses'])
+        $server = \Convoy\Models\Server::with(['user', 'node.location', 'addresses'])
             ->where(function ($q) use ($serverIdentifier) {
                 if (is_numeric($serverIdentifier)) {
                     $q->where('id', (int) $serverIdentifier)

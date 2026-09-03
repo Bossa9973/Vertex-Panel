@@ -55,7 +55,8 @@ class ServerRelocationService
             throw new \RuntimeException("Server #{$oldServer->id} has no valid owner.");
         }
 
-        $sourceNode = $oldServer->node;
+        $sourceNode = $oldServer->node?->loadMissing('location');
+        $targetNode = $targetNode->loadMissing('location');
 
         // Capture original server metadata
         // CRITICAL: Original expires_at must be strictly preserved under ALL circumstances
@@ -354,6 +355,9 @@ class ServerRelocationService
                 ->log();
         } catch (\Throwable $e) {}
 
+        $sourceLocation = $sourceNode?->location ? ($sourceNode->location->description ?: $sourceNode->location->short_code) : ($sourceNode?->name ?? 'Source Node');
+        $targetLocation = $targetNode->location ? ($targetNode->location->description ?: $targetNode->location->short_code) : $targetNode->name;
+
         return [
             'ok'               => true,
             'relocation_id'    => $relocationRecord->id,
@@ -362,6 +366,8 @@ class ServerRelocationService
             'new_server_id'    => $newServer->id,
             'source_node_name' => $sourceNode?->name ?? 'Node A',
             'target_node_name' => $targetNode->name,
+            'source_location'  => $sourceLocation,
+            'target_location'  => $targetLocation,
             'old_ip'           => $oldIp,
             'new_ip'           => $newIp,
             'reused_ip'        => $reusedIp,
