@@ -31,6 +31,11 @@ class Template extends Model implements Sortable
         return $this->belongsTo(TemplateGroup::class, 'template_group_id');
     }
 
+    public function templateGroup(): BelongsTo
+    {
+        return $this->group();
+    }
+
     public function buildSortQuery(): Builder
     {
         return static::query()->where('template_group_id', $this->template_group_id);

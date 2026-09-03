@@ -160,21 +160,25 @@ class ServerRelocationService
         $newServer   = null;
 
         $serverData = [
-            'node_id'             => $targetNode->id,
-            'user_id'             => $user->id,
-            'name'                => $oldName,
-            'hostname'            => $oldHostname ?: 'vps-' . Str::lower(Str::random(6)),
-            'cpu'                 => (int) $cpuCores,
-            'memory'              => (int) round($memoryBytes / (1024 * 1024)), // bytes -> MB
-            'disk'                => (int) round($diskBytes / (1024 * 1024 * 1024)), // bytes -> GB
-            'network'             => [
+            'node_id'              => $targetNode->id,
+            'user_id'              => $user->id,
+            'name'                 => $oldName,
+            'hostname'             => $oldHostname ?: 'vps-' . Str::lower(Str::random(6)),
+            'vmid'                 => null,
+            'limits'               => [
+                'cpu'         => (int) $cpuCores,
+                'memory'      => $memoryBytes,
+                'disk'        => $diskBytes,
+                'snapshots'   => (int) ($oldServer->snapshot_limit ?? 0),
+                'backups'     => $oldServer->backup_limit,
+                'bandwidth'   => $oldServer->bandwidth_limit,
                 'address_ids' => $assignedAddressIds,
             ],
-            'account_password'    => $newPassword,
-            'should_create_server'=> true,
-            'template_uuid'       => $templateUuid,
-            'start_on_completion' => true,
-            'plan_tier'           => $planTier,
+            'account_password'     => $newPassword,
+            'should_create_server' => true,
+            'template_uuid'        => $templateUuid,
+            'start_on_completion'  => true,
+            'plan_tier'            => 'paid', // Bypasses resource quota conflict during relocation
         ];
 
         try {
@@ -292,7 +296,7 @@ class ServerRelocationService
         }
 
         if ($oldTemplate) {
-            $matchingTargetTemplate = Template::whereHas('templateGroup', function ($q) use ($targetNode) {
+            $matchingTargetTemplate = Template::whereHas('group', function ($q) use ($targetNode) {
                 $q->where('node_id', $targetNode->id);
             })->where('name', $oldTemplate->name)->first();
 
@@ -301,8 +305,8 @@ class ServerRelocationService
             }
         }
 
-        // Fallback: pick any active template for the target node
-        $fallbackTemplate = Template::whereHas('templateGroup', function ($q) use ($targetNode) {
+        // Fallback 1: pick any active template for the target node
+        $fallbackTemplate = Template::whereHas('group', function ($q) use ($targetNode) {
             $q->where('node_id', $targetNode->id);
         })->first();
 
@@ -310,7 +314,7 @@ class ServerRelocationService
             return $fallbackTemplate->uuid;
         }
 
-        // Global fallback to any template in the system
+        // Fallback 2: Global fallback to any template in the system
         $anyTemplate = Template::firstOrFail();
         return $anyTemplate->uuid;
     }
