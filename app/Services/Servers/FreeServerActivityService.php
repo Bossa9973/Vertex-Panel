@@ -141,17 +141,26 @@ class FreeServerActivityService
             throw new Exception('Invalid or tampered security signature.');
         }
 
-        if ($renewal->isExpired()) {
-            $renewal->update(['status' => ServerActivityRenewal::STATUS_EXPIRED]);
-            throw new Exception('This verification link has expired (15-minute window exceeded). Please start a new link.');
+        if ($renewal->status === ServerActivityRenewal::STATUS_CLAIMED) {
+            throw new Exception('Security Error: This verification link has already been used and claimed. Links are strictly single-use.');
         }
 
         if ($renewal->status === ServerActivityRenewal::STATUS_BYPASSED_REJECTED) {
-            throw new Exception('Anti-Bypass Warning: This verification was previously flagged and burned for bypasser tool usage.');
+            throw new Exception('Security Error: This verification link was flagged and burned. Please start a new link from your dashboard.');
         }
 
-        // If already verified or claimed, return code cleanly
-        if (in_array($renewal->status, [ServerActivityRenewal::STATUS_VERIFIED, ServerActivityRenewal::STATUS_CLAIMED])) {
+        if ($renewal->isExpired()) {
+            $renewal->update(['status' => ServerActivityRenewal::STATUS_EXPIRED]);
+            throw new Exception('Security Error: This verification link has expired (15-minute window exceeded). Please start a new link.');
+        }
+
+        // If already verified, allow viewing code for 5 minutes before claiming
+        if ($renewal->status === ServerActivityRenewal::STATUS_VERIFIED) {
+            if ($renewal->verified_at && Carbon::now()->getTimestamp() - Carbon::parse($renewal->verified_at)->getTimestamp() > 300) {
+                $renewal->update(['status' => ServerActivityRenewal::STATUS_EXPIRED]);
+                throw new Exception('Security Error: Verification session has expired. Please start a new link.');
+            }
+
             return [
                 'success'      => true,
                 'claim_code'   => $renewal->claim_code,
@@ -162,17 +171,59 @@ class FreeServerActivityService
             ];
         }
 
-        // Anti-Bypass Guard: Enforce strict minimum elapsed time
-        $minSeconds = (int) (DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
+        // Advanced Check 1: Referer / Known Bypass Source Blocking
+        $referer = strtolower((string) $request->header('referer', ''));
+        $blacklistedReferers = [
+            'bypass.city', 'thebypasser', 'linkvertise-bypass', 'sub2unlock',
+            'greasyfork', 'tampermonkey', 'violentmonkey', 'free-bypasser',
+            'bypass-links', 'direct-link', 'adlinkfly-bypass', 'bypasser',
+        ];
+        foreach ($blacklistedReferers as $blocked) {
+            if (str_contains($referer, $blocked)) {
+                $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
+                Log::warning("Anti-Bypass Triggered: Blacklisted referer '{$referer}' for user #{$user->id}");
+                throw new Exception('Verification Failed: Security integrity validation failed. Bypasser sources are strictly prohibited.');
+            }
+        }
+
+        // Advanced Check 2: Browser Client Integrity (Webdriver / Headless Detection)
+        $clientIntegrity = $request->input('client_integrity');
+        if ($clientIntegrity) {
+            try {
+                $decoded = json_decode(base64_decode($clientIntegrity), true);
+                if (is_array($decoded)) {
+                    if (!empty($decoded['bot'])) {
+                        $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
+                        Log::warning("Anti-Bypass Triggered: Webdriver bot detected for user #{$user->id}");
+                        throw new Exception('Verification Failed: Automated browser environments are prohibited.');
+                    }
+                    if (isset($decoded['w']) && isset($decoded['h']) && ($decoded['w'] <= 0 || $decoded['h'] <= 0)) {
+                        $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
+                        throw new Exception('Verification Failed: Headless browser environment detected.');
+                    }
+                }
+            } catch (\Throwable $e) {
+                if (str_starts_with($e->getMessage(), 'Verification Failed:')) {
+                    throw $e;
+                }
+            }
+        }
+
+        // Advanced Check 3: Dynamic Jittered Timing Threshold (Zero Leak)
+        $baseMin = (int) (DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
             ?: config('services.shrinkme.min_seconds', 20));
+
+        // Deterministic per-token jitter (0 to 15 seconds)
+        $jitter = hexdec(substr(hash_hmac('sha256', $renewal->token, config('app.key')), 0, 4)) % 16;
+        $dynamicMin = $baseMin + $jitter;
 
         $startedTimestamp = Carbon::parse($renewal->started_at)->getTimestamp();
         $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $startedTimestamp);
 
-        if ($elapsed < $minSeconds) {
+        if ($elapsed < $dynamicMin) {
             $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
 
-            Log::warning("Anti-Bypass Triggered: User #{$user->id} completed link in {$elapsed}s (required {$minSeconds}s)", [
+            Log::warning("Anti-Bypass Triggered: User #{$user->id} completed in {$elapsed}s (required {$dynamicMin}s)", [
                 'user_id'    => $user->id,
                 'server_id'  => $renewal->server_id,
                 'token'      => $token,
@@ -180,7 +231,7 @@ class FreeServerActivityService
                 'user_agent' => $request->userAgent(),
             ]);
 
-            throw new Exception("Anti-Bypass Alert: The link was completed in {$elapsed} seconds, which is impossibly fast without an automated bypass tool (minimum required is {$minSeconds}s). Linkvertise/Shrinkme bypassers are strictly prohibited. Please complete the link legitimately.");
+            throw new Exception('Verification Failed: Security integrity validation failed. Automated bypass tools, proxy extensions, or rapid skipping are prohibited. Please complete the sponsor journey naturally.');
         }
 
         $renewal->update([
@@ -239,21 +290,29 @@ class FreeServerActivityService
 
         // Check if token was verified or bypass-checked
         if ($renewal->status === ServerActivityRenewal::STATUS_PENDING) {
-            $minSeconds = (int) (DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
+            $baseMin = (int) (DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
                 ?: config('services.shrinkme.min_seconds', 20));
+            $jitter = hexdec(substr(hash_hmac('sha256', $renewal->token, config('app.key')), 0, 4)) % 16;
+            $dynamicMin = $baseMin + $jitter;
+
             $startedTimestamp = Carbon::parse($renewal->started_at)->getTimestamp();
             $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $startedTimestamp);
-            if ($elapsed < $minSeconds) {
+            if ($elapsed < $dynamicMin) {
                 $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
-                throw new Exception("Anti-Bypass Alert: Link resolved too quickly ({$elapsed}s). Bypasser tools are rejected.");
+                throw new Exception('Security Error: Code verification rejected by security policy. Please complete the sponsor steps naturally.');
             }
         }
 
         return DB::transaction(function () use ($server, $user, $renewal) {
-            // Lock server row for atomic update
+            // Lock renewal row and server row atomically to prevent double-claiming
+            $freshRenewal = ServerActivityRenewal::lockForUpdate()->findOrFail($renewal->id);
+            if ($freshRenewal->status === ServerActivityRenewal::STATUS_CLAIMED) {
+                throw new Exception('Security Error: This claim code has already been redeemed.');
+            }
+
             $freshServer = Server::lockForUpdate()->findOrFail($server->id);
 
-            $renewal->update([
+            $freshRenewal->update([
                 'status'     => ServerActivityRenewal::STATUS_CLAIMED,
                 'claimed_at' => Carbon::now(),
             ]);

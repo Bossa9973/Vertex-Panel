@@ -40,8 +40,9 @@ class ServerActivityController extends ApiController
     public function verifyCallback(Request $request, FreeServerActivityService $activityService): JsonResponse
     {
         $request->validate([
-            'session' => 'required|string|size:48',
-            'sig'     => 'required|string|size:64',
+            'session'          => 'required|string|size:48',
+            'sig'              => 'required|string|size:64',
+            'client_integrity' => 'nullable|string',
         ]);
 
         try {

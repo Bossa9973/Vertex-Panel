@@ -365,10 +365,10 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
                                     )}
                                 </button>
 
-                                {waitCountdown > 0 && (
-                                    <div className='mt-2.5 flex items-center gap-2 text-[11px] text-amber-400/90 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20'>
-                                        <Clock className='w-3.5 h-3.5 animate-spin shrink-0' />
-                                        <span>Anti-bypass check: Please spend at least {waitCountdown}s completing the link...</span>
+                                {session && (
+                                    <div className='mt-2.5 flex items-center gap-2 text-[11px] text-violet-300 bg-violet-500/10 px-3 py-1.5 rounded-lg border border-violet-500/20'>
+                                        <Sparkles className='w-3.5 h-3.5 text-violet-400 shrink-0' />
+                                        <span>Complete the sponsor steps in the opened window to receive your claim code.</span>
                                     </div>
                                 )}
                             </div>

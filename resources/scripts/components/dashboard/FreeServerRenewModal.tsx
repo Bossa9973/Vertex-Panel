@@ -235,7 +235,7 @@ export const FreeServerRenewModal: React.FC<Props> = ({
                                 )}
                             </div>
                             <p className='text-xs text-gray-400 leading-relaxed mb-3'>
-                                Click below to generate your sponsored verification link (Shrinkme). Complete the 15-second countdown to receive your one-time claim code.
+                                Click below to generate your sponsored verification link. Complete the sponsor steps to receive your one-time claim code.
                             </p>
 
                             <button
@@ -259,10 +259,10 @@ export const FreeServerRenewModal: React.FC<Props> = ({
                                 )}
                             </button>
 
-                            {waitCountdown > 0 && (
-                                <div className='mt-2.5 flex items-center gap-2 text-[11px] text-amber-400/90 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20'>
-                                    <Clock className='w-3.5 h-3.5 animate-spin shrink-0' />
-                                    <span>Anti-bypass human check: Please wait at least {waitCountdown}s on the sponsored page...</span>
+                            {session && (
+                                <div className='mt-2.5 flex items-center gap-2 text-[11px] text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20'>
+                                    <ShieldCheck className='w-3.5 h-3.5 text-blue-400 shrink-0' />
+                                    <span>Complete the sponsor steps in the opened window to receive your claim code.</span>
                                 </div>
                             )}
                         </div>

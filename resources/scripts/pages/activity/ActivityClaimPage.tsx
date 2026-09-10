@@ -40,16 +40,33 @@ export const ActivityClaimPage: React.FC = () => {
             return
         }
 
+        const generateClientIntegrity = (): string => {
+            try {
+                const payload = {
+                    bot: !!(navigator as any).webdriver,
+                    w: window.screen?.width || 0,
+                    h: window.screen?.height || 0,
+                    cd: window.screen?.colorDepth || 0,
+                    tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+                    t: Date.now(),
+                }
+                return btoa(JSON.stringify(payload))
+            } catch {
+                return ''
+            }
+        }
+
         const verify = async () => {
             setLoading(true)
             setErrorMsg(null)
             try {
-                const data = await verifyActivityCallback(session, sig)
+                const integrity = generateClientIntegrity()
+                const data = await verifyActivityCallback(session, sig, integrity)
                 setResult(data)
             } catch (err: any) {
                 const msg =
                     err.response?.data?.message ||
-                    'Verification failed. If you used an automated bypass tool or completed the link too quickly, your claim was rejected.'
+                    'Verification failed. Security validation checks failed. Please complete the link legitimately in your browser.'
                 setErrorMsg(msg)
             } finally {
                 setLoading(false)
@@ -95,7 +112,7 @@ export const ActivityClaimPage: React.FC = () => {
                             <div>
                                 <h3 className='text-lg font-bold text-white'>Verifying Sponsored Completion...</h3>
                                 <p className='text-xs text-gray-400 mt-1'>
-                                    Checking Anti-Bypass security criteria and generating your single-use code.
+                                    Checking security criteria and generating your single-use code.
                                 </p>
                             </div>
                         </div>
@@ -109,7 +126,7 @@ export const ActivityClaimPage: React.FC = () => {
                                 {errorMsg}
                             </div>
                             <p className='text-xs text-gray-500 max-w-sm mx-auto'>
-                                Automated bypassers, Linkvertise skips, or completing the page in under 20 seconds are strictly forbidden to protect our free hosting.
+                                Automated bypass tools, scraper extensions, or proxy bots are strictly prohibited to protect our free hosting service.
                             </p>
                             <button
                                 onClick={() => navigate('/')}

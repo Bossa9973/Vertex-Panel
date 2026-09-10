@@ -68,8 +68,16 @@ export const startServerActivitySession = async (serverId: number): Promise<Acti
 /**
  * Verify token and HMAC signature upon landing at /activity/claim.
  */
-export const verifyActivityCallback = async (session: string, sig: string): Promise<ActivityVerificationResult> => {
-    const res = await http.post('/api/client/activity/verify', { session, sig })
+export const verifyActivityCallback = async (
+    session: string,
+    sig: string,
+    clientIntegrity?: string
+): Promise<ActivityVerificationResult> => {
+    const res = await http.post('/api/client/activity/verify', {
+        session,
+        sig,
+        client_integrity: clientIntegrity,
+    })
     return res.data.data
 }
 
