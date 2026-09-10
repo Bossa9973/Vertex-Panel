@@ -123,13 +123,16 @@ if [[ -f "${INSTALL_DIR}/bot/.env" ]]; then
     fi
 fi
 
-# 8. Clear Laravel caches so new routes & controllers take effect immediately
+# 8. Run migrations and clear Laravel caches so new features take effect immediately
 if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
-    info "Refreshing Laravel route and config caches..."
+    info "Running database migrations..."
+    (cd "$INSTALL_DIR" && php artisan migrate --force || true)
+    info "Refreshing Laravel route, view, and config caches..."
     (cd "$INSTALL_DIR" && php artisan route:clear >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan config:clear >/dev/null 2>&1 || true)
+    (cd "$INSTALL_DIR" && php artisan view:clear >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan queue:restart >/dev/null 2>&1 || true)
-    success "Laravel cache cleared and queue restarted."
+    success "Database migrated, Laravel cache cleared, and queue restarted."
 fi
 
 # 8. Restart Discord Bot with auto-healing
