@@ -80,6 +80,9 @@ Route::get('/nodes',               [BotApiController::class, 'getNodes']);
 Route::post('/backup/trigger',     [BotApiController::class, 'triggerBackups']);
 Route::post('/backup/set-tier',    [BotApiController::class, 'setServerTier']);
 
+// ── Inactivity Purge System (for /purge-inactive command) ───────────────────
+Route::get('/purge/servers',       [BotApiController::class, 'getServersForPurge']);
+
 // ── Anti-Abuse Inspection, History & Remediation (for /listabuse, bot & AI support) ───
 Route::get('/admin/abuse-list',        [BotApiController::class, 'getAbuseList']);
 Route::post('/admin/abuse-remediate',  [BotApiController::class, 'remediateAbuse']);

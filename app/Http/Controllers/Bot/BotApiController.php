@@ -2931,5 +2931,64 @@ class BotApiController extends Controller
             'message'          => "Inbound relocations to **{$node->name}** are now " . ($enabled ? '✅ ENABLED' : '❌ DISABLED') . '.',
         ]);
     }
+
+    /**
+     * Get free-tier servers on a given node eligible for inactivity purge.
+     * GET /api/bot/purge/servers?node_id=X
+     */
+    public function getServersForPurge(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'node_id' => 'required|integer|exists:nodes,id',
+        ]);
+
+        try {
+            $nodeId = (int) $validated['node_id'];
+            /** @var \Convoy\Models\Node $node */
+            $node = \Convoy\Models\Node::findOrFail($nodeId);
+
+            $servers = \Convoy\Models\Server::with(['user', 'node'])
+                ->where('node_id', $nodeId)
+                ->where(function ($query) {
+                    $query->whereNull('plan_tier')
+                          ->orWhere('plan_tier', '!=', 'paid');
+                })
+                ->get();
+
+            $data = $servers->map(function ($server) {
+                $ramMb  = (int) ($server->getRawOriginal('memory') ?? round($server->memory / 1048576));
+                $diskMb = (int) ($server->getRawOriginal('disk') ?? round($server->disk / 1048576));
+                $owner  = $server->user;
+
+                return [
+                    'id'                  => $server->id,
+                    'name'                => $server->name,
+                    'vmid'                => $server->vmid,
+                    'uuid'                => $server->uuid,
+                    'node_id'             => $server->node_id,
+                    'node_name'           => $server->node?->name ?? 'Unknown',
+                    'owner_id'            => $owner?->id,
+                    'owner_name'          => $owner?->name ?? 'Unknown',
+                    'owner_discord_id'    => $owner?->discord_id,
+                    'cpu'                 => (float) $server->cpu,
+                    'memory_mb'           => $ramMb,
+                    'disk_mb'             => $diskMb,
+                    'status'              => $server->status,
+                    'activity_expires_at' => $server->activity_expires_at ? $server->activity_expires_at->toIso8601String() : null,
+                    'created_at'          => $server->created_at ? $server->created_at->toIso8601String() : null,
+                ];
+            });
+
+            return response()->json([
+                'ok'        => true,
+                'node_id'   => $node->id,
+                'node_name' => $node->name,
+                'servers'   => $data,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('[BotAPI] getServersForPurge error: ' . $e->getMessage(), ['exception' => $e]);
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
 }
 

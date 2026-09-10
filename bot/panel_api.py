@@ -379,6 +379,19 @@ async def rename_server(discord_id: str, server_id: int, name: str) -> dict:
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+# ─── Inactivity Purge System ────────────────────────────────────────────────
+
+async def get_purge_servers(node_id: int) -> dict:
+    """
+    Fetch free-tier servers for a given node eligible for inactivity purge.
+    Returns {"ok": True, "node_id": ..., "node_name": ..., "servers": [...]} or {"ok": False, "error": ...}
+    """
+    try:
+        return await _get(f"/purge/servers?node_id={node_id}", timeout=20.0)
+    except Exception as e:
+        print(f"[panel_api] get_purge_servers failed for node {node_id}: {e}")
+        return {"ok": False, "error": str(e), "servers": []}
+
 # ════════════════════════════════════════════════════════════════
 # Backup Operations
 # ════════════════════════════════════════════════════════════════
