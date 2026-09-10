@@ -25,22 +25,37 @@ class ServerDeletionService
                 new PurgeBackupsJob($server->id),
                 ...$this->buildDispatchService->getChainedDeleteJobs($server),
                 function () use ($server) {
-                    Server::findOrFail($server->id)->delete();
+                    $s = Server::find($server->id);
+                    if ($s) {
+                        $s->addresses()->update(['server_id' => null]);
+                        $s->backups()->forceDelete();
+                        $s->delete();
+                    }
                 },
             ])
-                ->catch(fn () => $server->update(['status' => Status::DELETION_FAILED->value]))
+                ->catch(function (\Throwable $e) use ($server) {
+                    \Illuminate\Support\Facades\Log::error("DeleteServerJob chain failed for Server ID {$server->id} (VMID: {$server->vmid}): " . $e->getMessage(), [
+                        'exception' => get_class($e),
+                        'line' => $e->getLine(),
+                        'file' => $e->getFile(),
+                    ]);
+                    Server::where('id', $server->id)->update(['status' => Status::DELETION_FAILED->value]);
+                })
                 ->dispatch();
 
             return;
         }
 
+        $server->addresses()->update(['server_id' => null]);
+        $server->backups()->forceDelete();
         $server->delete();
     }
 
     public function validateStatus(Server $server, bool $verifyStatusOnly = false)
     {
         if (
-            ! is_null($server->status) && $server->status !== Status::DELETING->value
+            ! is_null($server->status) &&
+            ! in_array($server->status, [Status::DELETING->value, Status::DELETION_FAILED->value, Status::INSTALL_FAILED->value])
         ) {
             throw new ServerStatusConflictException($server);
         }

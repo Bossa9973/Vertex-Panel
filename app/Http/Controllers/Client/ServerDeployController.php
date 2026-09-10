@@ -406,9 +406,13 @@ class ServerDeployController extends Controller
                     'reference_id' => 'DEPLOY-' . Str::upper(Str::random(8)),
                 ]);
 
-                // Store plan/os metadata as description, set 30-day expiry
+                // Store plan/os metadata as description, set expiry
                 $server->description = "Plan: {$plan->name} | OS: {$template->name} (Node: {$node->name})";
                 $server->expires_at  = Carbon::now()->addDays(30);
+                if ($server->plan_tier !== 'paid') {
+                    $server->activity_expires_at = Carbon::now()->addHours(72);
+                    $server->expires_at          = Carbon::now()->addHours(72);
+                }
                 $server->save();
 
                 return ['server' => $server, 'user' => $freshUser];

@@ -64,6 +64,13 @@ class Kernel extends ConsoleKernel
                         ->pollAssignedPort($server);
                 });
         })->everyFiveMinutes()->name('poll-tunnel-ports')->withoutOverlapping();
+
+        // Automated Free VPS Activity & Recovery Lifecycle check:
+        // Runs every minute to enforce 72h+30m auto-suspension and 48h permanent auto-deletion ("GG").
+        $schedule->command(\Convoy\Console\Commands\Server\CheckFreeServerActivityCommand::class)
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->runInBackground();
     }
 
     /**

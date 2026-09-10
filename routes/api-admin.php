@@ -25,6 +25,8 @@ Route::get('/settings/app-install', [Admin\AdminSettingsController::class, 'getA
 Route::post('/settings/app-install', [Admin\AdminSettingsController::class, 'updateAppInstallSetting']);
 Route::get('/settings/earn-awards', [Admin\AdminSettingsController::class, 'getEarnAwardsSettings']);
 Route::post('/settings/earn-awards', [Admin\AdminSettingsController::class, 'updateEarnAwardsSettings']);
+Route::get('/settings/free-activity', [Admin\AdminSettingsController::class, 'getFreeServerActivitySettings']);
+Route::post('/settings/free-activity', [Admin\AdminSettingsController::class, 'updateFreeServerActivitySettings']);
 
 
 /*
@@ -153,7 +155,9 @@ Route::prefix('/servers')->group(function () {
             Route::post('/tier', [Admin\ServerController::class, 'setTier'])->withoutMiddleware(
                 ValidateServerStatusMiddleware::class,
             );
-            Route::delete('/', [Admin\ServerController::class, 'destroy']);
+            Route::delete('/', [Admin\ServerController::class, 'destroy'])->withoutMiddleware(
+                ValidateServerStatusMiddleware::class,
+            );
 
             Route::prefix('/settings')->group(function () {
                 Route::patch('/build', [Admin\ServerController::class, 'updateBuild']);

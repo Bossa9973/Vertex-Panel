@@ -62,4 +62,10 @@ return [
         'pubkeys_path'      => env('SISH_PUBKEYS_PATH', '/root/sish/pubkeys'),
     ],
 
+    'shrinkme' => [
+        'api_key'     => env('SHRINKME_API_KEY', ''),
+        'base_url'    => env('SHRINKME_API_URL', 'https://shrinkme.io/api'),
+        'min_seconds' => (int) env('SHRINKME_MIN_SECONDS', 20),
+    ],
+
 ];

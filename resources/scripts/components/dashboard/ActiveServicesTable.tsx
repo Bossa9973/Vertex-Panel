@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { RotateCw, Plus, Copy, Check, Layers, EyeOff } from 'lucide-react'
+import { RotateCw, Plus, Copy, Check, Layers, EyeOff, AlertTriangle, Clock, ShieldAlert } from 'lucide-react'
 import { BoltSvgIcon } from '@/components/elements/BoltSvgIcon'
 
 export interface ServerItem {
@@ -17,7 +17,17 @@ export interface ServerItem {
     price: number
     due_date: string
     days_left: number
-    status: 'Active' | 'Expired' | 'Stopped'
+    status: 'Active' | 'Expired' | 'Stopped' | 'Suspended'
+    plan_tier?: 'free' | 'paid'
+    activity_remaining_seconds?: number | null
+    deletion_remaining_seconds?: number | null
+    reactivation_progress?: {
+        completed: number
+        required: number
+        remaining: number
+        display: string
+    } | null
+    lifecycle_phase?: string
 }
 
 interface Props {
@@ -25,7 +35,21 @@ interface Props {
     loading: boolean
     onDeploy: () => void
     onRenew: (srv: ServerItem) => void
+    onRenewFree?: (srv: ServerItem) => void
+    onClaimBackSuspended?: (srv: ServerItem) => void
     renewingId: number | null
+}
+
+const formatRemainingSeconds = (totalSeconds?: number | null): string => {
+    if (totalSeconds === undefined || totalSeconds === null) return '—'
+    if (totalSeconds <= 0) return '00:00'
+    const days = Math.floor(totalSeconds / 86400)
+    const hours = Math.floor((totalSeconds % 86400) / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+
+    if (days > 0) return `${days}d ${hours}h`
+    if (hours > 0) return `${hours}h ${minutes}m`
+    return `${minutes}m ${totalSeconds % 60}s`
 }
 
 const formatOsName = (name?: string | null): string | null => {
@@ -33,7 +57,15 @@ const formatOsName = (name?: string | null): string | null => {
     return name.replace(/[-_]/g, ' ').replace(/\(.*?\)/g, '').trim()
 }
 
-const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }: Props) => {
+const ActiveServicesTable = ({
+    servers,
+    loading,
+    onDeploy,
+    onRenew,
+    onRenewFree,
+    onClaimBackSuspended,
+    renewingId,
+}: Props) => {
     const [copiedIp, setCopiedIp] = useState<string | null>(null)
     const [revealedIps, setRevealedIps] = useState<Record<string, boolean>>({})
 
@@ -204,43 +236,115 @@ const ActiveServicesTable = ({ servers, loading, onDeploy, onRenew, renewingId }
 
                                             {/* Price */}
                                             <td className='py-3 px-4 align-middle font-mono text-xs whitespace-nowrap'>
-                                                <div className='flex items-center gap-1 font-sans text-xs whitespace-nowrap'>
-                                                    <BoltSvgIcon className='w-3.5 h-3.5 text-amber-400 inline mr-1 shrink-0' />
-                                                    <span className='text-amber-400 font-semibold'>{Math.round(srv.price)} BOLTs</span>
-                                                    <span className='text-gray-400 text-xs ml-1'>/ 30d</span>
-                                                </div>
+                                                {srv.plan_tier === 'paid' ? (
+                                                    <div className='flex items-center gap-1 font-sans text-xs whitespace-nowrap'>
+                                                        <BoltSvgIcon className='w-3.5 h-3.5 text-amber-400 inline mr-1 shrink-0' />
+                                                        <span className='text-amber-400 font-semibold'>{Math.round(srv.price)} BOLTs</span>
+                                                        <span className='text-gray-400 text-xs ml-1'>/ 30d</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className='flex items-center gap-1 font-sans text-xs whitespace-nowrap'>
+                                                        <span className='px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/25 text-[10px] font-bold'>
+                                                            FREE (72h Cycle)
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </td>
 
-                                            {/* Due Date */}
-                                            <td className='py-3 px-4 align-middle font-mono text-xs text-gray-300 whitespace-nowrap'>
-                                                {srv.due_date}
+                                            {/* Due Date / Activity Timer */}
+                                            <td className='py-3 px-4 align-middle whitespace-nowrap font-sans text-xs'>
+                                                {srv.plan_tier === 'paid' ? (
+                                                    <span className='font-mono text-gray-300'>{srv.due_date}</span>
+                                                ) : srv.status === 'Suspended' || srv.lifecycle_phase === 'suspended_recovery' || srv.lifecycle_phase === 'pre_delete_critical' ? (
+                                                    <div className='flex flex-col'>
+                                                        <span className={`font-mono text-xs font-bold ${
+                                                            srv.lifecycle_phase === 'pre_delete_critical' ? 'text-rose-400 animate-pulse' : 'text-amber-400'
+                                                        }`}>
+                                                            {formatRemainingSeconds(srv.deletion_remaining_seconds)}
+                                                        </span>
+                                                        <span className='text-[9px] text-rose-400 font-medium'>
+                                                            Permanent Wipe Deadline
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <div className='flex flex-col'>
+                                                        <span className={`font-mono text-xs font-bold ${
+                                                            srv.lifecycle_phase === 'pre_suspend_critical' ? 'text-rose-400 animate-pulse' : 'text-gray-200'
+                                                        }`}>
+                                                            {formatRemainingSeconds(srv.activity_remaining_seconds)}
+                                                        </span>
+                                                        <span className='text-[9px] text-gray-500 font-medium'>
+                                                            72h Activity Timer
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </td>
 
                                             {/* Status */}
                                             <td className='py-3 px-4 align-middle whitespace-nowrap'>
-                                                <span
-                                                    className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase tracking-wide ${
-                                                        srv.status === 'Active'
-                                                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                                            : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-                                                    }`}
-                                                >
-                                                    {srv.status === 'Active' ? 'Active' : srv.status.toUpperCase()}
-                                                </span>
+                                                {srv.plan_tier === 'paid' ? (
+                                                    <span
+                                                        className={`text-[9px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wide ${
+                                                            srv.status === 'Active'
+                                                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                                                : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                                                        }`}
+                                                    >
+                                                        {srv.status === 'Active' ? 'Active' : srv.status.toUpperCase()}
+                                                    </span>
+                                                ) : srv.lifecycle_phase === 'pre_delete_critical' ? (
+                                                    <span className='text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse flex items-center gap-1 w-fit'>
+                                                        <AlertTriangle className='w-3 h-3' /> Final 30m (GG)
+                                                    </span>
+                                                ) : srv.status === 'Suspended' || srv.lifecycle_phase === 'suspended_recovery' ? (
+                                                    <span className='text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide bg-violet-500/20 text-violet-300 border-violet-500/40 flex items-center gap-1 w-fit'>
+                                                        Suspended ({srv.reactivation_progress?.display || '0/3'})
+                                                    </span>
+                                                ) : srv.lifecycle_phase === 'pre_suspend_critical' ? (
+                                                    <span className='text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse flex items-center gap-1 w-fit'>
+                                                        <Clock className='w-3 h-3' /> 30m Critical
+                                                    </span>
+                                                ) : (
+                                                    <span className='text-[9px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wide bg-emerald-500/20 text-emerald-400 border-emerald-500/30 w-fit'>
+                                                        Active (72h)
+                                                    </span>
+                                                )}
                                             </td>
 
                                             {/* Action */}
                                             <td className='py-3 px-4 text-right align-middle whitespace-nowrap'>
-                                                <button
-                                                    onClick={() => onRenew(srv)}
-                                                    disabled={renewingId === srv.internal_id}
-                                                    className='py-2 px-4 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-neutral-500 text-gray-300 hover:text-white font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 disabled:opacity-50'
-                                                >
-                                                    {renewingId === srv.internal_id && (
-                                                        <RotateCw className='w-3 h-3 animate-spin text-blue-400' />
-                                                    )}
-                                                    <span>Renew</span>
-                                                </button>
+                                                {srv.plan_tier === 'paid' ? (
+                                                    <button
+                                                        onClick={() => onRenew(srv)}
+                                                        disabled={renewingId === srv.internal_id}
+                                                        className='py-2 px-4 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-neutral-500 text-gray-300 hover:text-white font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 disabled:opacity-50'
+                                                    >
+                                                        {renewingId === srv.internal_id && (
+                                                            <RotateCw className='w-3 h-3 animate-spin text-blue-400' />
+                                                        )}
+                                                        <span>Renew</span>
+                                                    </button>
+                                                ) : srv.status === 'Suspended' || srv.lifecycle_phase === 'suspended_recovery' || srv.lifecycle_phase === 'pre_delete_critical' ? (
+                                                    <button
+                                                        onClick={() => (onClaimBackSuspended ? onClaimBackSuspended(srv) : onRenew(srv))}
+                                                        className='py-2 px-3.5 rounded-xl bg-gradient-to-t from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white font-bold text-xs cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-md shadow-violet-900/40 border border-violet-400 active:scale-95'
+                                                    >
+                                                        <ShieldAlert className='w-3.5 h-3.5' />
+                                                        <span>Claim Back ({srv.reactivation_progress?.display || '3 Links'})</span>
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => (onRenewFree ? onRenewFree(srv) : onRenew(srv))}
+                                                        className={`py-2 px-3.5 rounded-xl border text-xs font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 active:scale-95 ${
+                                                            srv.lifecycle_phase === 'pre_suspend_critical'
+                                                                ? 'bg-gradient-to-t from-rose-600 to-rose-500 text-white border-rose-400 shadow-md shadow-rose-900/40 animate-pulse'
+                                                                : 'bg-neutral-900 border-neutral-700 hover:border-blue-500 text-gray-200 hover:text-white'
+                                                        }`}
+                                                    >
+                                                        <Clock className='w-3.5 h-3.5 text-blue-400' />
+                                                        <span>{srv.lifecycle_phase === 'pre_suspend_critical' ? 'Urgent Renew' : 'Renew (72h)'}</span>
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     )

@@ -9,6 +9,9 @@ import QuickServicesGrid from '@/components/dashboard/QuickServicesGrid'
 import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
 import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
 import { RocketLaunchIcon } from '@heroicons/react/24/outline'
+import FreeServerRenewModal from '@/components/dashboard/FreeServerRenewModal'
+import SuspendedClaimBackModal from '@/components/dashboard/SuspendedClaimBackModal'
+import { AlertTriangle } from 'lucide-react'
 
 const LOCATION_FLAGS: Record<string, string> = {
     'India': 'https://flagcdn.com/in.svg',
@@ -88,6 +91,8 @@ export const DashboardContainer: React.FC = () => {
     const [deployModalOpen, setDeployModalOpen] = useState(false)
     const [servers, setServers] = useState<ServerItem[]>([])
     const [loading, setLoading] = useState(true)
+    const [freeRenewServer, setFreeRenewServer] = useState<ServerItem | null>(null)
+    const [suspendedServer, setSuspendedServer] = useState<ServerItem | null>(null)
     const [renewingId, setRenewingId] = useState<number | null>(null)
 
     const userCredits = user?.credits ?? 0
@@ -103,7 +108,7 @@ export const DashboardContainer: React.FC = () => {
                     const srv = item.attributes || item
 
                     let cpuUsage = 0
-                    let serverStatus: 'Active' | 'Expired' | 'Stopped' = 'Active'
+                    let serverStatus: 'Active' | 'Expired' | 'Stopped' | 'Suspended' = 'Active'
 
                     const serverId = srv.uuid || srv.id
                     if (serverId) {
@@ -144,6 +149,41 @@ export const DashboardContainer: React.FC = () => {
                     const diffDays = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 3600 * 24))
                     const isExpired = diffDays <= 0
 
+                    const planTier = srv.plan_tier ?? 'free'
+                    const activityExpiresAt = srv.activity_expires_at ? new Date(srv.activity_expires_at) : null
+                    const deletionDeadlineAt = srv.deletion_deadline_at ? new Date(srv.deletion_deadline_at) : null
+                    const isSuspended = srv.status === 'suspended' || srv.is_suspended === true
+
+                    const activityRemainingSecs = srv.activity_remaining_seconds !== undefined && srv.activity_remaining_seconds !== null
+                        ? srv.activity_remaining_seconds
+                        : (activityExpiresAt ? Math.max(0, Math.floor((activityExpiresAt.getTime() - now.getTime()) / 1000)) : null)
+
+                    const deletionRemainingSecs = srv.deletion_remaining_seconds !== undefined && srv.deletion_remaining_seconds !== null
+                        ? srv.deletion_remaining_seconds
+                        : (deletionDeadlineAt ? Math.max(0, Math.floor((deletionDeadlineAt.getTime() - now.getTime()) / 1000)) : null)
+
+                    const reactivationProgress = srv.reactivation_progress || {
+                        completed: srv.reactivation_codes_completed ?? 0,
+                        required: 3,
+                        remaining: Math.max(0, 3 - (srv.reactivation_codes_completed ?? 0)),
+                        display: `${srv.reactivation_codes_completed ?? 0}/3`,
+                    }
+
+                    let lifecyclePhase = srv.lifecycle_phase
+                    if (!lifecyclePhase) {
+                        if (planTier === 'paid') {
+                            lifecyclePhase = 'paid'
+                        } else if (isSuspended) {
+                            lifecyclePhase = (deletionRemainingSecs !== null && deletionRemainingSecs <= 1800)
+                                ? 'pre_delete_critical'
+                                : 'suspended_recovery'
+                        } else if (activityRemainingSecs !== null && activityRemainingSecs <= 0) {
+                            lifecyclePhase = 'pre_suspend_critical'
+                        } else {
+                            lifecyclePhase = 'active'
+                        }
+                    }
+
                     const ip = extractIpAddress(srv, idx)
                     const cpuCores = srv.limits?.cpu ? Math.max(1, Math.round(srv.limits.cpu / 100)) : 1
                     const ramMb = srv.limits?.memory ? (srv.limits.memory > 100000 ? Math.round(srv.limits.memory / (1024 * 1024)) : srv.limits.memory) : 1024
@@ -182,7 +222,12 @@ export const DashboardContainer: React.FC = () => {
                         price: boltsPrice,
                         due_date: expiresAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
                         days_left: Math.max(0, diffDays),
-                        status: isExpired ? 'Expired' : serverStatus,
+                        status: isSuspended ? 'Suspended' : (isExpired ? 'Expired' : serverStatus),
+                        plan_tier: planTier,
+                        activity_remaining_seconds: activityRemainingSecs,
+                        deletion_remaining_seconds: deletionRemainingSecs,
+                        reactivation_progress: reactivationProgress,
+                        lifecycle_phase: lifecyclePhase,
                     }
                 })
             )
@@ -236,6 +281,20 @@ export const DashboardContainer: React.FC = () => {
         setDeployModalOpen(true)
     }
 
+    const handleRenewFree = (srv: ServerItem) => {
+        setFreeRenewServer(srv)
+    }
+
+    const handleClaimBackSuspended = (srv: ServerItem) => {
+        setSuspendedServer(srv)
+    }
+
+    const urgentPreDeleteServer = servers.find(s => s.lifecycle_phase === 'pre_delete_critical')
+    const urgentPreSuspendServer = servers.find(s => s.lifecycle_phase === 'pre_suspend_critical')
+    const suspendedRecoveryServer = servers.find(
+        s => s.lifecycle_phase === 'suspended_recovery' || (s.status === 'Suspended' && s.plan_tier !== 'paid')
+    )
+
     return (
         <PageMaintenanceGuard pageKey='dashboard'>
         <PageContentBlock title='Dashboard' showFlashKey='dashboard'>
@@ -268,12 +327,82 @@ export const DashboardContainer: React.FC = () => {
 
                 <PromoBannersRow />
 
+                {urgentPreDeleteServer ? (
+                    <div className='mb-6 p-4 rounded-2xl bg-rose-950/40 border border-rose-500/50 shadow-[0px_0px_50px_-10px_rgba(244,63,94,0.3)] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-pulse'>
+                        <div className='flex items-center gap-3'>
+                            <div className='p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0'>
+                                <AlertTriangle className='w-6 h-6' />
+                            </div>
+                            <div>
+                                <h4 className='text-sm font-bold text-rose-300 font-sans flex items-center gap-2'>
+                                    CRITICAL WARNING: Permanent Deletion Imminent ({urgentPreDeleteServer.name})
+                                </h4>
+                                <p className='text-xs text-rose-200/80 mt-0.5'>
+                                    Final 30-minute grace window active. Your server will be permanently deleted (&quot;GG&quot;) unless claimed immediately.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => handleClaimBackSuspended(urgentPreDeleteServer)}
+                            className='px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white font-bold text-xs shadow-lg shadow-rose-900/50 border border-rose-400 shrink-0 cursor-pointer active:scale-95 transition-all'
+                        >
+                            Claim Back Server ({urgentPreDeleteServer.reactivation_progress?.display || '3 Links'})
+                        </button>
+                    </div>
+                ) : urgentPreSuspendServer ? (
+                    <div className='mb-6 p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 shadow-[0px_0px_50px_-10px_rgba(245,158,11,0.3)] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-pulse'>
+                        <div className='flex items-center gap-3'>
+                            <div className='p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0'>
+                                <AlertTriangle className='w-6 h-6' />
+                            </div>
+                            <div>
+                                <h4 className='text-sm font-bold text-amber-300 font-sans flex items-center gap-2'>
+                                    30-Minute Grace Window: Renew Activity ({urgentPreSuspendServer.name})
+                                </h4>
+                                <p className='text-xs text-amber-200/80 mt-0.5'>
+                                    Your 72-hour activity period expired. Renew via 1 sponsored link now to avoid server power-off and suspension.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => handleRenewFree(urgentPreSuspendServer)}
+                            className='px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold text-xs shadow-lg shadow-amber-900/50 border border-amber-400 shrink-0 cursor-pointer active:scale-95 transition-all'
+                        >
+                            Renew 72h Activity (1 Link)
+                        </button>
+                    </div>
+                ) : suspendedRecoveryServer ? (
+                    <div className='mb-6 p-4 rounded-2xl bg-violet-950/40 border border-violet-500/40 shadow-[0px_0px_50px_-10px_rgba(139,92,246,0.3)] flex flex-col md:flex-row items-start md:items-center justify-between gap-4'>
+                        <div className='flex items-center gap-3'>
+                            <div className='p-2.5 rounded-xl bg-violet-500/20 text-violet-300 border border-violet-500/30 shrink-0'>
+                                <AlertTriangle className='w-6 h-6' />
+                            </div>
+                            <div>
+                                <h4 className='text-sm font-bold text-violet-200 font-sans flex items-center gap-2'>
+                                    Server Suspended: Recovery Window Open ({suspendedRecoveryServer.name})
+                                </h4>
+                                <p className='text-xs text-violet-300/80 mt-0.5'>
+                                    You have 48 hours to claim back your VPS by completing 3 sponsored links ({suspendedRecoveryServer.reactivation_progress?.display || '0/3'} completed).
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => handleClaimBackSuspended(suspendedRecoveryServer)}
+                            className='px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white font-bold text-xs shadow-lg shadow-violet-900/50 border border-violet-400 shrink-0 cursor-pointer active:scale-95 transition-all'
+                        >
+                            Claim Back ({suspendedRecoveryServer.reactivation_progress?.display || '3 Links'})
+                        </button>
+                    </div>
+                ) : null}
+
                 <ActiveServicesTable
                     servers={servers}
                     loading={loading}
                     renewingId={renewingId}
                     onRenew={handleRenew}
                     onDeploy={handleOpenDeploy}
+                    onRenewFree={handleRenewFree}
+                    onClaimBackSuspended={handleClaimBackSuspended}
                 />
 
                 <QuickServicesGrid
@@ -284,6 +413,26 @@ export const DashboardContainer: React.FC = () => {
                     opened={deployModalOpen}
                     onClose={() => setDeployModalOpen(false)}
                     onSuccess={() => {
+                        fetchServers()
+                    }}
+                />
+
+                <FreeServerRenewModal
+                    server={freeRenewServer}
+                    opened={!!freeRenewServer}
+                    onClose={() => setFreeRenewServer(null)}
+                    onSuccess={() => {
+                        setFreeRenewServer(null)
+                        fetchServers()
+                    }}
+                />
+
+                <SuspendedClaimBackModal
+                    server={suspendedServer}
+                    opened={!!suspendedServer}
+                    onClose={() => setSuspendedServer(null)}
+                    onSuccess={() => {
+                        setSuspendedServer(null)
                         fetchServers()
                     }}
                 />

@@ -30,26 +30,35 @@ const DeleteServerCard = () => {
 
     const schema = z.object({
         noPurge: z.boolean(),
+        force: z.boolean().optional(),
     })
 
     const form = useForm({
         resolver: zodResolver(schema),
         defaultValues: {
             noPurge: false,
+            force: false,
         },
     })
 
-    const submit = async ({ noPurge }: z.infer<typeof schema>) => {
+    const submit = async ({ noPurge, force }: z.infer<typeof schema>) => {
         clearFlashes()
         try {
-            await deleteServer(server.uuid, noPurge)
+            await deleteServer(server.uuid, noPurge, force)
+
+            if (force) {
+                window.location.href = '/admin/servers'
+                return
+            }
 
             setServer({
                 ...server,
                 status: 'deleting',
             })
+            setShowConfirmation(false)
         } catch (error) {
             clearAndAddHttpError(error as any)
+            setShowConfirmation(false)
         }
     }
 
@@ -57,6 +66,8 @@ const DeleteServerCard = () => {
         e.preventDefault()
         setShowConfirmation(true)
     }
+
+    const isForceWipe = form.watch('force')
 
     return (
         <>
@@ -80,6 +91,11 @@ const DeleteServerCard = () => {
                                         {t('deletion.deleting_status')}
                                     </MessageBox>
                                 )}
+                                {server.status === 'deletion_failed' && (
+                                    <MessageBox title='Uninstallation Failed' type='error'>
+                                        Previous uninstallation failed. You can retry deletion or check "Force Wipe" to remove the server immediately from the database.
+                                    </MessageBox>
+                                )}
 
                                 <CheckboxForm
                                     name={'noPurge'}
@@ -88,18 +104,21 @@ const DeleteServerCard = () => {
                                         'Do not purge VM and related files'
                                     }
                                 />
+                                <CheckboxForm
+                                    name={'force'}
+                                    label={'Force Wipe from Database (Bypass hypervisor & remove record immediately)'}
+                                />
                             </div>
                         </FormCard.Body>
                         <FormCard.Footer>
                             <Button
                                 loading={form.formState.isSubmitting}
-                                disabled={server.status === 'deleting'}
                                 type='submit'
                                 variant='filled'
                                 color='danger'
                                 size='sm'
                             >
-                                {tStrings('delete')}
+                                {isForceWipe ? '⚡ Force Wipe Server' : tStrings('delete')}
                             </Button>
                         </FormCard.Footer>
                     </form>
@@ -112,16 +131,16 @@ const DeleteServerCard = () => {
             >
                 <Modal.Header>
                     <Modal.Title>
-                        {t('deletion.confirmation.title', {
-                            name: server.name,
-                        })}
+                        {isForceWipe
+                            ? `Force Wipe '${server.name}' from Database`
+                            : t('deletion.confirmation.title', { name: server.name })}
                     </Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
                     <Modal.Description>
-                        {t('deletion.confirmation.description', {
-                            name: server.name,
-                        })}
+                        {isForceWipe
+                            ? `Are you sure you want to permanently force-wipe '${server.name}'? This directly removes the server record and releases all IPs immediately without contacting Proxmox.`
+                            : t('deletion.confirmation.description', { name: server.name })}
                     </Modal.Description>
                 </Modal.Body>
                 <Modal.Actions>
@@ -136,7 +155,7 @@ const DeleteServerCard = () => {
                         loading={form.formState.isSubmitting}
                         onClick={form.handleSubmit(submit)}
                     >
-                        {tStrings('delete')}
+                        {isForceWipe ? '⚡ Wipe Into Void' : tStrings('delete')}
                     </Modal.Action>
                 </Modal.Actions>
             </Modal>

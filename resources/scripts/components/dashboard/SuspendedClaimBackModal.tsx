@@ -1,0 +1,441 @@
+import React, { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+    X,
+    ExternalLink,
+    ShieldAlert,
+    Clock,
+    AlertOctagon,
+    RotateCw,
+    CheckCircle2,
+    Sparkles,
+    KeyRound,
+    Power,
+    Server as ServerIcon,
+} from 'lucide-react'
+import {
+    startServerActivitySession,
+    claimActivityCode,
+    ActivityRenewalSession,
+} from '@/api/server/activity'
+
+interface Props {
+    opened: boolean
+    server: {
+        id: string
+        internal_id: number
+        name: string
+        hostname: string
+        deletion_remaining_seconds?: number | null
+        reactivation_progress?: {
+            completed: number
+            required: number
+            remaining: number
+            display: string
+        } | null
+        lifecycle_phase?: string
+    } | null
+    onClose: () => void
+    onSuccess: () => void
+}
+
+const formatSecondsToTime = (totalSeconds: number): string => {
+    if (totalSeconds <= 0) return '00:00:00'
+    const days = Math.floor(totalSeconds / 86400)
+    const hours = Math.floor((totalSeconds % 86400) / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = Math.floor(totalSeconds % 60)
+
+    if (days > 0) {
+        return `${days}d ${hours}h ${minutes}m ${seconds}s`
+    }
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+}
+
+export const SuspendedClaimBackModal: React.FC<Props> = ({
+    opened,
+    server,
+    onClose,
+    onSuccess,
+}) => {
+    const [loadingLink, setLoadingLink] = useState(false)
+    const [submittingCode, setSubmittingCode] = useState(false)
+    const [session, setSession] = useState<ActivityRenewalSession | null>(null)
+    const [claimCode, setClaimCode] = useState('')
+    const [errorMsg, setErrorMsg] = useState<string | null>(null)
+    const [successMsg, setSuccessMsg] = useState<string | null>(null)
+    const [waitCountdown, setWaitCountdown] = useState<number>(0)
+    const [completedSteps, setCompletedSteps] = useState<number>(0)
+    const [isFullyRestored, setIsFullyRestored] = useState(false)
+
+    // Local ticking countdown
+    const [secondsLeft, setSecondsLeft] = useState<number>(0)
+
+    useEffect(() => {
+        if (server?.deletion_remaining_seconds !== undefined && server?.deletion_remaining_seconds !== null) {
+            setSecondsLeft(server.deletion_remaining_seconds)
+        }
+        if (server?.reactivation_progress) {
+            setCompletedSteps(server.reactivation_progress.completed)
+        }
+    }, [server])
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setSecondsLeft((prev) => Math.max(0, prev - 1))
+        }, 1000)
+        return () => clearInterval(timer)
+    }, [])
+
+    // 20s anti-bypass countdown
+    useEffect(() => {
+        let timer: any = null
+        if (waitCountdown > 0) {
+            timer = setInterval(() => {
+                setWaitCountdown((prev) => Math.max(0, prev - 1))
+            }, 1000)
+        }
+        return () => {
+            if (timer) clearInterval(timer)
+        }
+    }, [waitCountdown])
+
+    // Reset local state when opened
+    useEffect(() => {
+        if (opened && server) {
+            setSession(null)
+            setClaimCode('')
+            setErrorMsg(null)
+            setSuccessMsg(null)
+            setWaitCountdown(0)
+            setIsFullyRestored(false)
+            setCompletedSteps(server.reactivation_progress?.completed ?? 0)
+        }
+    }, [opened, server?.internal_id])
+
+    if (!opened || !server) return null
+
+    const currentStepNumber = Math.min(3, completedSteps + 1)
+    const isFinalCritical = secondsLeft <= 1800 // Final 30 minutes before deletion
+
+    const handleStartStepLink = async () => {
+        setLoadingLink(true)
+        setErrorMsg(null)
+        try {
+            const data = await startServerActivitySession(server.internal_id)
+            setSession(data)
+            setWaitCountdown(20)
+
+            if (data.shrinkme_url) {
+                window.open(data.shrinkme_url, '_blank', 'noopener,noreferrer')
+            }
+        } catch (err: any) {
+            setErrorMsg(err.response?.data?.message || 'Failed to generate step verification link. Please try again.')
+        } finally {
+            setLoadingLink(false)
+        }
+    }
+
+    const handleSubmitCode = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!claimCode.trim()) {
+            setErrorMsg(`Please enter claim code #${currentStepNumber}.`)
+            return
+        }
+
+        setSubmittingCode(true)
+        setErrorMsg(null)
+        try {
+            const res = await claimActivityCode(server.internal_id, claimCode.trim())
+
+            if (res.restored) {
+                // 3/3 Reached! Server unsuspended and restored
+                setCompletedSteps(3)
+                setIsFullyRestored(true)
+                setSuccessMsg(res.message)
+                setTimeout(() => {
+                    onSuccess()
+                    onClose()
+                }, 2200)
+            } else {
+                // Advanced step (e.g. 1/3 -> 2/3)
+                const newCompleted = res.step_completed ?? (completedSteps + 1)
+                setCompletedSteps(newCompleted)
+                setClaimCode('')
+                setSession(null)
+                setWaitCountdown(0)
+                setSuccessMsg(res.message)
+            }
+        } catch (err: any) {
+            setErrorMsg(err.response?.data?.message || 'Invalid or incorrect code for this step. Please verify and try again.')
+        } finally {
+            setSubmittingCode(false)
+        }
+    }
+
+    return (
+        <AnimatePresence>
+            <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto'>
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                    className={`relative w-full max-w-lg bg-neutral-900/95 border rounded-3xl p-6 sm:p-7 text-white overflow-hidden font-sans text-left transition-all ${
+                        isFinalCritical
+                            ? 'border-rose-500/50 shadow-[0px_0px_140px_-20px_#e11d48]'
+                            : 'border-violet-500/40 shadow-[0px_0px_120px_-20px_#7c3aed]'
+                    }`}
+                >
+                    {/* Top ambient highlight bar */}
+                    <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${
+                        isFinalCritical
+                            ? 'from-transparent via-rose-500 to-transparent animate-pulse'
+                            : 'from-transparent via-violet-500 to-transparent'
+                    }`} />
+
+                    {/* Close Button */}
+                    <button
+                        type='button'
+                        onClick={onClose}
+                        className='absolute top-5 right-5 p-2 rounded-xl bg-neutral-800/80 hover:bg-neutral-700 text-gray-400 hover:text-white transition cursor-pointer'
+                        aria-label='Close'
+                    >
+                        <X className='w-4 h-4' />
+                    </button>
+
+                    {/* Header */}
+                    <div className='flex items-start gap-4 mb-5'>
+                        <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shadow-inner shrink-0 mt-0.5 ${
+                            isFinalCritical
+                                ? 'bg-rose-500/20 border-rose-500/30 text-rose-400'
+                                : 'bg-violet-500/20 border-violet-500/30 text-violet-400'
+                        }`}>
+                            <Power className='w-6 h-6' />
+                        </div>
+                        <div>
+                            <div className='flex items-center gap-2 flex-wrap'>
+                                <span className='text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30'>
+                                    VPS Suspended
+                                </span>
+                                {isFinalCritical && (
+                                    <span className='text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse flex items-center gap-1'>
+                                        <AlertOctagon className='w-3 h-3' /> Final 30m Window
+                                    </span>
+                                )}
+                            </div>
+                            <h3 className='text-xl font-bold text-white mt-1'>
+                                Claim Back Your Server
+                            </h3>
+                            <p className='text-xs text-gray-400 mt-0.5'>
+                                Complete 3 sequential links to unsuspend <span className='text-violet-300 font-semibold'>{server.name}</span>.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Live Deletion Countdown Warning */}
+                    <div className={`p-4 rounded-2xl border mb-5 flex items-center justify-between ${
+                        isFinalCritical
+                            ? 'bg-rose-950/40 border-rose-500/50 text-rose-300 animate-pulse'
+                            : 'bg-neutral-950/70 border-neutral-800 text-gray-300'
+                    }`}>
+                        <div className='flex items-center gap-3'>
+                            <Clock className={`w-5 h-5 ${isFinalCritical ? 'text-rose-400' : 'text-amber-400'}`} />
+                            <div>
+                                <span className='text-[10px] font-bold uppercase tracking-wider block text-gray-400'>
+                                    {isFinalCritical ? 'FINAL CHANCE BEFORE DELETION (GG)' : 'Permanent Deletion Deadline'}
+                                </span>
+                                <span className={`text-base font-bold font-mono tracking-tight ${isFinalCritical ? 'text-rose-400' : 'text-amber-400'}`}>
+                                    {formatSecondsToTime(secondsLeft)}
+                                </span>
+                            </div>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                            isFinalCritical ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'bg-neutral-900 border-neutral-800 text-gray-400'
+                        }`}>
+                            48h Grace Window
+                        </span>
+                    </div>
+
+                    {/* 3-Step Progress Stepper (1/3, 2/3, 3/3) */}
+                    <div className='p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800 mb-5'>
+                        <div className='flex items-center justify-between mb-2.5'>
+                            <span className='text-xs font-bold text-gray-300'>
+                                Recovery Progress:
+                            </span>
+                            <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full border ${
+                                completedSteps === 3
+                                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                    : 'bg-violet-500/20 text-violet-300 border-violet-500/30'
+                            }`}>
+                                {completedSteps}/3 Links Completed
+                            </span>
+                        </div>
+
+                        {/* Segmented Steps Bar */}
+                        <div className='grid grid-cols-3 gap-2'>
+                            {[1, 2, 3].map((step) => {
+                                const isDone = completedSteps >= step
+                                const isCurrent = currentStepNumber === step && !isFullyRestored
+
+                                return (
+                                    <div
+                                        key={step}
+                                        className={`py-2 px-3 rounded-xl border text-center transition-all ${
+                                            isDone
+                                                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold'
+                                                : isCurrent
+                                                ? 'bg-violet-500/20 border-violet-500/60 text-white font-bold ring-1 ring-violet-500/40 shadow-md'
+                                                : 'bg-neutral-900/60 border-neutral-800 text-gray-500'
+                                        }`}
+                                    >
+                                        <div className='flex items-center justify-center gap-1.5 text-xs'>
+                                            {isDone ? (
+                                                <CheckCircle2 className='w-3.5 h-3.5 text-emerald-400 shrink-0' />
+                                            ) : (
+                                                <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center ${
+                                                    isCurrent ? 'bg-violet-500 text-white' : 'bg-neutral-800 text-gray-400'
+                                                }`}>
+                                                    {step}
+                                                </span>
+                                            )}
+                                            <span>Link {step}</span>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Alerts */}
+                    {errorMsg && (
+                        <div className='mb-4 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 font-medium flex items-start gap-2 leading-relaxed'>
+                            <AlertOctagon className='w-4 h-4 shrink-0 mt-0.5 text-rose-400' />
+                            <span>{errorMsg}</span>
+                        </div>
+                    )}
+
+                    {successMsg && (
+                        <div className='mb-4 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-400 font-medium flex items-center gap-2'>
+                            <CheckCircle2 className='w-4 h-4 shrink-0 text-emerald-400' />
+                            <span>{successMsg}</span>
+                        </div>
+                    )}
+
+                    {/* Sequential Active Step Form (1 link = 1 code) */}
+                    {!isFullyRestored ? (
+                        <div className='space-y-4'>
+                            {/* Step A: Open Link */}
+                            <div className='p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800'>
+                                <div className='flex items-center justify-between mb-2'>
+                                    <span className='text-xs font-bold text-gray-200 flex items-center gap-2'>
+                                        <span className='w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 text-[10px] flex items-center justify-center border border-violet-500/30'>
+                                            {currentStepNumber}A
+                                        </span>
+                                        Open Sponsored Link #{currentStepNumber}
+                                    </span>
+                                    {session && (
+                                        <span className='text-[10px] font-mono text-emerald-400 font-semibold flex items-center gap-1'>
+                                            <CheckCircle2 className='w-3 h-3' /> Link #{currentStepNumber} Active
+                                        </span>
+                                    )}
+                                </div>
+                                <p className='text-xs text-gray-400 leading-relaxed mb-3'>
+                                    Click below to start verification link #{currentStepNumber} of 3. Complete the ad timer on Shrinkme to reveal Code #{currentStepNumber}.
+                                </p>
+
+                                <button
+                                    type='button'
+                                    onClick={handleStartStepLink}
+                                    disabled={loadingLink}
+                                    className='w-full py-2.5 px-4 rounded-xl bg-gradient-to-t from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white text-xs font-bold shadow-lg shadow-violet-900/40 border border-violet-400 flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50'
+                                >
+                                    {loadingLink ? (
+                                        <>
+                                            <RotateCw className='w-4 h-4 animate-spin' /> Generating Link #{currentStepNumber}...
+                                        </>
+                                    ) : session ? (
+                                        <>
+                                            <ExternalLink className='w-4 h-4' /> Re-open Link #{currentStepNumber}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ExternalLink className='w-4 h-4' /> Start Link #{currentStepNumber} of 3
+                                        </>
+                                    )}
+                                </button>
+
+                                {waitCountdown > 0 && (
+                                    <div className='mt-2.5 flex items-center gap-2 text-[11px] text-amber-400/90 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20'>
+                                        <Clock className='w-3.5 h-3.5 animate-spin shrink-0' />
+                                        <span>Anti-bypass check: Please spend at least {waitCountdown}s completing the link...</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Step B: Submit Code */}
+                            <form onSubmit={handleSubmitCode} className='p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800 space-y-3'>
+                                <div className='flex items-center justify-between'>
+                                    <span className='text-xs font-bold text-gray-200 flex items-center gap-2'>
+                                        <span className='w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 text-[10px] flex items-center justify-center border border-violet-500/30'>
+                                            {currentStepNumber}B
+                                        </span>
+                                        Enter Code #{currentStepNumber}
+                                    </span>
+                                    <span className='text-[10px] text-gray-500'>Code #{currentStepNumber} of 3</span>
+                                </div>
+
+                                <div className='relative'>
+                                    <input
+                                        type='text'
+                                        value={claimCode}
+                                        onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
+                                        placeholder={`Enter Code #${currentStepNumber} (ACT-XXXX-XXXX)`}
+                                        className='w-full px-4 py-2.5 bg-black/60 border border-neutral-700 rounded-xl text-xs font-mono tracking-widest text-white focus:outline-none focus:border-violet-500 uppercase placeholder:normal-case placeholder:tracking-normal transition'
+                                    />
+                                </div>
+
+                                <button
+                                    type='submit'
+                                    disabled={submittingCode || !claimCode.trim()}
+                                    className='w-full py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold border border-neutral-700 hover:border-neutral-600 flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed'
+                                >
+                                    {submittingCode ? (
+                                        <>
+                                            <RotateCw className='w-4 h-4 animate-spin text-violet-400' /> Verifying Code #{currentStepNumber}...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <KeyRound className='w-4 h-4 text-violet-400' />
+                                            {currentStepNumber === 3
+                                                ? 'Submit Final Code & Unsuspend Server!'
+                                                : `Submit Code #${currentStepNumber} (${currentStepNumber}/3)`}
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+                        </div>
+                    ) : (
+                        <div className='py-8 text-center space-y-3'>
+                            <div className='w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/50'>
+                                <CheckCircle2 className='w-8 h-8' />
+                            </div>
+                            <h4 className='text-lg font-bold text-white'>Server Unsuspended &amp; Booting!</h4>
+                            <p className='text-xs text-gray-400 max-w-sm mx-auto'>
+                                All 3 links have been verified. Your VPS is being started and granted 72 hours of active time.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Anti-Bypass Footer */}
+                    <div className='mt-4 flex items-center gap-2 text-[11px] text-gray-500 justify-center'>
+                        <ShieldAlert className='w-3.5 h-3.5 text-violet-400 shrink-0' />
+                        <span>Linkvertise/Shrinkme bypassers will burn the session token. Complete links manually.</span>
+                    </div>
+                </motion.div>
+            </div>
+        </AnimatePresence>
+    )
+}
+
+export default SuspendedClaimBackModal

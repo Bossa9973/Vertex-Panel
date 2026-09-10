@@ -33,6 +33,10 @@ Route::get('/plans', [Client\ServerDeployController::class, 'getOptions']);
 Route::post('/deploy', [Client\ServerDeployController::class, 'deploy']);
 Route::delete('/servers/{uuid}', [Client\ServerDeployController::class, 'destroy']);
 Route::post('/servers/{id}/renew', [Client\ServerDeployController::class, 'renew']);
+Route::post('/servers/{id}/activity/start', [Client\ServerActivityController::class, 'startSession']);
+Route::post('/servers/{id}/activity/claim-code', [Client\ServerActivityController::class, 'claimCode']);
+Route::get('/servers/{id}/activity/status', [Client\ServerActivityController::class, 'getStatus']);
+Route::post('/activity/verify', [Client\ServerActivityController::class, 'verifyCallback']);
 
 Route::prefix('/servers/{server}')->middleware(
     [ServerSubject::class, AuthenticateServerAccess::class],

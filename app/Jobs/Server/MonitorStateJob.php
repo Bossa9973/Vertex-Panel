@@ -46,7 +46,23 @@ class MonitorStateJob implements ShouldQueue
             throw new \RuntimeException("VM state transition timed out for Server ID {$server->id} (VMID: {$server->vmid}) waiting for state: {$this->targetState->value}.");
         }
 
-        $stateData = $repository->setServer($server)->getState();
+        try {
+            $stateData = $repository->setServer($server)->getState();
+        } catch (\Throwable $e) {
+            $msg = strtolower($e->getMessage());
+            if ($this->targetState === State::STOPPED && (
+                str_contains($msg, 'does not exist') ||
+                str_contains($msg, 'not found') ||
+                str_contains($msg, '404')
+            )) {
+                \Illuminate\Support\Facades\Log::info("MonitorStateJob: VM {$server->vmid} no longer exists on Proxmox, treating as stopped.");
+                if ($this->callback !== null) {
+                    call_user_func($this->callback);
+                }
+                return;
+            }
+            throw $e;
+        }
 
         if ($stateData->state === $this->targetState) {
             if ($this->callback !== null) {

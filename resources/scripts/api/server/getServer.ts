@@ -41,6 +41,15 @@ export interface ServerBuild {
     description: string | null
     status: EloquentStatus
     planTier?: 'free' | 'paid'
+    activityRemainingSeconds?: number | null
+    deletionRemainingSeconds?: number | null
+    lifecyclePhase?: string
+    reactivationProgress?: {
+        completed: number
+        required: number
+        remaining: number
+        display: string
+    } | null
     nodeId: number
     usages: {
         bandwidth: number // bytes
@@ -97,6 +106,10 @@ export const rawDataToServerBuild = (data: any): ServerBuild => ({
     name: data.name,
     status: data.status,
     planTier: data.plan_tier ?? 'free',
+    activityRemainingSeconds: data.activity_remaining_seconds,
+    deletionRemainingSeconds: data.deletion_remaining_seconds,
+    lifecyclePhase: data.lifecycle_phase,
+    reactivationProgress: data.reactivation_progress,
     nodeId: data.node_id,
     description: data.description
         ? data.description.length > 0

@@ -37,6 +37,19 @@ class DeleteServerJob implements ShouldQueue
     {
         $server = Server::findOrFail($this->serverId);
 
-        $service->delete($server);
+        try {
+            $service->delete($server);
+        } catch (\Throwable $e) {
+            $msg = strtolower($e->getMessage());
+            if (
+                str_contains($msg, 'does not exist') ||
+                str_contains($msg, 'not found') ||
+                str_contains($msg, '404')
+            ) {
+                \Illuminate\Support\Facades\Log::info("DeleteServerJob: VM {$server->vmid} already deleted/absent on Proxmox, proceeding.");
+                return;
+            }
+            throw $e;
+        }
     }
 }

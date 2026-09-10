@@ -30,6 +30,11 @@ class ServerDetailService
             'plan_tier' => $server->plan_tier ?? 'free',
             'created_at' => $server->created_at instanceof \DateTimeInterface ? $server->created_at->toIso8601String() : $server->created_at,
             'expires_at' => $server->expires_at instanceof \DateTimeInterface ? $server->expires_at->toIso8601String() : $server->expires_at,
+            'activity_expires_at' => $server->activity_expires_at instanceof \DateTimeInterface ? $server->activity_expires_at->toIso8601String() : $server->activity_expires_at,
+            'deletion_deadline_at' => $server->deletion_deadline_at instanceof \DateTimeInterface ? $server->deletion_deadline_at->toIso8601String() : $server->deletion_deadline_at,
+            'reactivation_codes_completed' => (int) ($server->reactivation_codes_completed ?? 0),
+            'reactivation_codes_required' => (int) ($server->reactivation_codes_required ?? 3),
+            'lifecycle_phase' => $server->getActivityLifecyclePhase(),
             'usages' => [
                 'bandwidth' => $server->bandwidth_usage,
             ],

@@ -1,5 +1,5 @@
 import usePagination from '@/util/usePagination'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import http from '@/api/http'
@@ -33,23 +33,33 @@ const STATUS_BADGE: Record<string, string> = {
 const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) => {
     const { t: tStrings } = useTranslation('strings')
     const [page, setPage] = usePagination()
+
+    // Reset pagination and selection whenever tab or query changes
+    useEffect(() => {
+        setPage(1)
+        setSelectedIds([])
+        setWipeMode(false)
+    }, [tab, query])
+
     const { data, mutate } = useServersSWR({
         page,
         query,
         nodeId,
         userId,
+        tab: tab === 'failed_uninstalls' ? 'failed_uninstalls' : undefined,
         include: ['node', 'user'],
     })
 
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [fadingIds, setFadingIds] = useState<number[]>([])
     const [confirmOpen, setConfirmOpen] = useState(false)
+    const [wipeMode, setWipeMode] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
     const filterItems = (items: AdminServerBuild[]) => {
         if (tab === 'failed_uninstalls') {
-            return items.filter(s => s.status === 'deletion_failed')
+            return items.filter(s => s.status === 'deletion_failed' || s.status === 'deleting')
         }
         return items
     }
@@ -69,15 +79,17 @@ const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) 
         )
     }
 
+    const isWipe = wipeMode || tab === 'failed_uninstalls'
+
     const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return
         setDeleting(true)
         setErrorMsg(null)
         setFadingIds(selectedIds)
 
-        // force=true  → DB wipe only (Failed Uninstalls tab, no Proxmox)
-        // force=false → dispatch real deletion job chain (All Servers tab)
-        const force = tab === 'failed_uninstalls'
+        // force=true  → DB wipe only (Failed Uninstalls tab or Force Wipe clicked)
+        // force=false → dispatch real deletion job chain (All Servers tab regular delete)
+        const force = isWipe
 
         try {
             await http.post('/api/admin/servers/bulk-delete', {
@@ -88,6 +100,7 @@ const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) 
                 setSelectedIds([])
                 setConfirmOpen(false)
                 setDeleting(false)
+                setWipeMode(false)
                 setFadingIds([])
                 await mutate()
             }, 700)
@@ -107,10 +120,11 @@ const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) 
                 color='red'
                 onClick={() => {
                     setSelectedIds([server.internalId])
+                    setWipeMode(true)
                     setConfirmOpen(true)
                 }}
             >
-                Force Wipe
+                ⚡ Force Wipe
             </Menu.Item>
         </Actions>
     )
@@ -126,25 +140,25 @@ const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) 
                             <div className='w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 text-xl font-bold shrink-0'>!</div>
                             <div>
                                 <h3 className='text-base font-bold text-white'>
-                                    {tab === 'failed_uninstalls'
+                                    {isWipe
                                         ? `Force Wipe ${selectedIds.length} Server${selectedIds.length !== 1 ? 's' : ''} from DB`
                                         : `Delete ${selectedIds.length} Server${selectedIds.length !== 1 ? 's' : ''}`
                                     }
                                 </h3>
                                 <p className='text-xs text-stone-500'>
-                                    {tab === 'failed_uninstalls'
-                                        ? 'Immediate database purge — no Proxmox communication'
+                                    {isWipe
+                                        ? 'Immediate database purge — releases all IPs & bypasses hypervisor'
                                         : 'Dispatches Proxmox deletion job chain'
                                     }
                                 </p>
                             </div>
                         </div>
                         <p className='text-sm text-stone-300 leading-relaxed bg-stone-900/60 border border-stone-800 rounded-xl p-4'>
-                            {tab === 'failed_uninstalls' ? (
+                            {isWipe ? (
                                 <>
                                     Selected server{selectedIds.length !== 1 ? 's' : ''} will be{' '}
                                     <span className='text-red-400 font-semibold'>permanently wiped</span> from the database
-                                    with no Proxmox communication. All allocated IPs will be released immediately.
+                                    with no Proxmox communication. All allocated IPs and backups will be cleared immediately.
                                 </>
                             ) : (
                                 <>
@@ -163,7 +177,7 @@ const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) 
                             <button
                                 type='button'
                                 disabled={deleting}
-                                onClick={() => { setConfirmOpen(false); setErrorMsg(null) }}
+                                onClick={() => { setConfirmOpen(false); setErrorMsg(null); setWipeMode(false) }}
                                 className='px-4 py-2 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-xl transition disabled:opacity-50'
                             >
                                 Cancel
@@ -174,7 +188,7 @@ const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) 
                                 onClick={handleBulkDelete}
                                 className='px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 rounded-xl shadow-lg shadow-red-600/20 transition flex items-center gap-2 disabled:opacity-50'
                             >
-                                {deleting ? '…Wiping' : '⚡ Wipe Into Void'}
+                                {deleting ? '…Processing' : (isWipe ? '⚡ Wipe Into Void' : 'Delete Selected')}
                             </button>
                         </div>
                     </div>
@@ -183,23 +197,32 @@ const ServersTable = ({ query, className, nodeId, userId, tab = 'all' }: Props) 
 
             {/* ─── Floating Selection Bar ──────────────────────────────────── */}
             {selectedIds.length > 0 && (
-                <div className='fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-5 px-6 py-3.5 bg-[#141619]/95 border border-red-500/30 backdrop-blur-xl rounded-2xl shadow-2xl'>
+                <div className='fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3.5 bg-[#141619]/95 border border-red-500/30 backdrop-blur-xl rounded-2xl shadow-2xl'>
                     <span className='text-sm font-semibold text-stone-200'>
                         🗑 {selectedIds.length} selected
                     </span>
                     <button
                         type='button'
-                        onClick={() => setSelectedIds([])}
+                        onClick={() => { setSelectedIds([]); setWipeMode(false); }}
                         className='text-xs text-stone-400 hover:text-white px-3 py-1.5 bg-stone-800/80 rounded-lg transition'
                     >
                         Clear
                     </button>
+                    {tab === 'all' && (
+                        <button
+                            type='button'
+                            onClick={() => { setWipeMode(false); setConfirmOpen(true); }}
+                            className='text-xs font-bold text-stone-200 hover:text-white bg-stone-800 hover:bg-stone-700 border border-stone-700 px-4 py-2 rounded-xl transition'
+                        >
+                            Delete Selected
+                        </button>
+                    )}
                     <button
                         type='button'
-                        onClick={() => setConfirmOpen(true)}
+                        onClick={() => { setWipeMode(true); setConfirmOpen(true); }}
                         className='text-xs font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 px-4 py-2 rounded-xl shadow-lg shadow-red-600/20 transition'
                     >
-                        ⚡ Delete Selected
+                        ⚡ Force Wipe ({selectedIds.length})
                     </button>
                 </div>
             )}

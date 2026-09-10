@@ -22,7 +22,12 @@ class Server extends Model
         'disk'            => MebibytesToAndFromBytes::class,
         'bandwidth_usage' => MebibytesToAndFromBytes::class,
         'bandwidth_limit' => MebibytesToAndFromBytes::class,
-        'expires_at'      => 'datetime',
+        'expires_at'                   => 'datetime',
+        'activity_expires_at'          => 'datetime',
+        'suspended_at'                 => 'datetime',
+        'deletion_deadline_at'         => 'datetime',
+        'reactivation_codes_completed' => 'integer',
+        'reactivation_codes_required'  => 'integer',
     ];
 
     protected $guarded = [
@@ -75,6 +80,11 @@ class Server extends Model
         return $this->hasMany(Backup::class);
     }
 
+    public function activityRenewals(): HasMany
+    {
+        return $this->hasMany(ServerActivityRenewal::class);
+    }
+
     /**
      * Returns all the activity log entries where the server is the subject.
      */
@@ -104,6 +114,118 @@ class Server extends Model
     public function hasPaidTier(): bool
     {
         return $this->plan_tier === 'paid';
+    }
+
+    public function isFreeTier(): bool
+    {
+        return $this->plan_tier !== 'paid';
+    }
+
+    /**
+     * True if free server has reached 72h active expiration but is within the 30m grace window before suspension.
+     */
+    public function isInPreSuspendCritical(): bool
+    {
+        if ($this->hasPaidTier() || !$this->activity_expires_at || $this->isSuspended()) {
+            return false;
+        }
+
+        $now = \Carbon\Carbon::now();
+        $expiredAt = \Carbon\Carbon::parse($this->activity_expires_at);
+        $suspendDeadline = $expiredAt->copy()->addMinutes(30);
+
+        return $now->greaterThanOrEqualTo($expiredAt) && $now->lessThan($suspendDeadline);
+    }
+
+    /**
+     * True if free server is suspended due to inactivity and within the 48-hour recovery window.
+     */
+    public function isAwaitingReactivation(): bool
+    {
+        if ($this->hasPaidTier() || !$this->isSuspended() || !$this->deletion_deadline_at) {
+            return false;
+        }
+
+        return \Carbon\Carbon::now()->lessThan($this->deletion_deadline_at);
+    }
+
+    /**
+     * True if free server is suspended and in its final 30-minute grace period before permanent deletion.
+     */
+    public function isInPreDeletionCritical(): bool
+    {
+        if ($this->hasPaidTier() || !$this->isSuspended() || !$this->deletion_deadline_at) {
+            return false;
+        }
+
+        $now = \Carbon\Carbon::now();
+        $deletionDeadline = \Carbon\Carbon::parse($this->deletion_deadline_at);
+        $criticalStart = $deletionDeadline->copy()->subMinutes(30);
+
+        return $now->greaterThanOrEqualTo($criticalStart) && $now->lessThan($deletionDeadline);
+    }
+
+    /**
+     * True if free server has passed the 48-hour suspended deadline and is ready for permanent deletion.
+     */
+    public function isReadyForPermanentDeletion(): bool
+    {
+        if ($this->hasPaidTier() || !$this->isSuspended() || !$this->deletion_deadline_at) {
+            return false;
+        }
+
+        return \Carbon\Carbon::now()->greaterThanOrEqualTo($this->deletion_deadline_at);
+    }
+
+    /**
+     * Lifecycle phase string for UI and API clients:
+     * - 'paid': Paid tier, exempt from timer
+     * - 'active': Free server running normally (> 12h left on 72h timer)
+     * - 'pre_suspend_warning': Free server with <= 12h left
+     * - 'pre_suspend_critical': In 30m critical grace before suspension
+     * - 'suspended_recovery': Suspended, in 48h window to complete 3 links
+     * - 'pre_delete_critical': In final 30m before permanent deletion
+     * - 'deleted': Past 48h deadline (queued for purge)
+     */
+    public function getActivityLifecyclePhase(): string
+    {
+        if ($this->hasPaidTier()) {
+            return 'paid';
+        }
+
+        if ($this->isSuspended()) {
+            if ($this->isReadyForPermanentDeletion()) {
+                return 'deleted';
+            }
+            if ($this->isInPreDeletionCritical()) {
+                return 'pre_delete_critical';
+            }
+            return 'suspended_recovery';
+        }
+
+        if ($this->isInPreSuspendCritical()) {
+            return 'pre_suspend_critical';
+        }
+
+        if ($this->activity_expires_at) {
+            $diffHours = \Carbon\Carbon::now()->diffInHours(\Carbon\Carbon::parse($this->activity_expires_at), false);
+            if ($diffHours <= 12 && $diffHours >= 0) {
+                return 'pre_suspend_warning';
+            }
+        }
+
+        return 'active';
+    }
+
+    public function getReactivationProgress(): array
+    {
+        $completed = min(3, max(0, (int) $this->reactivation_codes_completed));
+        return [
+            'completed' => $completed,
+            'required'  => 3,
+            'remaining' => max(0, 3 - $completed),
+            'display'   => "{$completed}/3",
+        ];
     }
 
     /**

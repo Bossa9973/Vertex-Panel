@@ -25,6 +25,7 @@ use Convoy\Services\Servers\SyncBuildService;
 use Convoy\Transformers\Admin\ServerBuildTransformer;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\QueryBuilder;
@@ -49,7 +50,13 @@ class ServerController extends ApiController
 
     public function index(Request $request)
     {
-        $servers = QueryBuilder::for(Server::query())
+        $query = Server::query();
+
+        if ($request->query('tab') === 'failed_uninstalls' || $request->input('tab') === 'failed_uninstalls') {
+            $query->whereIn('status', [Status::DELETION_FAILED->value, Status::DELETING->value]);
+        }
+
+        $servers = QueryBuilder::for($query)
                                ->with(['addresses', 'user', 'node'])
                                ->defaultSort('-id')
                                ->allowedFilters(
@@ -63,6 +70,7 @@ class ServerController extends ApiController
                                        ),
                                        AllowedFilter::exact('node_id'),
                                        AllowedFilter::exact('user_id'),
+                                       AllowedFilter::exact('status'),
                                        'name',
                                    ],
                                )
@@ -165,6 +173,18 @@ class ServerController extends ApiController
 
     public function destroy(Request $request, Server $server)
     {
+        $force = $request->boolean('force') || $request->boolean('no_purge');
+
+        if ($force) {
+            $this->forceWipeServer($server);
+            return $this->returnNoContent();
+        }
+
+        // If server is already marked deletion_failed, reset status to null so deletion service can re-dispatch cleanly
+        if ($server->status === Status::DELETION_FAILED->value) {
+            $server->update(['status' => null]);
+        }
+
         $this->connection->transaction(function () use ($server, $request) {
             $server->update(['status' => Status::DELETING->value]);
 
@@ -190,8 +210,7 @@ class ServerController extends ApiController
 
         foreach ($servers as $server) {
             if ($force) {
-                $server->addresses()->update(['server_id' => null]);
-                $server->delete();
+                $this->forceWipeServer($server);
                 $wiped++;
             } else {
                 $server->update(['status' => null]);
@@ -200,7 +219,7 @@ class ServerController extends ApiController
                     $this->deletionService->handle($server);
                     $dispatched++;
                 } catch (\Throwable $e) {
-                    $server->update(['status' => \Convoy\Enums\Server\Status::DELETION_FAILED->value]);
+                    $server->update(['status' => Status::DELETION_FAILED->value]);
                 }
             }
         }
@@ -215,6 +234,23 @@ class ServerController extends ApiController
             'dispatched'  => $dispatched,
             'wiped'       => $wiped,
         ]);
+    }
+
+    private function forceWipeServer(Server $server): void
+    {
+        try {
+            $server->addresses()->update(['server_id' => null]);
+            $server->backups()->forceDelete();
+            $server->delete();
+        } catch (\Throwable $e) {
+            Log::error("Failed to force-wipe server #{$server->id} via Eloquent: " . $e->getMessage());
+            // Direct DB fallback to guarantee server is wiped no matter what
+            DB::table('addresses')->where('server_id', $server->id)->update(['server_id' => null]);
+            DB::table('backups')->where('server_id', $server->id)->delete();
+            DB::table('pterodactyl_deploys')->where('server_id', $server->id)->update(['server_id' => null]);
+            DB::table('reseller_payment_links')->where('server_id', $server->id)->update(['server_id' => null]);
+            DB::table('servers')->where('id', $server->id)->delete();
+        }
     }
 
     /**

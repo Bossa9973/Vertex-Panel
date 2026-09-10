@@ -360,5 +360,73 @@ class AdminSettingsController extends ApiController
             'data' => $payload,
         ]);
     }
+
+    public function getFreeServerActivitySettings()
+    {
+        $apiKey = DB::table('settings')->where('key', 'shrinkme_api_key')->value('value')
+            ?: config('services.shrinkme.api_key', '');
+        $minSeconds = DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
+            ?: config('services.shrinkme.min_seconds', 20);
+        $enabled = DB::table('settings')->where('key', 'shrinkme_enabled')->value('value');
+        $isEnabled = $enabled !== null ? ($enabled === 'true' || $enabled === '1') : true;
+        $timerHours = (int) (DB::table('settings')->where('key', 'free_server_timer_hours')->value('value') ?: 72);
+        $graceMinutes = (int) (DB::table('settings')->where('key', 'free_server_grace_minutes')->value('value') ?: 30);
+        $recoveryDays = (int) (DB::table('settings')->where('key', 'free_server_recovery_days')->value('value') ?: 2);
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'shrinkme_api_key'     => $apiKey,
+                'shrinkme_min_seconds' => (int) $minSeconds,
+                'shrinkme_enabled'     => (bool) $isEnabled,
+                'timer_hours'          => $timerHours,
+                'grace_minutes'        => $graceMinutes,
+                'recovery_days'        => $recoveryDays,
+            ],
+        ]);
+    }
+
+    public function updateFreeServerActivitySettings(Request $request)
+    {
+        $request->validate([
+            'shrinkme_api_key'     => 'nullable|string',
+            'shrinkme_min_seconds' => 'required|integer|min:5|max:120',
+            'shrinkme_enabled'     => 'required|boolean',
+            'timer_hours'          => 'required|integer|min:1|max:720',
+            'grace_minutes'        => 'required|integer|min:5|max:180',
+            'recovery_days'        => 'required|integer|min:1|max:14',
+        ]);
+
+        $settings = [
+            'shrinkme_api_key'          => (string) $request->input('shrinkme_api_key', ''),
+            'shrinkme_min_seconds'      => (string) $request->input('shrinkme_min_seconds', 20),
+            'shrinkme_enabled'          => $request->boolean('shrinkme_enabled') ? 'true' : 'false',
+            'free_server_timer_hours'   => (string) $request->input('timer_hours', 72),
+            'free_server_grace_minutes' => (string) $request->input('grace_minutes', 30),
+            'free_server_recovery_days' => (string) $request->input('recovery_days', 2),
+        ];
+
+        foreach ($settings as $k => $v) {
+            DB::table('settings')->updateOrInsert(
+                ['key' => $k],
+                ['value' => $v, 'updated_at' => now()]
+            );
+        }
+
+        try {
+            \Convoy\Facades\Activity::event('admin:activity-settings-update')
+                ->actor($request->user())
+                ->description("Admin updated Free Server Activity & Shrinkme configuration")
+                ->property(['settings' => $settings])
+                ->withRequestMetadata()
+                ->log();
+        } catch (\Throwable $e) {}
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Free server activity and Shrinkme settings updated successfully.',
+            'data'    => $request->all(),
+        ]);
+    }
 }
 

@@ -37,7 +37,25 @@ class SendPowerCommandJob implements ShouldQueue
     {
         $server = Server::findOrFail($this->serverId);
 
-        $repository->setServer($server)->send($this->power);
+        try {
+            $repository->setServer($server)->send($this->power);
+        } catch (\Throwable $e) {
+            // When killing/stopping a VM during deletion, if it's already stopped, not running, or doesn't exist on Proxmox, proceed
+            if ($this->power === PowerAction::KILL) {
+                $msg = strtolower($e->getMessage());
+                if (
+                    str_contains($msg, 'not running') ||
+                    str_contains($msg, 'already stopped') ||
+                    str_contains($msg, 'does not exist') ||
+                    str_contains($msg, 'not found') ||
+                    str_contains($msg, '404')
+                ) {
+                    \Illuminate\Support\Facades\Log::info("SendPowerCommandJob: VM {$server->vmid} already stopped or absent on Proxmox ({$e->getMessage()}), proceeding.");
+                    return;
+                }
+            }
+            throw $e;
+        }
     }
 
     public function failed(\Throwable $exception): void

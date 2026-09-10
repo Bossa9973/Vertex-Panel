@@ -44,6 +44,13 @@ class ServerTransformer extends TransformerAbstract
             }
         }
         $data['price'] = $price;
+        $data['activity_remaining_seconds'] = $server->activity_expires_at
+            ? max(0, \Carbon\Carbon::now()->diffInSeconds(\Carbon\Carbon::parse($server->activity_expires_at), false))
+            : null;
+        $data['deletion_remaining_seconds'] = $server->deletion_deadline_at
+            ? max(0, \Carbon\Carbon::now()->diffInSeconds(\Carbon\Carbon::parse($server->deletion_deadline_at), false))
+            : null;
+        $data['reactivation_progress'] = $server->getReactivationProgress();
 
         return $data;
     }

@@ -15,6 +15,8 @@ export interface QueryParams {
     page?: number | null
     perPage?: number | null
     include?: ServerInclude[] | null
+    tab?: string | null
+    status?: string | null
 }
 
 export type ServerResponse = PaginatedResult<AdminServerBuild>
@@ -26,6 +28,8 @@ const getServers = async ({
     query,
     perPage = 50,
     include,
+    tab,
+    status,
     ...params
 }: QueryParams): Promise<ServerResponse> => {
     const { data } = await http.get('/api/admin/servers', {
@@ -34,6 +38,8 @@ const getServers = async ({
             'filter[node_id]': nodeId,
             'filter[user_id]': userId,
             'filter[*]': query,
+            'filter[status]': status,
+            'tab': tab,
             'include': include?.join(','),
             'per_page': perPage,
             ...params,

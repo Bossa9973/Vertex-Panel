@@ -125,7 +125,9 @@ Route::prefix('/servers')->group(function () {
             Route::patch('/', [Admin\ServerController::class, 'update'])->withoutMiddleware(
                 ValidateServerStatusMiddleware::class,
             );
-            Route::delete('/', [Admin\ServerController::class, 'destroy']);
+            Route::delete('/', [Admin\ServerController::class, 'destroy'])->withoutMiddleware(
+                ValidateServerStatusMiddleware::class,
+            );
 
             Route::prefix('/settings')->group(function () {
                 Route::patch('/build', [Admin\ServerController::class, 'updateBuild']);

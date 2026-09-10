@@ -44,6 +44,11 @@ export const routes: Route[] = [
         path: 'deploy/pterodactyl/:deployId',
         element: lazyLoad(lazy(() => import('@/pages/deploy/PterodactylStatusPage'))),
     },
+    // Free VPS activity check claim landing route
+    {
+        path: 'activity/claim',
+        element: lazyLoad(lazy(() => import('@/pages/activity/ActivityClaimPage'))),
+    },
     ...serverRoutes,
 ]
 

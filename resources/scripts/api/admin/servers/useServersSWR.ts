@@ -12,10 +12,12 @@ const useServersSWR = ({
     userId,
     addressPoolId,
     query,
+    tab,
+    status,
     ...params
 }: QueryParams) => {
     return useSWR<ServerResponse>(
-        ['admin:servers', page, query, nodeId, userId, addressPoolId],
+        ['admin:servers', page, query, nodeId, userId, addressPoolId, tab, status],
         () =>
             getServers({
                 page,
@@ -23,6 +25,8 @@ const useServersSWR = ({
                 nodeId,
                 userId,
                 addressPoolId,
+                tab,
+                status,
                 ...params,
             })
     )
