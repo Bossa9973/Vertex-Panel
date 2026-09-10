@@ -16,11 +16,20 @@ class ServerActivityController extends ApiController
      */
     public function startSession(Request $request, int $id, FreeServerActivityService $activityService): JsonResponse
     {
+        $request->validate([
+            'client_nonce' => 'nullable|string|max:128',
+        ]);
+
         try {
             /** @var Server $server */
             $server = Server::where('user_id', $request->user()->id)->findOrFail($id);
 
-            $data = $activityService->startSession($server, $request->user(), $request);
+            $data = $activityService->startRenewalSession(
+                $server,
+                $request->user(),
+                $request,
+                $request->input('client_nonce')
+            );
 
             return response()->json([
                 'success' => true,
@@ -42,6 +51,8 @@ class ServerActivityController extends ApiController
         $request->validate([
             'session'          => 'required|string|size:48',
             'sig'              => 'required|string|size:64',
+            'client_nonce'     => 'nullable|string|max:128',
+            'gesture'          => 'nullable|array',
             'client_integrity' => 'nullable|string',
         ]);
 

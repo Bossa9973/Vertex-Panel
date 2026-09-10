@@ -60,20 +60,39 @@ export const FreeServerRenewModal: React.FC<Props> = ({
     const [claimCode, setClaimCode] = useState('')
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
-    const [waitCountdown, setWaitCountdown] = useState<number>(0)
 
-    // Countdown interval for anti-bypass guidance (20s)
+    // BroadcastChannel handshake listener for two-tab security & auto-code sync
     useEffect(() => {
-        let timer: any = null
-        if (waitCountdown > 0) {
-            timer = setInterval(() => {
-                setWaitCountdown((prev) => Math.max(0, prev - 1))
-            }, 1000)
+        if (!opened) return
+
+        let channel: BroadcastChannel | null = null
+        try {
+            channel = new BroadcastChannel('vertex_activity_handshake')
+            channel.onmessage = (evt) => {
+                const data = evt.data
+                if (!data) return
+
+                if (data.type === 'CHALLENGE_REQUEST') {
+                    const currentNonce = sessionStorage.getItem('vertex_activity_client_nonce')
+                    if (currentNonce && channel) {
+                        channel.postMessage({
+                            type: 'CHALLENGE_RESPONSE',
+                            session: data.session,
+                            clientNonce: currentNonce,
+                        })
+                    }
+                } else if (data.type === 'CODE_CLAIMED_AUTO_APPLY' && data.code) {
+                    setClaimCode(data.code)
+                }
+            }
+        } catch (e) {
+            // Ignore if BroadcastChannel not available
         }
+
         return () => {
-            if (timer) clearInterval(timer)
+            channel?.close()
         }
-    }, [waitCountdown])
+    }, [opened])
 
     // Reset local state when opened
     useEffect(() => {
@@ -82,7 +101,6 @@ export const FreeServerRenewModal: React.FC<Props> = ({
             setClaimCode('')
             setErrorMsg(null)
             setSuccessMsg(null)
-            setWaitCountdown(0)
         }
     }, [opened, server?.internal_id])
 
@@ -95,9 +113,13 @@ export const FreeServerRenewModal: React.FC<Props> = ({
         setLoadingSession(true)
         setErrorMsg(null)
         try {
-            const data = await startServerActivitySession(server.internal_id)
+            const clientNonce = typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
+                : Math.random().toString(36).substring(2) + Date.now().toString(36)
+            sessionStorage.setItem('vertex_activity_client_nonce', clientNonce)
+
+            const data = await startServerActivitySession(server.internal_id, clientNonce)
             setSession(data)
-            setWaitCountdown(20)
 
             // Open Shrinkme URL in new window
             if (data.shrinkme_url) {

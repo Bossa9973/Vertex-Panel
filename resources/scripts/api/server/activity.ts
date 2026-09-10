@@ -57,25 +57,40 @@ export interface ActivityServerStatus {
     }
 }
 
+export interface HumanGesturePayload {
+    is_trusted: boolean
+    points: Array<[number, number, number]>
+    is_touch?: boolean
+}
+
 /**
  * Start a renewal or reactivation link session for a free server.
  */
-export const startServerActivitySession = async (serverId: number): Promise<ActivityRenewalSession> => {
-    const res = await http.post(`/api/client/servers/${serverId}/activity/start`)
+export const startServerActivitySession = async (
+    serverId: number,
+    clientNonce?: string
+): Promise<ActivityRenewalSession> => {
+    const res = await http.post(`/api/client/servers/${serverId}/activity/start`, {
+        client_nonce: clientNonce,
+    })
     return res.data.data
 }
 
 /**
- * Verify token and HMAC signature upon landing at /activity/claim.
+ * Verify token callback with 5-pillar Anti-Bypass checks (Two-tab handshake, physical gesture, integrity).
  */
 export const verifyActivityCallback = async (
     session: string,
     sig: string,
+    clientNonce?: string,
+    gesture?: HumanGesturePayload,
     clientIntegrity?: string
 ): Promise<ActivityVerificationResult> => {
     const res = await http.post('/api/client/activity/verify', {
         session,
         sig,
+        client_nonce: clientNonce,
+        gesture,
         client_integrity: clientIntegrity,
     })
     return res.data.data

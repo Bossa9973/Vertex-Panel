@@ -20,6 +20,7 @@ return new class extends Migration
                 $table->unsignedTinyInteger('step_number')->default(1);
                 $table->string('token', 64)->unique();
                 $table->string('claim_code', 32)->unique();
+                $table->string('client_nonce_hash', 64)->nullable();
                 $table->text('shrinkme_url')->nullable();
                 $table->text('destination_url');
                 $table->enum('status', ['pending', 'verified', 'claimed', 'bypassed_rejected', 'expired'])->default('pending');

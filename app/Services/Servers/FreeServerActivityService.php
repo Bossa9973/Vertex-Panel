@@ -21,12 +21,27 @@ class FreeServerActivityService
     ) {}
 
     /**
-     * Start a new link verification session for either active renewal or suspended reactivation step.
+     * Start session proxy for backwards-compatibility.
      *
      * @throws Exception
      */
-    public function startSession(Server $server, User $user, Request $request): array
+    public function startSession(Server $server, User $user, Request $request, ?string $clientNonce = null): array
     {
+        return $this->startRenewalSession($server, $user, $request, $clientNonce);
+    }
+
+    /**
+     * Start a new activity renewal session.
+     * Generates a single-use token, pre-reserves a claim code, and contacts Shrinkme.
+     *
+     * @throws Exception
+     */
+    public function startRenewalSession(Server $server, User $user, Request $request, ?string $clientNonce = null): array
+    {
+        if ($server->user_id !== $user->id) {
+            throw new Exception('Unauthorized: You do not own this server.');
+        }
+
         if ($server->hasPaidTier()) {
             throw new Exception('Paid servers are exempt from free activity renewals.');
         }
@@ -40,6 +55,8 @@ class FreeServerActivityService
             ? min(3, max(1, ((int) $server->reactivation_codes_completed) + 1))
             : 1;
 
+        $clientNonceHash = !empty($clientNonce) ? hash('sha256', $clientNonce) : null;
+
         // Check if a pending, unexpired session was created within the last 45 seconds for this exact step
         $recent = ServerActivityRenewal::where('server_id', $server->id)
             ->where('user_id', $user->id)
@@ -51,6 +68,10 @@ class FreeServerActivityService
             ->first();
 
         if ($recent) {
+            if ($clientNonceHash && empty($recent->client_nonce_hash)) {
+                $recent->update(['client_nonce_hash' => $clientNonceHash]);
+            }
+
             return [
                 'session_id'         => $recent->id,
                 'token'              => $recent->token,
@@ -96,19 +117,20 @@ class FreeServerActivityService
         }
 
         $renewal = ServerActivityRenewal::create([
-            'server_id'       => $server->id,
-            'user_id'         => $user->id,
-            'session_type'    => $sessionType,
-            'step_number'     => $stepNumber,
-            'token'           => $token,
-            'claim_code'      => $claimCode,
-            'shrinkme_url'    => $shortUrl,
-            'destination_url' => $destinationUrl,
-            'status'          => ServerActivityRenewal::STATUS_PENDING,
-            'ip_address'      => $request->ip(),
-            'user_agent'      => substr((string) $request->userAgent(), 0, 500),
-            'started_at'      => Carbon::now(),
-            'expires_at'      => Carbon::now()->addMinutes(15),
+            'server_id'         => $server->id,
+            'user_id'           => $user->id,
+            'session_type'      => $sessionType,
+            'step_number'       => $stepNumber,
+            'token'             => $token,
+            'claim_code'        => $claimCode,
+            'client_nonce_hash' => $clientNonceHash,
+            'shrinkme_url'      => $shortUrl,
+            'destination_url'   => $destinationUrl,
+            'status'            => ServerActivityRenewal::STATUS_PENDING,
+            'ip_address'        => $request->ip(),
+            'user_agent'        => substr((string) $request->userAgent(), 0, 500),
+            'started_at'        => Carbon::now(),
+            'expires_at'        => Carbon::now()->addMinutes(15),
         ]);
 
         return [
@@ -123,7 +145,7 @@ class FreeServerActivityService
     }
 
     /**
-     * Verify token callback from landing page with Anti-Bypass checks.
+     * Verify token callback from landing page with 5-Pillar Anti-Bypass checks.
      *
      * @throws Exception
      */
@@ -171,7 +193,37 @@ class FreeServerActivityService
             ];
         }
 
-        // Advanced Check 1: Referer / Known Bypass Source Blocking
+        // Pillar 1: Two-Tab Active Browser Handshake (Client Nonce Check)
+        if (!empty($renewal->client_nonce_hash)) {
+            $clientNonce = $request->input('client_nonce');
+            if (empty($clientNonce) || !hash_equals($renewal->client_nonce_hash, hash('sha256', (string) $clientNonce))) {
+                $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
+                Log::warning("Anti-Bypass: Client nonce handshake failed for user #{$user->id}");
+                throw new Exception('Verification Failed: Active browser session handshake failed. Links must be completed from the dashboard session where they originated.');
+            }
+        }
+
+        // Pillar 2: Hardware Physical Interaction Check (isTrusted & Cursor Trajectory)
+        $gesture = $request->input('gesture');
+        if (is_array($gesture)) {
+            if (empty($gesture['is_trusted'])) {
+                $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
+                Log::warning("Anti-Bypass: Synthetic isTrusted=false click detected for user #{$user->id}");
+                throw new Exception('Verification Failed: Hardware interaction validation failed. Synthetic clicks and automated userscripts are prohibited.');
+            }
+
+            $points = $gesture['points'] ?? [];
+            if (!is_array($points) || count($points) < 4) {
+                $isTouch = !empty($gesture['is_touch']);
+                if (!$isTouch) {
+                    $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
+                    Log::warning("Anti-Bypass: Insufficient cursor trajectory points (" . count($points) . ") for user #{$user->id}");
+                    throw new Exception('Verification Failed: Physical interaction validation failed. Automated scripts are prohibited.');
+                }
+            }
+        }
+
+        // Pillar 3: Referer / Known Bypass Source Blocking
         $referer = strtolower((string) $request->header('referer', ''));
         $blacklistedReferers = [
             'bypass.city', 'thebypasser', 'linkvertise-bypass', 'sub2unlock',
@@ -186,7 +238,24 @@ class FreeServerActivityService
             }
         }
 
-        // Advanced Check 2: Browser Client Integrity (Webdriver / Headless Detection)
+        // Pillar 4: Datacenter & Cloud Proxy ASN / Reverse DNS Inspection
+        $ip = $request->ip();
+        if ($ip && !in_array($ip, ['127.0.0.1', '::1', 'localhost'])) {
+            $host = @gethostbyaddr($ip);
+            if ($host && $host !== $ip) {
+                $cloudKeywords = ['hetzner', 'ovh', 'digitalocean', 'amazonaws', 'googleusercontent', 'linode', 'oracle', 'vultr', 'contabo', 'leaseweb'];
+                $lowerHost = strtolower($host);
+                foreach ($cloudKeywords as $kw) {
+                    if (str_contains($lowerHost, $kw)) {
+                        $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
+                        Log::warning("Anti-Bypass: Cloud datacenter IP rejected ({$ip} -> {$host}) for user #{$user->id}");
+                        throw new Exception('Verification Failed: Security integrity validation failed. Datacenter proxies and automated scraping servers are prohibited.');
+                    }
+                }
+            }
+        }
+
+        // Pillar 5: Browser Client Integrity (Webdriver / Headless Detection)
         $clientIntegrity = $request->input('client_integrity');
         if ($clientIntegrity) {
             try {
@@ -209,29 +278,13 @@ class FreeServerActivityService
             }
         }
 
-        // Advanced Check 3: Dynamic Jittered Timing Threshold (Zero Leak)
-        $baseMin = (int) (DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
-            ?: config('services.shrinkme.min_seconds', 20));
-
-        // Deterministic per-token jitter (0 to 15 seconds)
-        $jitter = hexdec(substr(hash_hmac('sha256', $renewal->token, config('app.key')), 0, 4)) % 16;
-        $dynamicMin = $baseMin + $jitter;
-
+        // Minimal Sanity Floor (5 seconds) to prevent microsecond concurrent spam attacks
         $startedTimestamp = Carbon::parse($renewal->started_at)->getTimestamp();
         $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $startedTimestamp);
 
-        if ($elapsed < $dynamicMin) {
+        if ($elapsed < 5) {
             $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
-
-            Log::warning("Anti-Bypass Triggered: User #{$user->id} completed in {$elapsed}s (required {$dynamicMin}s)", [
-                'user_id'    => $user->id,
-                'server_id'  => $renewal->server_id,
-                'token'      => $token,
-                'ip'         => $request->ip(),
-                'user_agent' => $request->userAgent(),
-            ]);
-
-            throw new Exception('Verification Failed: Security integrity validation failed. Automated bypass tools, proxy extensions, or rapid skipping are prohibited. Please complete the sponsor journey naturally.');
+            throw new Exception('Verification Failed: Security integrity validation failed. Automated rapid skipping is prohibited. Please complete the sponsor journey naturally.');
         }
 
         $renewal->update([
@@ -288,19 +341,9 @@ class FreeServerActivityService
             throw new Exception('This claim session has expired. Please generate a new link.');
         }
 
-        // Check if token was verified or bypass-checked
-        if ($renewal->status === ServerActivityRenewal::STATUS_PENDING) {
-            $baseMin = (int) (DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
-                ?: config('services.shrinkme.min_seconds', 20));
-            $jitter = hexdec(substr(hash_hmac('sha256', $renewal->token, config('app.key')), 0, 4)) % 16;
-            $dynamicMin = $baseMin + $jitter;
-
-            $startedTimestamp = Carbon::parse($renewal->started_at)->getTimestamp();
-            $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $startedTimestamp);
-            if ($elapsed < $dynamicMin) {
-                $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
-                throw new Exception('Security Error: Code verification rejected by security policy. Please complete the sponsor steps naturally.');
-            }
+        // Enforce that token has completed human landing page verification
+        if ($renewal->status !== ServerActivityRenewal::STATUS_VERIFIED) {
+            throw new Exception('Security Error: Code has not been verified yet. Please complete the verification step on the claim page.');
         }
 
         return DB::transaction(function () use ($server, $user, $renewal) {
