@@ -32,7 +32,8 @@ class FreeServerActivityService
 
     /**
      * Start a new activity renewal session.
-     * Generates a single-use token, pre-reserves a claim code, and contacts Shrinkme.
+     * Generates a single-use token and contacts Shrinkme. No claim code is generated —
+     * the renewal is granted automatically when the user lands and passes all security checks.
      *
      * @throws Exception
      */
@@ -83,8 +84,7 @@ class FreeServerActivityService
             ];
         }
 
-        $token     = Str::random(48);
-        $claimCode = 'ACT-' . strtoupper(Str::random(4)) . '-' . strtoupper(Str::random(4));
+        $token = Str::random(48);
         $sig       = hash_hmac('sha256', "{$token}|{$server->id}|{$user->id}", config('app.key'));
 
         $baseUrl        = rtrim(config('app.url', url('/')), '/');
@@ -122,7 +122,6 @@ class FreeServerActivityService
             'session_type'      => $sessionType,
             'step_number'       => $stepNumber,
             'token'             => $token,
-            'claim_code'        => $claimCode,
             'client_nonce_hash' => $clientNonceHash,
             'shrinkme_url'      => $shortUrl,
             'destination_url'   => $destinationUrl,
@@ -145,7 +144,16 @@ class FreeServerActivityService
     }
 
     /**
-     * Verify token callback from landing page with 5-Pillar Anti-Bypass checks.
+     * Verify landing callback and — if all security pillars pass — directly grant the renewal.
+     * No claim code is returned. The dashboard polls getStatus() to detect completion.
+     *
+     * Security Pillars:
+     *   1. Two-Tab Active Browser Handshake (client_nonce)
+     *   2. Hardware Physical Interaction (isTrusted + cursor trajectory)
+     *   3. Known Bypass Source Referer Blacklist
+     *   4. Datacenter / Cloud Proxy ASN Blocker
+     *   5. Browser Client Integrity (webdriver / headless)
+     *   6. Shrinkme Referrer Gate — request MUST originate from shrinkme.io (unless Shrinkme is disabled)
      *
      * @throws Exception
      */
@@ -176,19 +184,14 @@ class FreeServerActivityService
             throw new Exception('Security Error: This verification link has expired (15-minute window exceeded). Please start a new link.');
         }
 
-        // If already verified, allow viewing code for 5 minutes before claiming
-        if ($renewal->status === ServerActivityRenewal::STATUS_VERIFIED) {
-            if ($renewal->verified_at && Carbon::now()->getTimestamp() - Carbon::parse($renewal->verified_at)->getTimestamp() > 300) {
-                $renewal->update(['status' => ServerActivityRenewal::STATUS_EXPIRED]);
-                throw new Exception('Security Error: Verification session has expired. Please start a new link.');
-            }
-
+        // Already granted — idempotent re-load safe response
+        if ($renewal->status === ServerActivityRenewal::STATUS_CLAIMED) {
             return [
                 'success'      => true,
-                'claim_code'   => $renewal->claim_code,
+                'auto_granted' => true,
                 'session_type' => $renewal->session_type,
                 'step_number'  => $renewal->step_number,
-                'status'       => $renewal->status,
+                'status'       => ServerActivityRenewal::STATUS_CLAIMED,
                 'server_id'    => $renewal->server_id,
             ];
         }
@@ -278,79 +281,80 @@ class FreeServerActivityService
             }
         }
 
-        // Minimal Sanity Floor (5 seconds) to prevent microsecond concurrent spam attacks
+        // Minimal Sanity Floor (5 seconds) — prevent microsecond spam attacks
         $startedTimestamp = Carbon::parse($renewal->started_at)->getTimestamp();
         $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $startedTimestamp);
-
         if ($elapsed < 5) {
             $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
-            throw new Exception('Verification Failed: Security integrity validation failed. Automated rapid skipping is prohibited. Please complete the sponsor journey naturally.');
+            throw new Exception('Verification Failed: Security integrity validation failed.');
         }
 
+        // ─── Pillar 6: Shrinkme Referrer Gate ────────────────────────────────────────
+        // The HTTP Referer header on the verify call must originate from shrinkme.io.
+        // bypass.city resolves our destination URL server-side and hands it to the user.
+        // When the user then opens the URL directly, their browser's Referer header will
+        // be "bypass.city" or blank — never shrinkme.io — so we reject.
+        //
+        // We skip this check only when Shrinkme is explicitly disabled in settings,
+        // in which case the two-tab client_nonce handshake (Pillar 1) is the primary gate.
+        $shrinkmeEnabled = DB::table('settings')->where('key', 'shrinkme_enabled')->value('value');
+        $shrinkmeActive  = ($shrinkmeEnabled !== 'false' && $shrinkmeEnabled !== '0');
+        $shrinkmeApiKey  = DB::table('settings')->where('key', 'shrinkme_api_key')->value('value')
+            ?: config('services.shrinkme.api_key', '');
+
+        if ($shrinkmeActive && !empty($shrinkmeApiKey)) {
+            $referer = strtolower((string) $request->header('referer', ''));
+            $isFromShrinkme = str_contains($referer, 'shrinkme.');
+            $isFromPanel    = str_contains($referer, strtolower(rtrim(config('app.url', ''), '/')));
+
+            if (!$isFromShrinkme && !$isFromPanel) {
+                $renewal->update([
+                    'status'        => ServerActivityRenewal::STATUS_BYPASSED_REJECTED,
+                    'claim_referer' => substr($referer, 0, 512),
+                ]);
+                Log::warning("Anti-Bypass [Pillar 6 Shrinkme Gate]: Invalid referer '{$referer}' for user #{$user->id} session {$renewal->id}");
+                throw new Exception('Verification Failed: Security integrity validation failed. Please open the link through the dashboard.');
+            }
+
+            // Store referer for audit
+            $renewal->claim_referer = substr($referer, 0, 512);
+        }
+
+        // ─── All pillars passed — directly grant the renewal ──────────────────────────
+        // Mark verified first so we can safely hand off to the grant logic
         $renewal->update([
             'status'      => ServerActivityRenewal::STATUS_VERIFIED,
             'verified_at' => Carbon::now(),
         ]);
 
-        return [
-            'success'      => true,
-            'claim_code'   => $renewal->claim_code,
-            'session_type' => $renewal->session_type,
-            'step_number'  => $renewal->step_number,
-            'status'       => ServerActivityRenewal::STATUS_VERIFIED,
-            'server_id'    => $renewal->server_id,
-        ];
+        // Retrieve the server and execute the grant inside an atomic transaction
+        $server = Server::findOrFail($renewal->server_id);
+        $result = $this->executeGrant($renewal, $server, $user);
+
+        return array_merge(['success' => true, 'auto_granted' => true], $result);
     }
 
     /**
-     * Claim code for active renewal or suspended reactivation step.
+     * Execute the renewal grant atomically (shared by verifyCallback auto-grant path).
+     * Locks both the renewal row and the server row to prevent double-granting.
      *
      * @throws Exception
      */
-    public function claimCode(Server $server, User $user, string $code): array
+    protected function executeGrant(ServerActivityRenewal $renewal, Server $server, User $user): array
     {
-        if ($server->user_id !== $user->id) {
-            throw new Exception('Unauthorized: You do not own this server.');
-        }
-
-        if ($server->hasPaidTier()) {
-            throw new Exception('Paid servers do not require free activity claims.');
-        }
-
-        $cleanCode = strtoupper(trim($code));
-
-        /** @var ServerActivityRenewal $renewal */
-        $renewal = ServerActivityRenewal::where('server_id', $server->id)
-            ->where('user_id', $user->id)
-            ->where('claim_code', $cleanCode)
-            ->first();
-
-        if (!$renewal) {
-            throw new Exception('Invalid claim code. Please check the code and try again.');
-        }
-
-        if ($renewal->status === ServerActivityRenewal::STATUS_CLAIMED) {
-            throw new Exception('This claim code has already been used.');
-        }
-
-        if ($renewal->status === ServerActivityRenewal::STATUS_BYPASSED_REJECTED) {
-            throw new Exception('This code was invalidated due to automated bypass detection.');
-        }
-
-        if ($renewal->isExpired()) {
-            throw new Exception('This claim session has expired. Please generate a new link.');
-        }
-
-        // Enforce that token has completed human landing page verification
-        if ($renewal->status !== ServerActivityRenewal::STATUS_VERIFIED) {
-            throw new Exception('Security Error: Code has not been verified yet. Please complete the verification step on the claim page.');
-        }
-
-        return DB::transaction(function () use ($server, $user, $renewal) {
-            // Lock renewal row and server row atomically to prevent double-claiming
+        return DB::transaction(function () use ($renewal, $server, $user) {
             $freshRenewal = ServerActivityRenewal::lockForUpdate()->findOrFail($renewal->id);
             if ($freshRenewal->status === ServerActivityRenewal::STATUS_CLAIMED) {
-                throw new Exception('Security Error: This claim code has already been redeemed.');
+                // Already granted in a concurrent request — return idempotent success
+                return [
+                    'already_claimed' => true,
+                    'session_type'    => $freshRenewal->session_type,
+                    'step_number'     => $freshRenewal->step_number,
+                    'server_id'       => $freshRenewal->server_id,
+                ];
+            }
+            if ($freshRenewal->status === ServerActivityRenewal::STATUS_BYPASSED_REJECTED) {
+                throw new Exception('Verification Failed: Security integrity validation failed.');
             }
 
             $freshServer = Server::lockForUpdate()->findOrFail($server->id);
@@ -360,7 +364,7 @@ class FreeServerActivityService
                 'claimed_at' => Carbon::now(),
             ]);
 
-            // Branch A: Active Server Renewal (1 link = 1 code)
+            // Branch A: Active server renewal
             if (!$freshServer->isSuspended()) {
                 $freshServer->activity_expires_at = Carbon::now()->addHours(72);
                 $freshServer->expires_at          = Carbon::now()->addHours(72);
@@ -379,13 +383,16 @@ class FreeServerActivityService
                 return [
                     'restored'         => true,
                     'is_suspended'     => false,
+                    'session_type'     => $freshRenewal->session_type,
+                    'step_number'      => $freshRenewal->step_number,
+                    'server_id'        => $freshServer->id,
                     'lifecycle_phase'  => $freshServer->getActivityLifecyclePhase(),
                     'activity_expires' => $freshServer->activity_expires_at->toIso8601String(),
-                    'message'          => "Server '{$freshServer->name}' renewed! Exactly 72 hours (3 days) added to your activity timer.",
+                    'message'          => "Server '{$freshServer->name}' renewed for another 72 hours!",
                 ];
             }
 
-            // Branch B: Suspended Server Reactivation (3 sequential links: 1/3 -> 2/3 -> 3/3)
+            // Branch B: Suspended server reactivation (3 sequential links)
             $completed = (int) $freshServer->reactivation_codes_completed + 1;
             $freshServer->reactivation_codes_completed = min(3, $completed);
 
@@ -398,7 +405,7 @@ class FreeServerActivityService
                     \Convoy\Facades\Activity::event('server:reactivation-step')
                         ->actor($user)
                         ->subject($freshServer)
-                        ->description("Verified claim code {$completed}/3 for suspended VPS '{$freshServer->name}'")
+                        ->description("Verified link {$completed}/3 for suspended VPS '{$freshServer->name}'")
                         ->property(['progress' => "{$completed}/3"])
                         ->withRequestMetadata()
                         ->log();
@@ -407,17 +414,20 @@ class FreeServerActivityService
                 return [
                     'restored'         => false,
                     'is_suspended'     => true,
+                    'session_type'     => $freshRenewal->session_type,
                     'step_completed'   => $completed,
+                    'step_number'      => $freshRenewal->step_number,
+                    'server_id'        => $freshServer->id,
                     'required'         => 3,
                     'remaining'        => $remaining,
                     'next_step'        => $nextStep,
                     'progress_display' => "{$completed}/3",
                     'lifecycle_phase'  => $freshServer->getActivityLifecyclePhase(),
-                    'message'          => "Code {$completed}/3 verified! Complete Link {$nextStep} of 3 to restore your server.",
+                    'message'          => "Step {$completed}/3 complete! Open Link {$nextStep} to continue.",
                 ];
             }
 
-            // Step 3/3 reached: Unsuspend and power VM back on
+            // All 3/3 complete — unsuspend
             $freshServer->status                       = null;
             $freshServer->suspended_at                 = null;
             $freshServer->deletion_deadline_at         = null;
@@ -436,7 +446,7 @@ class FreeServerActivityService
                 \Convoy\Facades\Activity::event('server:activity-unsuspend')
                     ->actor($user)
                     ->subject($freshServer)
-                    ->description("Successfully completed all 3/3 links! Unsuspended and restarted VPS '{$freshServer->name}' (+72 hours)")
+                    ->description("Completed all 3/3 links — unsuspended and restarted VPS '{$freshServer->name}' (+72h)")
                     ->property(['activity_expires_at' => (string) $freshServer->activity_expires_at])
                     ->withRequestMetadata()
                     ->log();
@@ -445,14 +455,69 @@ class FreeServerActivityService
             return [
                 'restored'         => true,
                 'is_suspended'     => false,
+                'session_type'     => $freshRenewal->session_type,
                 'step_completed'   => 3,
+                'step_number'      => $freshRenewal->step_number,
+                'server_id'        => $freshServer->id,
                 'required'         => 3,
                 'progress_display' => '3/3',
-                'lifecycle_phase'  => 'active',
+                'lifecycle_phase'  => $freshServer->getActivityLifecyclePhase(),
                 'activity_expires' => $freshServer->activity_expires_at->toIso8601String(),
-                'message'          => "All 3 links verified! Server '{$freshServer->name}' has been unsuspended, booted online, and granted a fresh 72-hour timer.",
+                'message'          => "All 3/3 complete! Server '{$freshServer->name}' has been restored.",
             ];
         });
+    }
+
+    /**
+     * @deprecated Manual claim codes are removed. Renewals are now auto-granted on landing.
+     *             This method is kept as a no-op stub so old API calls return a clear error.
+     */
+    public function claimCode(Server $server, User $user, string $code): array
+    {
+        throw new Exception('Manual claim codes have been removed. Your server is renewed automatically when you complete the sponsored link.');
+    }
+
+    /**
+     * Lightweight poll endpoint: returns the status of the most recent pending-or-claimed
+     * renewal session for this server, so the dashboard can detect completion without polling getStatus.
+     */
+    public function getActiveSessionStatus(Server $server, User $user): array
+    {
+        $renewal = ServerActivityRenewal::where('server_id', $server->id)
+            ->where('user_id', $user->id)
+            ->whereIn('status', [
+                ServerActivityRenewal::STATUS_PENDING,
+                ServerActivityRenewal::STATUS_VERIFIED,
+                ServerActivityRenewal::STATUS_CLAIMED,
+            ])
+            ->orderByDesc('started_at')
+            ->first();
+
+        if (!$renewal) {
+            return ['has_session' => false];
+        }
+
+        return [
+            'has_session'  => true,
+            'session_id'   => $renewal->id,
+            'status'       => $renewal->status,
+            'session_type' => $renewal->session_type,
+            'step_number'  => $renewal->step_number,
+            'is_claimed'   => $renewal->status === ServerActivityRenewal::STATUS_CLAIMED,
+            'is_expired'   => $renewal->isExpired(),
+        ];
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // Legacy stub — originally returned claimCode grant details, kept for partial compat
+    // ──────────────────────────────────────────────────────────────────────────────────
+    protected function _legacyGrantPlaceholder(): void
+    {
+        // Intentionally empty.
+        // The old grant logic is now in executeGrant().
+        // The old claimCode() arguments were:
+        //   'restored', 'is_suspended', 'step_completed', 'required', 'progress_display',
+        //   'lifecycle_phase', 'activity_expires', 'message'
     }
 
     /**

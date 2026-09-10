@@ -1,0 +1,1 @@
+import{a as n}from"./vendor-react-866dfb5c.js";import{Z as s,P as r}from"./main-6c3a2831.js";const d=({title:o,children:t,...e})=>{const{data:a}=s();return n(r,{title:`${o} | ${a.name}`,...e,children:t})};export{d as N};

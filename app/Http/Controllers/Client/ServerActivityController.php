@@ -77,23 +77,27 @@ class ServerActivityController extends ApiController
     }
 
     /**
-     * Submit a claim code to extend active timer or advance suspended recovery step.
+     * @deprecated Claim codes have been removed. Returns 410 Gone.
+     * Renewals are now auto-granted server-side when the user lands on the claim page.
      */
     public function claimCode(Request $request, int $id, FreeServerActivityService $activityService): JsonResponse
     {
-        $request->validate([
-            'code' => 'required|string|min:6|max:40',
-        ]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Claim codes have been removed. Your server is renewed automatically when you complete the sponsored link.',
+        ], 410);
+    }
 
+    /**
+     * Get real-time activity and recovery status for a server.
+     */
+    public function getStatus(Request $request, int $id, FreeServerActivityService $activityService): JsonResponse
+    {
         try {
             /** @var Server $server */
             $server = Server::where('user_id', $request->user()->id)->findOrFail($id);
 
-            $data = $activityService->claimCode(
-                $server,
-                $request->user(),
-                $request->input('code')
-            );
+            $data = $activityService->getStatus($server);
 
             return response()->json([
                 'success' => true,
@@ -108,15 +112,16 @@ class ServerActivityController extends ApiController
     }
 
     /**
-     * Get real-time activity and recovery status for a server.
+     * Lightweight poll endpoint: returns whether the active renewal session for this server
+     * has been claimed (granted). The dashboard uses this to detect when landing verification completes.
      */
-    public function getStatus(Request $request, int $id, FreeServerActivityService $activityService): JsonResponse
+    public function sessionStatus(Request $request, int $id, FreeServerActivityService $activityService): JsonResponse
     {
         try {
             /** @var Server $server */
             $server = Server::where('user_id', $request->user()->id)->findOrFail($id);
 
-            $data = $activityService->getStatus($server);
+            $data = $activityService->getActiveSessionStatus($server, $request->user());
 
             return response()->json([
                 'success' => true,

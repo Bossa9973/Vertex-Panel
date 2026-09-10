@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     X,
@@ -8,13 +8,12 @@ import {
     AlertTriangle,
     RotateCw,
     CheckCircle2,
-    Sparkles,
-    KeyRound,
-    HelpCircle,
+    Loader2,
 } from 'lucide-react'
 import {
     startServerActivitySession,
-    claimActivityCode,
+    getServerSessionStatus,
+    getServerActivityStatus,
     ActivityRenewalSession,
 } from '@/api/server/activity'
 
@@ -39,29 +38,20 @@ const formatSecondsToTime = (totalSeconds: number): string => {
     const minutes = Math.floor((totalSeconds % 3600) / 60)
     const seconds = Math.floor(totalSeconds % 60)
 
-    if (days > 0) {
-        return `${days}d ${hours}h ${minutes}m`
-    }
-    if (hours > 0) {
-        return `${hours}h ${minutes}m ${seconds}s`
-    }
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
     return `${minutes}m ${seconds}s`
 }
 
-export const FreeServerRenewModal: React.FC<Props> = ({
-    opened,
-    server,
-    onClose,
-    onSuccess,
-}) => {
+export const FreeServerRenewModal: React.FC<Props> = ({ opened, server, onClose, onSuccess }) => {
     const [loadingSession, setLoadingSession] = useState(false)
-    const [submittingCode, setSubmittingCode] = useState(false)
     const [session, setSession] = useState<ActivityRenewalSession | null>(null)
-    const [claimCode, setClaimCode] = useState('')
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
+    const [polling, setPolling] = useState(false)
+    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    // BroadcastChannel handshake listener for two-tab security & auto-code sync
+    // Respond to BroadcastChannel CHALLENGE_REQUEST (two-tab handshake)
     useEffect(() => {
         if (!opened) return
 
@@ -71,7 +61,6 @@ export const FreeServerRenewModal: React.FC<Props> = ({
             channel.onmessage = (evt) => {
                 const data = evt.data
                 if (!data) return
-
                 if (data.type === 'CHALLENGE_REQUEST') {
                     const currentNonce = sessionStorage.getItem('vertex_activity_client_nonce')
                     if (currentNonce && channel) {
@@ -81,8 +70,9 @@ export const FreeServerRenewModal: React.FC<Props> = ({
                             clientNonce: currentNonce,
                         })
                     }
-                } else if (data.type === 'CODE_CLAIMED_AUTO_APPLY' && data.code) {
-                    setClaimCode(data.code)
+                } else if (data.type === 'GRANT_COMPLETE') {
+                    // Landing page already auto-granted — finalize without polling
+                    handleGrantComplete(data.message)
                 }
             }
         } catch (e) {
@@ -94,15 +84,58 @@ export const FreeServerRenewModal: React.FC<Props> = ({
         }
     }, [opened])
 
-    // Reset local state when opened
+    // Reset when opened
     useEffect(() => {
         if (opened) {
             setSession(null)
-            setClaimCode('')
             setErrorMsg(null)
             setSuccessMsg(null)
+            setPolling(false)
+        } else {
+            stopPolling()
         }
     }, [opened, server?.internal_id])
+
+    const stopPolling = () => {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+        }
+        setPolling(false)
+    }
+
+    const startPolling = (serverId: number) => {
+        setPolling(true)
+        pollIntervalRef.current = setInterval(async () => {
+            try {
+                const status = await getServerSessionStatus(serverId)
+                if (status.is_claimed) {
+                    stopPolling()
+                    // Fetch fresh server status to get new expires_at
+                    try {
+                        const freshStatus = await getServerActivityStatus(serverId)
+                        const expiry = freshStatus.activity_expires_at
+                            ? new Date(freshStatus.activity_expires_at).toLocaleString()
+                            : 'extended'
+                        handleGrantComplete(`Server renewed! Active until ${expiry}.`)
+                    } catch {
+                        handleGrantComplete('Server renewed for another 72 hours!')
+                    }
+                }
+            } catch {
+                // Silently retry — network blip
+            }
+        }, 3000)
+    }
+
+    const handleGrantComplete = (message: string) => {
+        stopPolling()
+        setSuccessMsg(message)
+        setTimeout(() => {
+            onSuccess()
+            onClose()
+        }, 2200)
+    }
 
     if (!opened || !server) return null
 
@@ -113,45 +146,29 @@ export const FreeServerRenewModal: React.FC<Props> = ({
         setLoadingSession(true)
         setErrorMsg(null)
         try {
-            const clientNonce = typeof crypto !== 'undefined' && crypto.randomUUID
-                ? crypto.randomUUID()
-                : Math.random().toString(36).substring(2) + Date.now().toString(36)
+            const clientNonce =
+                typeof crypto !== 'undefined' && crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : Math.random().toString(36).substring(2) + Date.now().toString(36)
             sessionStorage.setItem('vertex_activity_client_nonce', clientNonce)
 
             const data = await startServerActivitySession(server.internal_id, clientNonce)
             setSession(data)
 
-            // Open Shrinkme URL in new window
+            // Open Shrinkme link in a new tab
             if (data.shrinkme_url) {
                 window.open(data.shrinkme_url, '_blank', 'noopener,noreferrer')
             }
+
+            // Begin polling for grant completion
+            startPolling(server.internal_id)
         } catch (err: any) {
-            setErrorMsg(err.response?.data?.message || 'Failed to generate verification session. Please try again.')
+            setErrorMsg(
+                err.response?.data?.message ||
+                    'Failed to generate verification session. Please try again.'
+            )
         } finally {
             setLoadingSession(false)
-        }
-    }
-
-    const handleSubmitCode = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!claimCode.trim()) {
-            setErrorMsg('Please enter your claim code.')
-            return
-        }
-
-        setSubmittingCode(true)
-        setErrorMsg(null)
-        try {
-            const res = await claimActivityCode(server.internal_id, claimCode.trim())
-            setSuccessMsg(res.message || 'Server renewed for an additional 72 hours!')
-            setTimeout(() => {
-                onSuccess()
-                onClose()
-            }, 1800)
-        } catch (err: any) {
-            setErrorMsg(err.response?.data?.message || 'Failed to verify claim code. Please check the code and try again.')
-        } finally {
-            setSubmittingCode(false)
         }
     }
 
@@ -165,7 +182,7 @@ export const FreeServerRenewModal: React.FC<Props> = ({
                     transition={{ type: 'spring', stiffness: 350, damping: 30 }}
                     className='relative w-full max-w-lg bg-neutral-900/90 border border-neutral-800 rounded-3xl p-6 sm:p-7 shadow-[0px_0px_120px_-20px_#0900ff] text-white overflow-hidden font-sans text-left'
                 >
-                    {/* Subtle top glow bar */}
+                    {/* Top glow bar */}
                     <div className='absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500 to-transparent' />
 
                     {/* Close Button */}
@@ -194,34 +211,40 @@ export const FreeServerRenewModal: React.FC<Props> = ({
                                     </span>
                                 )}
                             </div>
-                            <h3 className='text-xl font-bold text-white mt-1'>
-                                Renew Free Server
-                            </h3>
+                            <h3 className='text-xl font-bold text-white mt-1'>Renew Free Server</h3>
                             <p className='text-xs text-gray-400 mt-0.5'>
-                                Keep <span className='text-blue-300 font-semibold'>{server.name}</span> active for another 72 hours (3 days).
+                                Keep{' '}
+                                <span className='text-blue-300 font-semibold'>{server.name}</span>{' '}
+                                active for another 72 hours (3 days).
                             </p>
                         </div>
                     </div>
 
                     {/* Countdown Status Card */}
-                    <div className={`p-4 rounded-2xl border mb-5 flex items-center justify-between ${
-                        isCritical
-                            ? 'bg-rose-950/30 border-rose-500/40 text-rose-300 shadow-inner'
-                            : 'bg-neutral-950/60 border-neutral-800 text-gray-300'
-                    }`}>
+                    <div
+                        className={`p-4 rounded-2xl border mb-5 flex items-center justify-between ${
+                            isCritical
+                                ? 'bg-rose-950/30 border-rose-500/40 text-rose-300 shadow-inner'
+                                : 'bg-neutral-950/60 border-neutral-800 text-gray-300'
+                        }`}
+                    >
                         <div className='flex items-center gap-3'>
-                            <Clock className={`w-5 h-5 ${isCritical ? 'text-rose-400 animate-pulse' : 'text-blue-400'}`} />
+                            <Clock
+                                className={`w-5 h-5 ${isCritical ? 'text-rose-400 animate-pulse' : 'text-blue-400'}`}
+                            />
                             <div>
                                 <span className='text-[10px] font-bold uppercase tracking-wider block text-gray-400'>
                                     {isCritical ? 'Time Before Suspension' : 'Activity Timer Remaining'}
                                 </span>
-                                <span className={`text-base font-bold font-mono ${isCritical ? 'text-rose-400' : 'text-white'}`}>
+                                <span
+                                    className={`text-base font-bold font-mono ${isCritical ? 'text-rose-400' : 'text-white'}`}
+                                >
                                     {formatSecondsToTime(remainingSecs)}
                                 </span>
                             </div>
                         </div>
                         <span className='text-[11px] font-medium bg-black/40 px-2.5 py-1 rounded-lg border border-white/5 text-gray-300'>
-                            +72 Hours on Claim
+                            +72 Hours on Renewal
                         </span>
                     </div>
 
@@ -240,7 +263,7 @@ export const FreeServerRenewModal: React.FC<Props> = ({
                         </div>
                     )}
 
-                    {/* Step 1: Sponsored Link */}
+                    {/* Step 1: Open Link */}
                     <div className='space-y-4'>
                         <div className='p-4 rounded-2xl bg-neutral-950/60 border border-neutral-800'>
                             <div className='flex items-center justify-between mb-2'>
@@ -250,25 +273,27 @@ export const FreeServerRenewModal: React.FC<Props> = ({
                                     </span>
                                     Open Verification Link
                                 </span>
-                                {session && (
+                                {session && !polling && !successMsg && (
                                     <span className='text-[10px] font-mono text-emerald-400 font-semibold flex items-center gap-1'>
                                         <CheckCircle2 className='w-3 h-3' /> Link Generated
                                     </span>
                                 )}
                             </div>
                             <p className='text-xs text-gray-400 leading-relaxed mb-3'>
-                                Click below to generate your sponsored verification link. Complete the sponsor steps to receive your one-time claim code.
+                                Click below to generate your sponsored verification link. Complete
+                                the sponsor steps — your server will be renewed automatically.
                             </p>
 
                             <button
                                 type='button'
                                 onClick={handleStartLink}
-                                disabled={loadingSession}
+                                disabled={loadingSession || polling || !!successMsg}
                                 className='w-full py-2.5 px-4 rounded-xl bg-gradient-to-t from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-900/40 border border-blue-400 flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50'
                             >
                                 {loadingSession ? (
                                     <>
-                                        <RotateCw className='w-4 h-4 animate-spin' /> Generating Link...
+                                        <RotateCw className='w-4 h-4 animate-spin' /> Generating
+                                        Link...
                                     </>
                                 ) : session ? (
                                     <>
@@ -281,58 +306,33 @@ export const FreeServerRenewModal: React.FC<Props> = ({
                                 )}
                             </button>
 
-                            {session && (
+                            {/* Polling status */}
+                            {polling && !successMsg && (
+                                <div className='mt-3 flex items-center gap-2 text-[11px] text-blue-300 bg-blue-500/10 px-3 py-2.5 rounded-xl border border-blue-500/20 animate-pulse'>
+                                    <Loader2 className='w-3.5 h-3.5 text-blue-400 shrink-0 animate-spin' />
+                                    <span>
+                                        Waiting for your verification to complete… This will update
+                                        automatically when you finish the sponsored link.
+                                    </span>
+                                </div>
+                            )}
+
+                            {session && !polling && !successMsg && (
                                 <div className='mt-2.5 flex items-center gap-2 text-[11px] text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20'>
                                     <ShieldCheck className='w-3.5 h-3.5 text-blue-400 shrink-0' />
-                                    <span>Complete the sponsor steps in the opened window to receive your claim code.</span>
+                                    <span>
+                                        Complete the sponsor steps in the opened window. Your server
+                                        will renew automatically — no code needed.
+                                    </span>
                                 </div>
                             )}
                         </div>
-
-                        {/* Step 2: Enter Code */}
-                        <form onSubmit={handleSubmitCode} className='p-4 rounded-2xl bg-neutral-950/60 border border-neutral-800 space-y-3'>
-                            <div className='flex items-center justify-between'>
-                                <span className='text-xs font-bold text-gray-200 flex items-center gap-2'>
-                                    <span className='w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] flex items-center justify-center border border-blue-500/30'>
-                                        2
-                                    </span>
-                                    Submit Claim Code
-                                </span>
-                                <span className='text-[10px] text-gray-500'>Format: ACT-XXXX-XXXX</span>
-                            </div>
-
-                            <div className='relative'>
-                                <input
-                                    type='text'
-                                    value={claimCode}
-                                    onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
-                                    placeholder='Paste code (e.g. ACT-4K8P-9Z2X)'
-                                    className='w-full px-4 py-2.5 bg-black/60 border border-neutral-700 rounded-xl text-xs font-mono tracking-widest text-white focus:outline-none focus:border-blue-500 uppercase placeholder:normal-case placeholder:tracking-normal transition'
-                                />
-                            </div>
-
-                            <button
-                                type='submit'
-                                disabled={submittingCode || !claimCode.trim()}
-                                className='w-full py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold border border-neutral-700 hover:border-neutral-600 flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed'
-                            >
-                                {submittingCode ? (
-                                    <>
-                                        <RotateCw className='w-4 h-4 animate-spin text-blue-400' /> Verifying Code...
-                                    </>
-                                ) : (
-                                    <>
-                                        <KeyRound className='w-4 h-4 text-blue-400' /> Apply Code &amp; Renew (+72h)
-                                    </>
-                                )}
-                            </button>
-                        </form>
                     </div>
 
                     {/* Anti-Bypass Notice Footer */}
                     <div className='mt-4 flex items-center gap-2 text-[11px] text-gray-500 justify-center'>
                         <ShieldCheck className='w-3.5 h-3.5 text-blue-400 shrink-0' />
-                        <span>Protected by Anti-Bypass Guard. Automated bypassers will burn the token.</span>
+                        <span>Protected by Anti-Bypass Guard. Automated tools will be rejected.</span>
                     </div>
                 </motion.div>
             </div>

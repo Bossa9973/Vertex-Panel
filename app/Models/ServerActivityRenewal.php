@@ -25,7 +25,7 @@ class ServerActivityRenewal extends Model
 
     public const STATUS_PENDING           = 'pending';
     public const STATUS_VERIFIED          = 'verified';
-    public const STATUS_CLAIMED           = 'claimed';
+    public const STATUS_CLAIMED           = 'claimed';  // auto-granted on landing (no manual code)
     public const STATUS_BYPASSED_REJECTED = 'bypassed_rejected';
     public const STATUS_EXPIRED           = 'expired';
 

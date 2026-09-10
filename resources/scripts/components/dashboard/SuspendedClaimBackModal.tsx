@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     X,
@@ -9,13 +9,13 @@ import {
     RotateCw,
     CheckCircle2,
     Sparkles,
-    KeyRound,
     Power,
-    Server as ServerIcon,
+    Loader2,
 } from 'lucide-react'
 import {
     startServerActivitySession,
-    claimActivityCode,
+    getServerSessionStatus,
+    getServerActivityStatus,
     ActivityRenewalSession,
 } from '@/api/server/activity'
 
@@ -46,32 +46,25 @@ const formatSecondsToTime = (totalSeconds: number): string => {
     const minutes = Math.floor((totalSeconds % 3600) / 60)
     const seconds = Math.floor(totalSeconds % 60)
 
-    if (days > 0) {
-        return `${days}d ${hours}h ${minutes}m ${seconds}s`
-    }
+    if (days > 0) return `${days}d ${hours}h ${minutes}m ${seconds}s`
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
-export const SuspendedClaimBackModal: React.FC<Props> = ({
-    opened,
-    server,
-    onClose,
-    onSuccess,
-}) => {
+export const SuspendedClaimBackModal: React.FC<Props> = ({ opened, server, onClose, onSuccess }) => {
     const [loadingLink, setLoadingLink] = useState(false)
-    const [submittingCode, setSubmittingCode] = useState(false)
     const [session, setSession] = useState<ActivityRenewalSession | null>(null)
-    const [claimCode, setClaimCode] = useState('')
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
     const [completedSteps, setCompletedSteps] = useState<number>(0)
     const [isFullyRestored, setIsFullyRestored] = useState(false)
+    const [polling, setPolling] = useState(false)
+    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     // Local ticking countdown
     const [secondsLeft, setSecondsLeft] = useState<number>(0)
 
     useEffect(() => {
-        if (server?.deletion_remaining_seconds !== undefined && server?.deletion_remaining_seconds !== null) {
+        if (server?.deletion_remaining_seconds != null) {
             setSecondsLeft(server.deletion_remaining_seconds)
         }
         if (server?.reactivation_progress) {
@@ -86,7 +79,7 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
         return () => clearInterval(timer)
     }, [])
 
-    // BroadcastChannel handshake listener for two-tab security & auto-code sync
+    // BroadcastChannel handshake listener (two-tab security)
     useEffect(() => {
         if (!opened) return
 
@@ -96,7 +89,6 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
             channel.onmessage = (evt) => {
                 const data = evt.data
                 if (!data) return
-
                 if (data.type === 'CHALLENGE_REQUEST') {
                     const currentNonce = sessionStorage.getItem('vertex_activity_client_nonce')
                     if (currentNonce && channel) {
@@ -106,8 +98,8 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
                             clientNonce: currentNonce,
                         })
                     }
-                } else if (data.type === 'CODE_CLAIMED_AUTO_APPLY' && data.code) {
-                    setClaimCode(data.code)
+                } else if (data.type === 'GRANT_COMPLETE') {
+                    handleStepComplete(data)
                 }
             }
         } catch (e) {
@@ -119,17 +111,68 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
         }
     }, [opened])
 
-    // Reset local state when opened
+    // Reset state when opened
     useEffect(() => {
         if (opened && server) {
             setSession(null)
-            setClaimCode('')
             setErrorMsg(null)
             setSuccessMsg(null)
             setIsFullyRestored(false)
             setCompletedSteps(server.reactivation_progress?.completed ?? 0)
+            setPolling(false)
+        } else {
+            stopPolling()
         }
     }, [opened, server?.internal_id])
+
+    const stopPolling = () => {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+        }
+        setPolling(false)
+    }
+
+    const startPolling = (serverId: number) => {
+        setPolling(true)
+        pollIntervalRef.current = setInterval(async () => {
+            try {
+                const status = await getServerSessionStatus(serverId)
+                if (status.is_claimed) {
+                    stopPolling()
+                    // Re-read server status to get updated step count
+                    try {
+                        const freshStatus = await getServerActivityStatus(serverId)
+                        const newCompleted = freshStatus.reactivation_progress?.completed ?? completedSteps + 1
+                        handleStepComplete({ newCompleted, restored: !freshStatus.is_suspended })
+                    } catch {
+                        handleStepComplete({ newCompleted: completedSteps + 1, restored: false })
+                    }
+                }
+            } catch {
+                // Silently retry
+            }
+        }, 3000)
+    }
+
+    const handleStepComplete = (data: { newCompleted?: number; restored?: boolean; message?: string }) => {
+        stopPolling()
+        const newCompleted = data.newCompleted ?? completedSteps + 1
+
+        if (data.restored || newCompleted >= 3) {
+            setCompletedSteps(3)
+            setIsFullyRestored(true)
+            setSuccessMsg(data.message || 'All 3 links verified! Server is being unsuspended…')
+            setTimeout(() => {
+                onSuccess()
+                onClose()
+            }, 2200)
+        } else {
+            setCompletedSteps(newCompleted)
+            setSession(null)
+            setSuccessMsg(data.message || `Step ${newCompleted}/3 complete! Open Link ${newCompleted + 1} to continue.`)
+        }
+    }
 
     if (!opened || !server) return null
 
@@ -139,10 +182,12 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
     const handleStartStepLink = async () => {
         setLoadingLink(true)
         setErrorMsg(null)
+        setSuccessMsg(null)
         try {
-            const clientNonce = typeof crypto !== 'undefined' && crypto.randomUUID
-                ? crypto.randomUUID()
-                : Math.random().toString(36).substring(2) + Date.now().toString(36)
+            const clientNonce =
+                typeof crypto !== 'undefined' && crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : Math.random().toString(36).substring(2) + Date.now().toString(36)
             sessionStorage.setItem('vertex_activity_client_nonce', clientNonce)
 
             const data = await startServerActivitySession(server.internal_id, clientNonce)
@@ -151,46 +196,15 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
             if (data.shrinkme_url) {
                 window.open(data.shrinkme_url, '_blank', 'noopener,noreferrer')
             }
+
+            startPolling(server.internal_id)
         } catch (err: any) {
-            setErrorMsg(err.response?.data?.message || 'Failed to generate step verification link. Please try again.')
+            setErrorMsg(
+                err.response?.data?.message ||
+                    'Failed to generate step verification link. Please try again.'
+            )
         } finally {
             setLoadingLink(false)
-        }
-    }
-
-    const handleSubmitCode = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!claimCode.trim()) {
-            setErrorMsg(`Please enter claim code #${currentStepNumber}.`)
-            return
-        }
-
-        setSubmittingCode(true)
-        setErrorMsg(null)
-        try {
-            const res = await claimActivityCode(server.internal_id, claimCode.trim())
-
-            if (res.restored) {
-                // 3/3 Reached! Server unsuspended and restored
-                setCompletedSteps(3)
-                setIsFullyRestored(true)
-                setSuccessMsg(res.message)
-                setTimeout(() => {
-                    onSuccess()
-                    onClose()
-                }, 2200)
-            } else {
-                // Advanced step (e.g. 1/3 -> 2/3)
-                const newCompleted = res.step_completed ?? (completedSteps + 1)
-                setCompletedSteps(newCompleted)
-                setClaimCode('')
-                setSession(null)
-                setSuccessMsg(res.message)
-            }
-        } catch (err: any) {
-            setErrorMsg(err.response?.data?.message || 'Invalid or incorrect code for this step. Please verify and try again.')
-        } finally {
-            setSubmittingCode(false)
         }
     }
 
@@ -209,11 +223,13 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
                     }`}
                 >
                     {/* Top ambient highlight bar */}
-                    <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${
-                        isFinalCritical
-                            ? 'from-transparent via-rose-500 to-transparent animate-pulse'
-                            : 'from-transparent via-violet-500 to-transparent'
-                    }`} />
+                    <div
+                        className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${
+                            isFinalCritical
+                                ? 'from-transparent via-rose-500 to-transparent animate-pulse'
+                                : 'from-transparent via-violet-500 to-transparent'
+                        }`}
+                    />
 
                     {/* Close Button */}
                     <button
@@ -227,11 +243,13 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
 
                     {/* Header */}
                     <div className='flex items-start gap-4 mb-5'>
-                        <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shadow-inner shrink-0 mt-0.5 ${
-                            isFinalCritical
-                                ? 'bg-rose-500/20 border-rose-500/30 text-rose-400'
-                                : 'bg-violet-500/20 border-violet-500/30 text-violet-400'
-                        }`}>
+                        <div
+                            className={`w-12 h-12 rounded-2xl border flex items-center justify-center shadow-inner shrink-0 mt-0.5 ${
+                                isFinalCritical
+                                    ? 'bg-rose-500/20 border-rose-500/30 text-rose-400'
+                                    : 'bg-violet-500/20 border-violet-500/30 text-violet-400'
+                            }`}
+                        >
                             <Power className='w-6 h-6' />
                         </div>
                         <div>
@@ -245,55 +263,63 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
                                     </span>
                                 )}
                             </div>
-                            <h3 className='text-xl font-bold text-white mt-1'>
-                                Claim Back Your Server
-                            </h3>
+                            <h3 className='text-xl font-bold text-white mt-1'>Claim Back Your Server</h3>
                             <p className='text-xs text-gray-400 mt-0.5'>
-                                Complete 3 sequential links to unsuspend <span className='text-violet-300 font-semibold'>{server.name}</span>.
+                                Complete 3 sequential links to unsuspend{' '}
+                                <span className='text-violet-300 font-semibold'>{server.name}</span>.
                             </p>
                         </div>
                     </div>
 
                     {/* Live Deletion Countdown Warning */}
-                    <div className={`p-4 rounded-2xl border mb-5 flex items-center justify-between ${
-                        isFinalCritical
-                            ? 'bg-rose-950/40 border-rose-500/50 text-rose-300 animate-pulse'
-                            : 'bg-neutral-950/70 border-neutral-800 text-gray-300'
-                    }`}>
+                    <div
+                        className={`p-4 rounded-2xl border mb-5 flex items-center justify-between ${
+                            isFinalCritical
+                                ? 'bg-rose-950/40 border-rose-500/50 text-rose-300 animate-pulse'
+                                : 'bg-neutral-950/70 border-neutral-800 text-gray-300'
+                        }`}
+                    >
                         <div className='flex items-center gap-3'>
                             <Clock className={`w-5 h-5 ${isFinalCritical ? 'text-rose-400' : 'text-amber-400'}`} />
                             <div>
                                 <span className='text-[10px] font-bold uppercase tracking-wider block text-gray-400'>
-                                    {isFinalCritical ? 'FINAL CHANCE BEFORE DELETION (GG)' : 'Permanent Deletion Deadline'}
+                                    {isFinalCritical
+                                        ? 'FINAL CHANCE BEFORE DELETION (GG)'
+                                        : 'Permanent Deletion Deadline'}
                                 </span>
-                                <span className={`text-base font-bold font-mono tracking-tight ${isFinalCritical ? 'text-rose-400' : 'text-amber-400'}`}>
+                                <span
+                                    className={`text-base font-bold font-mono tracking-tight ${isFinalCritical ? 'text-rose-400' : 'text-amber-400'}`}
+                                >
                                     {formatSecondsToTime(secondsLeft)}
                                 </span>
                             </div>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
-                            isFinalCritical ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'bg-neutral-900 border-neutral-800 text-gray-400'
-                        }`}>
+                        <span
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                                isFinalCritical
+                                    ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                                    : 'bg-neutral-900 border-neutral-800 text-gray-400'
+                            }`}
+                        >
                             48h Grace Window
                         </span>
                     </div>
 
-                    {/* 3-Step Progress Stepper (1/3, 2/3, 3/3) */}
+                    {/* 3-Step Progress Stepper */}
                     <div className='p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800 mb-5'>
                         <div className='flex items-center justify-between mb-2.5'>
-                            <span className='text-xs font-bold text-gray-300'>
-                                Recovery Progress:
-                            </span>
-                            <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full border ${
-                                completedSteps === 3
-                                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                    : 'bg-violet-500/20 text-violet-300 border-violet-500/30'
-                            }`}>
+                            <span className='text-xs font-bold text-gray-300'>Recovery Progress:</span>
+                            <span
+                                className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full border ${
+                                    completedSteps === 3
+                                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                        : 'bg-violet-500/20 text-violet-300 border-violet-500/30'
+                                }`}
+                            >
                                 {completedSteps}/3 Links Completed
                             </span>
                         </div>
 
-                        {/* Segmented Steps Bar */}
                         <div className='grid grid-cols-3 gap-2'>
                             {[1, 2, 3].map((step) => {
                                 const isDone = completedSteps >= step
@@ -306,17 +332,21 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
                                             isDone
                                                 ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold'
                                                 : isCurrent
-                                                ? 'bg-violet-500/20 border-violet-500/60 text-white font-bold ring-1 ring-violet-500/40 shadow-md'
-                                                : 'bg-neutral-900/60 border-neutral-800 text-gray-500'
+                                                  ? 'bg-violet-500/20 border-violet-500/60 text-white font-bold ring-1 ring-violet-500/40 shadow-md'
+                                                  : 'bg-neutral-900/60 border-neutral-800 text-gray-500'
                                         }`}
                                     >
                                         <div className='flex items-center justify-center gap-1.5 text-xs'>
                                             {isDone ? (
                                                 <CheckCircle2 className='w-3.5 h-3.5 text-emerald-400 shrink-0' />
                                             ) : (
-                                                <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center ${
-                                                    isCurrent ? 'bg-violet-500 text-white' : 'bg-neutral-800 text-gray-400'
-                                                }`}>
+                                                <span
+                                                    className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center ${
+                                                        isCurrent
+                                                            ? 'bg-violet-500 text-white'
+                                                            : 'bg-neutral-800 text-gray-400'
+                                                    }`}
+                                                >
                                                     {step}
                                                 </span>
                                             )}
@@ -343,98 +373,71 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
                         </div>
                     )}
 
-                    {/* Sequential Active Step Form (1 link = 1 code) */}
+                    {/* Active Step UI */}
                     {!isFullyRestored ? (
-                        <div className='space-y-4'>
-                            {/* Step A: Open Link */}
-                            <div className='p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800'>
-                                <div className='flex items-center justify-between mb-2'>
-                                    <span className='text-xs font-bold text-gray-200 flex items-center gap-2'>
-                                        <span className='w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 text-[10px] flex items-center justify-center border border-violet-500/30'>
-                                            {currentStepNumber}A
-                                        </span>
-                                        Open Sponsored Link #{currentStepNumber}
+                        <div className='p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800 space-y-3'>
+                            <div className='flex items-center justify-between mb-1'>
+                                <span className='text-xs font-bold text-gray-200 flex items-center gap-2'>
+                                    <span className='w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 text-[10px] flex items-center justify-center border border-violet-500/30'>
+                                        {currentStepNumber}
                                     </span>
-                                    {session && (
-                                        <span className='text-[10px] font-mono text-emerald-400 font-semibold flex items-center gap-1'>
-                                            <CheckCircle2 className='w-3 h-3' /> Link #{currentStepNumber} Active
-                                        </span>
-                                    )}
-                                </div>
-                                <p className='text-xs text-gray-400 leading-relaxed mb-3'>
-                                    Click below to start verification link #{currentStepNumber} of 3. Complete the ad timer on Shrinkme to reveal Code #{currentStepNumber}.
-                                </p>
-
-                                <button
-                                    type='button'
-                                    onClick={handleStartStepLink}
-                                    disabled={loadingLink}
-                                    className='w-full py-2.5 px-4 rounded-xl bg-gradient-to-t from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white text-xs font-bold shadow-lg shadow-violet-900/40 border border-violet-400 flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50'
-                                >
-                                    {loadingLink ? (
-                                        <>
-                                            <RotateCw className='w-4 h-4 animate-spin' /> Generating Link #{currentStepNumber}...
-                                        </>
-                                    ) : session ? (
-                                        <>
-                                            <ExternalLink className='w-4 h-4' /> Re-open Link #{currentStepNumber}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ExternalLink className='w-4 h-4' /> Start Link #{currentStepNumber} of 3
-                                        </>
-                                    )}
-                                </button>
-
-                                {session && (
-                                    <div className='mt-2.5 flex items-center gap-2 text-[11px] text-violet-300 bg-violet-500/10 px-3 py-1.5 rounded-lg border border-violet-500/20'>
-                                        <Sparkles className='w-3.5 h-3.5 text-violet-400 shrink-0' />
-                                        <span>Complete the sponsor steps in the opened window to receive your claim code.</span>
-                                    </div>
+                                    Open Sponsored Link #{currentStepNumber}
+                                </span>
+                                {session && !polling && (
+                                    <span className='text-[10px] font-mono text-emerald-400 font-semibold flex items-center gap-1'>
+                                        <CheckCircle2 className='w-3 h-3' /> Link #{currentStepNumber} Active
+                                    </span>
                                 )}
                             </div>
+                            <p className='text-xs text-gray-400 leading-relaxed'>
+                                Click below to start verification link #{currentStepNumber} of 3.
+                                Complete the sponsor steps — your progress will advance automatically.
+                            </p>
 
-                            {/* Step B: Submit Code */}
-                            <form onSubmit={handleSubmitCode} className='p-4 rounded-2xl bg-neutral-950/70 border border-neutral-800 space-y-3'>
-                                <div className='flex items-center justify-between'>
-                                    <span className='text-xs font-bold text-gray-200 flex items-center gap-2'>
-                                        <span className='w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 text-[10px] flex items-center justify-center border border-violet-500/30'>
-                                            {currentStepNumber}B
-                                        </span>
-                                        Enter Code #{currentStepNumber}
+                            <button
+                                type='button'
+                                onClick={handleStartStepLink}
+                                disabled={loadingLink || polling}
+                                className='w-full py-2.5 px-4 rounded-xl bg-gradient-to-t from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white text-xs font-bold shadow-lg shadow-violet-900/40 border border-violet-400 flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50'
+                            >
+                                {loadingLink ? (
+                                    <>
+                                        <RotateCw className='w-4 h-4 animate-spin' /> Generating
+                                        Link #{currentStepNumber}...
+                                    </>
+                                ) : session ? (
+                                    <>
+                                        <ExternalLink className='w-4 h-4' /> Re-open Link #
+                                        {currentStepNumber}
+                                    </>
+                                ) : (
+                                    <>
+                                        <ExternalLink className='w-4 h-4' /> Start Link #
+                                        {currentStepNumber} of 3
+                                    </>
+                                )}
+                            </button>
+
+                            {/* Polling indicator */}
+                            {polling && (
+                                <div className='flex items-center gap-2 text-[11px] text-violet-300 bg-violet-500/10 px-3 py-2.5 rounded-xl border border-violet-500/20 animate-pulse'>
+                                    <Loader2 className='w-3.5 h-3.5 text-violet-400 shrink-0 animate-spin' />
+                                    <span>
+                                        Waiting for link #{currentStepNumber} to complete… Progress
+                                        will advance automatically.
                                     </span>
-                                    <span className='text-[10px] text-gray-500'>Code #{currentStepNumber} of 3</span>
                                 </div>
+                            )}
 
-                                <div className='relative'>
-                                    <input
-                                        type='text'
-                                        value={claimCode}
-                                        onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
-                                        placeholder={`Enter Code #${currentStepNumber} (ACT-XXXX-XXXX)`}
-                                        className='w-full px-4 py-2.5 bg-black/60 border border-neutral-700 rounded-xl text-xs font-mono tracking-widest text-white focus:outline-none focus:border-violet-500 uppercase placeholder:normal-case placeholder:tracking-normal transition'
-                                    />
+                            {session && !polling && (
+                                <div className='flex items-center gap-2 text-[11px] text-violet-300 bg-violet-500/10 px-3 py-1.5 rounded-lg border border-violet-500/20'>
+                                    <Sparkles className='w-3.5 h-3.5 text-violet-400 shrink-0' />
+                                    <span>
+                                        Complete the sponsor steps in the new window. No code needed
+                                        — your progress updates automatically.
+                                    </span>
                                 </div>
-
-                                <button
-                                    type='submit'
-                                    disabled={submittingCode || !claimCode.trim()}
-                                    className='w-full py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold border border-neutral-700 hover:border-neutral-600 flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed'
-                                >
-                                    {submittingCode ? (
-                                        <>
-                                            <RotateCw className='w-4 h-4 animate-spin text-violet-400' /> Verifying Code #{currentStepNumber}...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <KeyRound className='w-4 h-4 text-violet-400' />
-                                            {currentStepNumber === 3
-                                                ? 'Submit Final Code & Unsuspend Server!'
-                                                : `Submit Code #${currentStepNumber} (${currentStepNumber}/3)`}
-                                        </>
-                                    )}
-                                </button>
-                            </form>
+                            )}
                         </div>
                     ) : (
                         <div className='py-8 text-center space-y-3'>
@@ -443,7 +446,8 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
                             </div>
                             <h4 className='text-lg font-bold text-white'>Server Unsuspended &amp; Booting!</h4>
                             <p className='text-xs text-gray-400 max-w-sm mx-auto'>
-                                All 3 links have been verified. Your VPS is being started and granted 72 hours of active time.
+                                All 3 links have been verified. Your VPS is being started and granted
+                                72 hours of active time.
                             </p>
                         </div>
                     )}
@@ -451,7 +455,7 @@ export const SuspendedClaimBackModal: React.FC<Props> = ({
                     {/* Anti-Bypass Footer */}
                     <div className='mt-4 flex items-center gap-2 text-[11px] text-gray-500 justify-center'>
                         <ShieldAlert className='w-3.5 h-3.5 text-violet-400 shrink-0' />
-                        <span>Linkvertise/Shrinkme bypassers will burn the session token. Complete links manually.</span>
+                        <span>Protected by Anti-Bypass Guard. Automated tools will be rejected.</span>
                     </div>
                 </motion.div>
             </div>

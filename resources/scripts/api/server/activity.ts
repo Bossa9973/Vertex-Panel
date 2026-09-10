@@ -10,18 +10,20 @@ export interface ActivityRenewalSession {
     started_at: string
 }
 
+/**
+ * Auto-grant result returned from verifyActivityCallback.
+ * The renewal is now applied server-side — no claim code is returned.
+ */
 export interface ActivityVerificationResult {
     success: boolean
-    claim_code: string
+    auto_granted: boolean
     session_type: 'active_renewal' | 'reactivation_step'
     step_number: number
     status: string
     server_id: number
-}
-
-export interface ActivityClaimResult {
-    restored: boolean
-    is_suspended: boolean
+    // Grant details (set when auto_granted = true)
+    restored?: boolean
+    is_suspended?: boolean
     step_completed?: number
     required?: number
     remaining?: number
@@ -29,7 +31,17 @@ export interface ActivityClaimResult {
     progress_display?: string
     lifecycle_phase?: string
     activity_expires?: string
-    message: string
+    message?: string
+}
+
+export interface ActivitySessionStatus {
+    has_session: boolean
+    session_id?: number
+    status?: 'pending' | 'verified' | 'claimed' | 'bypassed_rejected' | 'expired'
+    session_type?: 'active_renewal' | 'reactivation_step'
+    step_number?: number
+    is_claimed?: boolean
+    is_expired?: boolean
 }
 
 export interface ActivityServerStatus {
@@ -77,7 +89,9 @@ export const startServerActivitySession = async (
 }
 
 /**
- * Verify token callback with 5-pillar Anti-Bypass checks (Two-tab handshake, physical gesture, integrity).
+ * Verify token callback with 6-pillar Anti-Bypass checks.
+ * On success, the server renewal is AUTO-GRANTED — no claim code is returned.
+ * The dashboard polls sessionStatus() to detect completion.
  */
 export const verifyActivityCallback = async (
     session: string,
@@ -97,10 +111,11 @@ export const verifyActivityCallback = async (
 }
 
 /**
- * Submit claim code to extend active timer or advance suspended recovery step.
+ * Poll the status of the most recent renewal session for a server.
+ * Returns is_claimed=true once the landing page verification has completed and the grant was applied.
  */
-export const claimActivityCode = async (serverId: number, code: string): Promise<ActivityClaimResult> => {
-    const res = await http.post(`/api/client/servers/${serverId}/activity/claim-code`, { code })
+export const getServerSessionStatus = async (serverId: number): Promise<ActivitySessionStatus> => {
+    const res = await http.get(`/api/client/servers/${serverId}/activity/session-status`)
     return res.data.data
 }
 

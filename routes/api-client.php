@@ -34,8 +34,9 @@ Route::post('/deploy', [Client\ServerDeployController::class, 'deploy']);
 Route::delete('/servers/{uuid}', [Client\ServerDeployController::class, 'destroy']);
 Route::post('/servers/{id}/renew', [Client\ServerDeployController::class, 'renew']);
 Route::post('/servers/{id}/activity/start', [Client\ServerActivityController::class, 'startSession']);
-Route::post('/servers/{id}/activity/claim-code', [Client\ServerActivityController::class, 'claimCode']);
+Route::post('/servers/{id}/activity/claim-code', [Client\ServerActivityController::class, 'claimCode']); // deprecated — returns 410
 Route::get('/servers/{id}/activity/status', [Client\ServerActivityController::class, 'getStatus']);
+Route::get('/servers/{id}/activity/session-status', [Client\ServerActivityController::class, 'sessionStatus']);
 Route::post('/activity/verify', [Client\ServerActivityController::class, 'verifyCallback']);
 
 Route::prefix('/servers/{server}')->middleware(
