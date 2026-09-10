@@ -57,7 +57,7 @@ class FreeServerActivityService
                 'session_type'       => $recent->session_type,
                 'step_number'        => $recent->step_number,
                 'shrinkme_url'       => $recent->shrinkme_url ?: $recent->destination_url,
-                'expires_in_seconds' => Carbon::now()->diffInSeconds($recent->expires_at, false),
+                'expires_in_seconds' => (int) max(0, Carbon::parse($recent->expires_at)->getTimestamp() - Carbon::now()->getTimestamp()),
                 'started_at'         => $recent->started_at->toIso8601String(),
             ];
         }
@@ -166,7 +166,8 @@ class FreeServerActivityService
         $minSeconds = (int) (DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
             ?: config('services.shrinkme.min_seconds', 20));
 
-        $elapsed = Carbon::now()->diffInSeconds($renewal->started_at);
+        $startedTimestamp = Carbon::parse($renewal->started_at)->getTimestamp();
+        $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $startedTimestamp);
 
         if ($elapsed < $minSeconds) {
             $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
@@ -240,7 +241,8 @@ class FreeServerActivityService
         if ($renewal->status === ServerActivityRenewal::STATUS_PENDING) {
             $minSeconds = (int) (DB::table('settings')->where('key', 'shrinkme_min_seconds')->value('value')
                 ?: config('services.shrinkme.min_seconds', 20));
-            $elapsed = Carbon::now()->diffInSeconds($renewal->started_at);
+            $startedTimestamp = Carbon::parse($renewal->started_at)->getTimestamp();
+            $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $startedTimestamp);
             if ($elapsed < $minSeconds) {
                 $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
                 throw new Exception("Anti-Bypass Alert: Link resolved too quickly ({$elapsed}s). Bypasser tools are rejected.");
@@ -365,26 +367,26 @@ class FreeServerActivityService
             ];
         }
 
-        $now = Carbon::now();
+        $nowTs = Carbon::now()->getTimestamp();
         $isSuspended = $server->isSuspended();
         $phase = $server->getActivityLifecyclePhase();
 
         $activeRemainingSeconds = 0;
         if ($server->activity_expires_at) {
-            $activeRemainingSeconds = max(0, $now->diffInSeconds(Carbon::parse($server->activity_expires_at), false));
+            $activeRemainingSeconds = (int) max(0, Carbon::parse($server->activity_expires_at)->getTimestamp() - $nowTs);
         }
 
         $preSuspendCriticalSeconds = 0;
         if ($server->isInPreSuspendCritical()) {
             $suspendAt = Carbon::parse($server->activity_expires_at)->addMinutes(30);
-            $preSuspendCriticalSeconds = max(0, $now->diffInSeconds($suspendAt, false));
+            $preSuspendCriticalSeconds = (int) max(0, $suspendAt->getTimestamp() - $nowTs);
         }
 
         $suspendedRemainingSeconds = 0;
         $preDeleteCriticalSeconds = 0;
         if ($isSuspended && $server->deletion_deadline_at) {
             $deadline = Carbon::parse($server->deletion_deadline_at);
-            $suspendedRemainingSeconds = max(0, $now->diffInSeconds($deadline, false));
+            $suspendedRemainingSeconds = (int) max(0, $deadline->getTimestamp() - $nowTs);
             if ($server->isInPreDeletionCritical()) {
                 $preDeleteCriticalSeconds = $suspendedRemainingSeconds;
             }
