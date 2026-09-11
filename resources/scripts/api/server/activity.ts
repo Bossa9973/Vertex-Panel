@@ -126,3 +126,21 @@ export const getServerActivityStatus = async (serverId: number): Promise<Activit
     const res = await http.get(`/api/client/servers/${serverId}/activity/status`)
     return res.data.data
 }
+
+/**
+ * Landing ping — call this immediately on mount in ActivityClaimPage.
+ *
+ * At the moment the claim page loads the browser Referer is still shrinkme.io
+ * (set by the redirect chain). This stamps shrinkme_landed_at on the session row
+ * so verifyCallback can verify the Shrinkme gate server-side.
+ *
+ * If the user arrived via a bypass tool (direct URL), the server will burn the
+ * session immediately and this will throw — show an error and block the verify button.
+ */
+export const pingActivityLanding = async (
+    session: string,
+    sig: string
+): Promise<{ landed: boolean; already_consumed?: boolean }> => {
+    const res = await http.post('/api/client/activity/landing-ping', { session, sig })
+    return res.data.data
+}

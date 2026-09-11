@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import PageContentBlock from '@/components/elements/PageContentBlock'
-import { verifyActivityCallback, ActivityVerificationResult } from '@/api/server/activity'
+import { verifyActivityCallback, pingActivityLanding, ActivityVerificationResult } from '@/api/server/activity'
 import {
     ShieldCheck,
     ShieldAlert,
@@ -41,6 +41,15 @@ export const ActivityClaimPage: React.FC = () => {
     // Trajectory buffer for physical human input validation (Pillar 2)
     const trajectoryRef = useRef<Array<[number, number, number]>>([])
 
+    /**
+     * Landing-ping state.
+     * 'loading' — ping in-flight (page just mounted)
+     * 'ok'      — stamp confirmed; verify button enabled
+     * 'rejected'— session burned server-side (bypass detected); verify button disabled
+     */
+    const [landingState, setLandingState] = useState<'loading' | 'ok' | 'rejected'>('loading')
+    const [landingError, setLandingError] = useState<string | null>(null)
+
     useEffect(() => {
         const handleMove = (e: MouseEvent | TouchEvent) => {
             const now = Date.now()
@@ -67,6 +76,38 @@ export const ActivityClaimPage: React.FC = () => {
             window.removeEventListener('touchmove', handleMove)
         }
     }, [])
+
+    // ── Landing ping: stamp shrinkme_landed_at on the DB row at page-load time ──────
+    // Called immediately on mount. The browser Referer at this moment is still
+    // shrinkme.io (or the Shrinkme redirect chain). If the user arrived directly
+    // (bypass), the server rejects and burns the session — we show an error and
+    // block the verify button permanently.
+    useEffect(() => {
+        if (!session || !sig) {
+            setLandingState('rejected')
+            setLandingError('Missing verification parameters. Please launch the link from your dashboard.')
+            return
+        }
+
+        let cancelled = false
+        pingActivityLanding(session, sig)
+            .then(() => {
+                if (!cancelled) setLandingState('ok')
+            })
+            .catch((err: any) => {
+                if (cancelled) return
+                setLandingState('rejected')
+                setLandingError(
+                    err.response?.data?.message ||
+                        'Verification Failed: This link was not accessed through the required sponsored page. Please start a new link from your dashboard.'
+                )
+            })
+
+        return () => {
+            cancelled = true
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session, sig])
 
     // Request client_nonce from the original dashboard tab via BroadcastChannel (Pillar 1)
     const requestClientNonce = async (targetSession: string): Promise<string | null> => {
@@ -129,6 +170,15 @@ export const ActivityClaimPage: React.FC = () => {
             return
         }
 
+        // Pillar 6 pre-check: landing stamp must have been accepted
+        if (landingState !== 'ok') {
+            setErrorMsg(
+                landingError ||
+                    'Verification Failed: This link was not accessed through the sponsored page. Please start a new link from your dashboard.'
+            )
+            return
+        }
+
         if (!session || !sig) {
             setErrorMsg(
                 'Missing verification parameters. Please launch the link from your dashboard.'
@@ -184,7 +234,7 @@ export const ActivityClaimPage: React.FC = () => {
                     {/* Top Accent Line */}
                     <div className='absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500 to-transparent' />
 
-                    {/* State: Idle (ready to verify) */}
+                    {/* State: Idle (ready to verify) or Landing Loading/Rejected */}
                     {!result && !errorMsg && (
                         <div className='py-6 space-y-6'>
                             <div className='w-16 h-16 rounded-3xl bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center mx-auto shadow-lg shadow-blue-950/60'>
@@ -204,14 +254,29 @@ export const ActivityClaimPage: React.FC = () => {
                                 </p>
                             </div>
 
+                            {/* Landing-ping rejection banner */}
+                            {landingState === 'rejected' && landingError && (
+                                <div className='p-4 rounded-2xl bg-rose-950/30 border border-rose-500/30 text-xs text-rose-300 leading-relaxed text-left'>
+                                    <div className='flex items-start gap-2'>
+                                        <ShieldAlert className='w-4 h-4 shrink-0 mt-0.5 text-rose-400' />
+                                        <span>{landingError}</span>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className='pt-2'>
                                 <button
                                     type='button'
                                     onClick={handleUnlockClick}
-                                    disabled={verifying}
-                                    className='w-full py-3.5 px-6 rounded-2xl bg-gradient-to-t from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold text-sm shadow-xl shadow-blue-900/50 border border-blue-400 flex items-center justify-center gap-2.5 cursor-pointer transition active:scale-95 disabled:opacity-50'
+                                    disabled={verifying || landingState !== 'ok'}
+                                    className='w-full py-3.5 px-6 rounded-2xl bg-gradient-to-t from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold text-sm shadow-xl shadow-blue-900/50 border border-blue-400 flex items-center justify-center gap-2.5 cursor-pointer transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'
                                 >
-                                    {verifying ? (
+                                    {landingState === 'loading' ? (
+                                        <>
+                                            <RotateCw className='w-5 h-5 animate-spin' /> Checking
+                                            Session...
+                                        </>
+                                    ) : verifying ? (
                                         <>
                                             <RotateCw className='w-5 h-5 animate-spin' /> Validating
                                             &amp; Renewing...

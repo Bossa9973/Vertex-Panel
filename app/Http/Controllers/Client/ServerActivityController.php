@@ -44,6 +44,39 @@ class ServerActivityController extends ApiController
     }
 
     /**
+     * Landing ping — called by ActivityClaimPage on mount to stamp shrinkme_landed_at.
+     * Checks the browser's Referer at page-load time (when it is still shrinkme.io)
+     * and burns the session immediately if it did not arrive via Shrinkme.
+     * verifyCallback (Pillar 6) then requires the stamp rather than the POST Referer.
+     */
+    public function recordLanding(Request $request, FreeServerActivityService $activityService): JsonResponse
+    {
+        $request->validate([
+            'session' => 'required|string|size:48',
+            'sig'     => 'required|string|size:64',
+        ]);
+
+        try {
+            $data = $activityService->recordLanding(
+                $request->input('session'),
+                $request->input('sig'),
+                $request->user(),
+                $request
+            );
+
+            return response()->json([
+                'success' => true,
+                'data'    => $data,
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
      * Anti-Bypass callback verification endpoint (called when user lands on /activity/claim).
      */
     public function verifyCallback(Request $request, FreeServerActivityService $activityService): JsonResponse

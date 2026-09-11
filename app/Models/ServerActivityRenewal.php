@@ -16,11 +16,12 @@ class ServerActivityRenewal extends Model
     protected $guarded = ['id', 'created_at', 'updated_at'];
 
     protected $casts = [
-        'step_number' => 'integer',
-        'started_at'  => 'datetime',
-        'verified_at' => 'datetime',
-        'claimed_at'  => 'datetime',
-        'expires_at'  => 'datetime',
+        'step_number'        => 'integer',
+        'started_at'         => 'datetime',
+        'verified_at'        => 'datetime',
+        'claimed_at'         => 'datetime',
+        'expires_at'         => 'datetime',
+        'shrinkme_landed_at' => 'datetime',
     ];
 
     public const STATUS_PENDING           = 'pending';

@@ -1,0 +1,1 @@
+import{r as s,a as r}from"./vendor-react-866dfb5c.js";import{a as p}from"./formik.esm-6ca2d235.js";import{T as f}from"./TextInput-88c2a1f5.js";const T=s.forwardRef(({name:o,...t},e)=>r(p,{innerRef:e,name:o,children:({field:a,meta:{error:i,touched:m}})=>r(f,{...a,...t,error:m?i:void 0})}));export{T};

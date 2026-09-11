@@ -38,6 +38,7 @@ Route::post('/servers/{id}/activity/claim-code', [Client\ServerActivityControlle
 Route::get('/servers/{id}/activity/status', [Client\ServerActivityController::class, 'getStatus']);
 Route::get('/servers/{id}/activity/session-status', [Client\ServerActivityController::class, 'sessionStatus']);
 Route::post('/activity/verify', [Client\ServerActivityController::class, 'verifyCallback']);
+Route::post('/activity/landing-ping', [Client\ServerActivityController::class, 'recordLanding']);
 
 Route::prefix('/servers/{server}')->middleware(
     [ServerSubject::class, AuthenticateServerAccess::class],

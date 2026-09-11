@@ -144,6 +144,78 @@ class FreeServerActivityService
     }
 
     /**
+     * Record that the user's browser genuinely landed on the claim page from Shrinkme.
+     *
+     * Called by POST /activity/landing-ping immediately on page mount — at that
+     * moment the browser's Referer header is still set to shrinkme.io (or its
+     * redirect chain). We stamp shrinkme_landed_at so verifyCallback can require
+     * it as proof-of-Shrinkme instead of the broken Referer-of-POST approach.
+     *
+     * When Shrinkme is disabled in settings this is a no-op stamp (always succeeds)
+     * so the rest of the flow is unaffected.
+     *
+     * @throws Exception
+     */
+    public function recordLanding(string $token, string $sig, User $user, Request $request): array
+    {
+        /** @var ServerActivityRenewal $renewal */
+        $renewal = ServerActivityRenewal::where('token', $token)->firstOrFail();
+
+        if ($renewal->user_id !== $user->id) {
+            throw new Exception('Unauthorized: Renewal session belongs to a different user account.');
+        }
+
+        $expectedSig = hash_hmac('sha256', "{$token}|{$renewal->server_id}|{$user->id}", config('app.key'));
+        if (!hash_equals($expectedSig, $sig)) {
+            throw new Exception('Invalid or tampered security signature.');
+        }
+
+        if ($renewal->status !== ServerActivityRenewal::STATUS_PENDING) {
+            // Session already consumed or burned — just return current state silently.
+            return ['landed' => false, 'already_consumed' => true];
+        }
+
+        if ($renewal->isExpired()) {
+            $renewal->update(['status' => ServerActivityRenewal::STATUS_EXPIRED]);
+            throw new Exception('Security Error: This verification link has expired.');
+        }
+
+        $shrinkmeEnabled = DB::table('settings')->where('key', 'shrinkme_enabled')->value('value');
+        $shrinkmeActive  = ($shrinkmeEnabled !== 'false' && $shrinkmeEnabled !== '0');
+        $shrinkmeApiKey  = DB::table('settings')->where('key', 'shrinkme_api_key')->value('value')
+            ?: config('services.shrinkme.api_key', '');
+
+        if ($shrinkmeActive && !empty($shrinkmeApiKey)) {
+            $referer = strtolower((string) $request->header('referer', ''));
+            $isFromShrinkme = str_contains($referer, 'shrinkme.');
+
+            if (!$isFromShrinkme) {
+                // Burn the session immediately — the user did not arrive via Shrinkme.
+                $renewal->update([
+                    'status'        => ServerActivityRenewal::STATUS_BYPASSED_REJECTED,
+                    'claim_referer' => substr($referer, 0, 512),
+                ]);
+                Log::warning(
+                    "Anti-Bypass [Landing Gate]: Non-Shrinkme referer '{$referer}' for user #{$user->id} session {$renewal->id}. " .
+                    "Session burned."
+                );
+                throw new Exception(
+                    'Verification Failed: You must arrive at this page through the sponsored link, not directly. ' .
+                    'Please start a new link from your dashboard.'
+                );
+            }
+        }
+
+        // Stamp the landing time — verifyCallback will check this instead of Referer.
+        $renewal->update([
+            'shrinkme_landed_at' => Carbon::now(),
+            'claim_referer'      => substr(strtolower((string) $request->header('referer', '')), 0, 512),
+        ]);
+
+        return ['landed' => true];
+    }
+
+    /**
      * Verify landing callback and — if all security pillars pass — directly grant the renewal.
      * No claim code is returned. The dashboard polls getStatus() to detect completion.
      *
@@ -153,7 +225,7 @@ class FreeServerActivityService
      *   3. Known Bypass Source Referer Blacklist
      *   4. Datacenter / Cloud Proxy ASN Blocker
      *   5. Browser Client Integrity (webdriver / headless)
-     *   6. Shrinkme Referrer Gate — request MUST originate from shrinkme.io (unless Shrinkme is disabled)
+     *   6. Shrinkme Landing Stamp Gate — shrinkme_landed_at must be set by recordLanding() (unless Shrinkme is disabled)
      *
      * @throws Exception
      */
@@ -289,35 +361,35 @@ class FreeServerActivityService
             throw new Exception('Verification Failed: Security integrity validation failed.');
         }
 
-        // ─── Pillar 6: Shrinkme Referrer Gate ────────────────────────────────────────
-        // The HTTP Referer header on the verify call must originate from shrinkme.io.
-        // bypass.city resolves our destination URL server-side and hands it to the user.
-        // When the user then opens the URL directly, their browser's Referer header will
-        // be "bypass.city" or blank — never shrinkme.io — so we reject.
+        // ─── Pillar 6: Shrinkme Landing Stamp Gate ────────────────────────────────────
+        // Instead of checking the Referer of the verify POST (which is always the
+        // panel domain — trivially bypassable), we require that shrinkme_landed_at
+        // was stamped by recordLanding() at page-load time, when the browser Referer
+        // is still shrinkme.io. bypass.city / direct URL access never goes through
+        // Shrinkme so the stamp is never set, and the session is rejected here.
         //
-        // We skip this check only when Shrinkme is explicitly disabled in settings,
-        // in which case the two-tab client_nonce handshake (Pillar 1) is the primary gate.
+        // NOTE: $isFromPanel was intentionally REMOVED. Allowing panel-referer as a
+        // fallback was the exact vector that let bypassed sessions through.
         $shrinkmeEnabled = DB::table('settings')->where('key', 'shrinkme_enabled')->value('value');
         $shrinkmeActive  = ($shrinkmeEnabled !== 'false' && $shrinkmeEnabled !== '0');
         $shrinkmeApiKey  = DB::table('settings')->where('key', 'shrinkme_api_key')->value('value')
             ?: config('services.shrinkme.api_key', '');
 
         if ($shrinkmeActive && !empty($shrinkmeApiKey)) {
-            $referer = strtolower((string) $request->header('referer', ''));
-            $isFromShrinkme = str_contains($referer, 'shrinkme.');
-            $isFromPanel    = str_contains($referer, strtolower(rtrim(config('app.url', ''), '/')));
-
-            if (!$isFromShrinkme && !$isFromPanel) {
+            if (empty($renewal->shrinkme_landed_at)) {
                 $renewal->update([
                     'status'        => ServerActivityRenewal::STATUS_BYPASSED_REJECTED,
-                    'claim_referer' => substr($referer, 0, 512),
+                    'claim_referer' => substr(strtolower((string) $request->header('referer', '')), 0, 512),
                 ]);
-                Log::warning("Anti-Bypass [Pillar 6 Shrinkme Gate]: Invalid referer '{$referer}' for user #{$user->id} session {$renewal->id}");
-                throw new Exception('Verification Failed: Security integrity validation failed. Please open the link through the dashboard.');
+                Log::warning(
+                    "Anti-Bypass [Pillar 6 Landing Stamp]: No shrinkme_landed_at for user #{$user->id} session {$renewal->id}. " .
+                    "Direct URL access (bypass) detected — session burned."
+                );
+                throw new Exception(
+                    'Verification Failed: Security integrity validation failed. ' .
+                    'This link must be opened through the dashboard and completed via the sponsored page.'
+                );
             }
-
-            // Store referer for audit
-            $renewal->claim_referer = substr($referer, 0, 512);
         }
 
         // ─── All pillars passed — directly grant the renewal ──────────────────────────
