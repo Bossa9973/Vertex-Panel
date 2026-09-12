@@ -125,6 +125,10 @@ fi
 
 # 8. Run migrations and clear Laravel caches so new features take effect immediately
 if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
+    if command -v composer >/dev/null 2>&1; then
+        info "Ensuring PHP dependencies are up to date (composer)..."
+        (cd "$INSTALL_DIR" && composer install --no-dev --optimize-autoloader --no-interaction --quiet || true)
+    fi
     info "Running database migrations..."
     (cd "$INSTALL_DIR" && php artisan migrate --force || true)
     info "Refreshing Laravel route, view, and config caches..."
