@@ -441,12 +441,13 @@ class NodeSelect(discord.ui.Select):
         self.hours = hours
 
     async def callback(self, interaction: discord.Interaction):
-        if not is_admin(interaction.user):
-            return await interaction.response.send_message("❌ Admin permission required.", ephemeral=True)
-
-        node_id = int(self.values[0])
+        # Acknowledge the interaction immediately to guarantee no Discord 3-second timeout
         await interaction.response.defer()
 
+        if not is_admin(interaction.user):
+            return await interaction.followup.send("❌ Admin permission required.", ephemeral=True)
+
+        node_id = int(self.values[0])
         await self.cog.start_purge_session(interaction, node_id, self.hours)
 
 

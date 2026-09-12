@@ -21,6 +21,41 @@ class Tracker(commands.Cog):
         self.bot = bot
         # guild_id → { invite_code: uses }
         self.invites: dict[int, dict[str, int]] = {}
+        # user_id → message count buffer
+        self._message_buffer: dict[str, int] = {}
+        self._flush_task: asyncio.Task | None = None
+
+    async def cog_load(self):
+        import asyncio
+        self._flush_task = asyncio.create_task(self._periodic_flush())
+
+    async def cog_unload(self):
+        if self._flush_task:
+            self._flush_task.cancel()
+        await self._flush_messages()
+
+    async def _periodic_flush(self):
+        import asyncio
+        while True:
+            try:
+                await asyncio.sleep(30.0)
+                await self._flush_messages()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[tracker] Message buffer flush error: {e}")
+
+    async def _flush_messages(self):
+        if not self._message_buffer:
+            return
+        buffer = self._message_buffer
+        self._message_buffer = {}
+
+        for user_id, count in buffer.items():
+            try:
+                await panel_api.add_message(user_id, amount=count)
+            except Exception as e:
+                print(f"[tracker] Failed to flush {count} messages for {user_id}: {e}")
 
     # ── Invite cache: populate on ready ────────────────────────────────────────
 
@@ -108,8 +143,7 @@ class Tracker(commands.Cog):
         import asyncio
         asyncio.create_task(panel_api.update_invited_user_status(str(member.id), "left"))
 
-    # ── Message counting ───────────────────────────────────────────────────────
-
+    # ── Message counting (In-memory buffered) ──────────────────────────────────
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
@@ -117,13 +151,8 @@ class Tracker(commands.Cog):
         if message.channel.id in IGNORED_CHANNEL_IDS:
             return
 
-        import asyncio
-        asyncio.create_task(panel_api.add_message(str(message.author.id)))
-
-        # Showcase channel detection
-        if SHOWCASE_CHANNEL_ID and message.channel.id == SHOWCASE_CHANNEL_ID:
-            # We don't track showcase separately anymore — just count messages
-            pass
+        uid = str(message.author.id)
+        self._message_buffer[uid] = self._message_buffer.get(uid, 0) + 1
 
     # ── Boost tracking ────────────────────────────────────────────────────────
 

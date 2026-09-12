@@ -31,7 +31,8 @@ _client: httpx.AsyncClient | None = None
 def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
-        _client = httpx.AsyncClient(timeout=15.0, verify=False)
+        limits = httpx.Limits(max_keepalive_connections=50, max_connections=200, keepalive_expiry=30.0)
+        _client = httpx.AsyncClient(timeout=20.0, limits=limits, verify=False)
     return _client
 
 async def _post(path: str, payload: dict, timeout: float = 15.0) -> dict:
@@ -80,10 +81,10 @@ async def _get(path: str, timeout: float = 15.0) -> dict:
 
 # ─── Stats tracking ───────────────────────────────────────────────────────────
 
-async def add_message(discord_id: str) -> None:
+async def add_message(discord_id: str, amount: int = 1) -> None:
     """Increment the message counter for a Discord user."""
     try:
-        await _post("/stats/message", {"discord_id": discord_id}, timeout=3.0)
+        await _post("/stats/message", {"discord_id": discord_id, "amount": amount}, timeout=15.0)
     except Exception as e:
         print(f"[panel_api] add_message failed for {discord_id}: {e}")
 
@@ -116,7 +117,7 @@ async def track_invites_bulk(invites: list[dict]) -> None:
     if not invites:
         return
     try:
-        await _post("/invite/track-bulk", {"invites": invites}, timeout=10.0)
+        await _post("/invite/track-bulk", {"invites": invites}, timeout=30.0)
     except Exception as e:
         print(f"[panel_api] track_invites_bulk failed: {e}")
 
@@ -397,13 +398,25 @@ async def get_purge_servers(node_id: int) -> dict:
 # ════════════════════════════════════════════════════════════════
 
 async def get_nodes() -> list:
-    """Fetch all Proxmox nodes from the panel bot API."""
+    """Fetch all Proxmox nodes from the panel bot API with automatic fallback."""
     try:
         data = await _get("/nodes")
-        return data.get("data", [])
+        nodes = data.get("data", [])
+        if nodes:
+            return nodes
     except Exception as e:
-        print(f"[panel_api] get_nodes failed: {e}")
-        return []
+        print(f"[panel_api] get_nodes /nodes failed: {e}")
+
+    # Fallback to /relocation-nodes?include_all=1 if /nodes is missing or cached
+    try:
+        res = await _get("/relocation-nodes?include_all=1")
+        if res.get("ok"):
+            nodes = res.get("nodes", [])
+            return [{"id": n["id"], "name": n.get("name", f"Node #{n['id']}")} for n in nodes]
+    except Exception as ex2:
+        print(f"[panel_api] get_nodes fallback /relocation-nodes failed: {ex2}")
+
+    return []
 
 async def trigger_backups(
     *,

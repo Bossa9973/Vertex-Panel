@@ -29,12 +29,16 @@ class BotApiController extends Controller
 
     /**
      * Increment the message counter for a Discord user.
-     * POST /api/bot/stats/message   { discord_id }
+     * POST /api/bot/stats/message   { discord_id, amount? }
      */
     public function trackMessage(Request $request): JsonResponse
     {
-        $request->validate(['discord_id' => 'required|string|max:32']);
-        $this->incrementStat($request->input('discord_id'), 'messages', 1);
+        $request->validate([
+            'discord_id' => 'required|string|max:32',
+            'amount'     => 'nullable|integer|min:1',
+        ]);
+        $amount = (int) $request->input('amount', 1);
+        $this->incrementStat($request->input('discord_id'), 'messages', $amount);
 
         return response()->json(['ok' => true]);
     }
@@ -1585,25 +1589,23 @@ class BotApiController extends Controller
     // =========================================================================
 
     /**
-     * Safely insert or increment a stats counter in discord_stats table.
+     * Safely insert or increment a stats counter in discord_stats table using an atomic single query.
      */
     protected function incrementStat(string $discordId, string $column, int $amount = 1): void
     {
-        $exists = DB::table('discord_stats')->where('discord_id', $discordId)->exists();
-
-        if (!$exists) {
-            DB::table('discord_stats')->insert([
-                'discord_id' => $discordId,
-                'messages'   => $column === 'messages' ? $amount : 0,
-                'boosts'     => $column === 'boosts' ? $amount : 0,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        } else {
-            DB::table('discord_stats')
-                ->where('discord_id', $discordId)
-                ->increment($column, $amount, ['updated_at' => now()]);
+        if (!in_array($column, ['messages', 'boosts'], true)) {
+            return;
         }
+
+        DB::statement("
+            INSERT INTO discord_stats (discord_id, messages, boosts, created_at, updated_at)
+            VALUES (?, ?, ?, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE {$column} = {$column} + VALUES({$column}), updated_at = NOW()
+        ", [
+            $discordId,
+            $column === 'messages' ? $amount : 0,
+            $column === 'boosts' ? $amount : 0,
+        ]);
     }
 
     /**
