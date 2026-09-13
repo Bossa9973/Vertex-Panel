@@ -137,11 +137,12 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
         if [[ -f "${INSTALL_DIR}/.env" ]]; then
             rpass=$(grep '^REDIS_PASSWORD=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' | tr -d "'" || echo "")
         fi
+        local rcmd="redis-cli"
         if [[ -n "$rpass" && "$rpass" != "null" ]]; then
-            redis-cli -a "$rpass" config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
-        else
-            redis-cli config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+            rcmd="redis-cli -a $rpass"
         fi
+        $rcmd config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+        $rcmd config set save "" >/dev/null 2>&1 || true
         chown -R redis:redis /var/lib/redis 2>/dev/null || true
     fi
 

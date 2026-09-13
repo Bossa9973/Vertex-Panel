@@ -445,17 +445,18 @@ perform_update() {
         if [[ -f "${INSTALL_DIR}/.env" ]]; then
             rpass=$(grep '^REDIS_PASSWORD=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' | tr -d "'" || echo "")
         fi
+        local rcmd="redis-cli"
         if [[ -n "$rpass" && "$rpass" != "null" ]]; then
-            redis-cli -a "$rpass" config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
-        else
-            redis-cli config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+            rcmd="redis-cli -a $rpass"
         fi
+        $rcmd config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+        $rcmd config set save "" >/dev/null 2>&1 || true
         chown -R redis:redis /var/lib/redis 2>/dev/null || true
     fi
 
-    # Laravel cache — clear stale, then re-cache
+    # Laravel cache — clear stale, then re-cache (with graceful fallback if package metadata caching fails)
     run_or_fail "Clearing & re-caching application" \
-        bash -c "cd '${INSTALL_DIR}' && php artisan optimize:clear && php artisan optimize"
+        bash -c "cd '${INSTALL_DIR}' && php artisan optimize:clear && (php artisan optimize || (php artisan config:cache && php artisan route:cache && php artisan view:cache))"
 
     # Database migrations
 
