@@ -2206,10 +2206,10 @@ class AdminVmSelectView(discord.ui.View):
 
 @bot.tree.command(name="vm-delete", description="Staff tool to delete user VM with multi-step owner verification & HTML transcript (Admin Only)")
 async def vm_delete_cmd(interaction: discord.Interaction, user: Union[discord.Member, discord.User]):
-    if not is_admin(interaction):
-        return await interaction.response.send_message("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
-
     await interaction.response.defer(ephemeral=True)
+
+    if not is_admin(interaction):
+        return await interaction.followup.send("❌ Access Denied. This command is restricted to administrators.", ephemeral=True)
 
     user_history_data = await panel_api.get_user_history(str(user.id))
     if not user_history_data.get("ok"):

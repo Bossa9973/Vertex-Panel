@@ -511,17 +511,17 @@ class Purge(commands.Cog):
         hours="Inactivity confirmation window in hours (default: 3.0)",
     )
     async def purge_inactive(self, interaction: discord.Interaction, hours: Optional[float] = None) -> None:
+        await interaction.response.defer(ephemeral=False)
+
         if not is_admin(interaction.user):
             embed = discord.Embed(
                 color=DANGER,
                 title="Access Denied",
                 description=f"❌ You must be an Administrator or have the staff role <@&{ADMIN_ROLE_ID}> to run `/purge-inactive`.",
             )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            return await interaction.followup.send(embed=embed, ephemeral=True)
 
         purge_hours = float(hours) if (hours and hours > 0) else DEFAULT_PURGE_HOURS
-
-        await interaction.response.defer(ephemeral=False)
 
         # Fetch Proxmox nodes from panel API
         try:
