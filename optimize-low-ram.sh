@@ -166,7 +166,7 @@ sysctl vm.overcommit_memory=1 >/dev/null 2>&1 || true
 echo "vm.overcommit_memory = 1" > /etc/sysctl.d/99-redis-overcommit.conf 2>/dev/null || true
 
 if command -v redis-cli >/dev/null 2>&1; then
-    local rpass=""
+    rpass=""
     if [[ -f "${INSTALL_DIR}/.env" ]]; then
         rpass=$(grep '^REDIS_PASSWORD=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' | tr -d "'" || echo "")
     fi
