@@ -25,6 +25,7 @@ interface Props {
 }
 
 const STORAGE_KEY = 'vertex_page_maintenance_status_cache'
+const STORAGE_TIME_KEY = 'vertex_page_maintenance_status_ts'
 
 const getInitialCache = (): MaintenanceStatus | null => {
     try {
@@ -40,14 +41,23 @@ export const PageMaintenanceGuard: React.FC<Props> = ({ pageKey, children }) => 
     const [status, setStatus] = useState<MaintenanceStatus | null>(getInitialCache)
     const [loading, setLoading] = useState<boolean>(!status)
 
-    const checkStatus = async () => {
+    const checkStatus = async (force: boolean = false) => {
         try {
-            const res = await http.get('/api/maintenance-status')
+            const lastFetched = localStorage.getItem(STORAGE_TIME_KEY)
+            const now = Date.now()
+            // Reuse cache if fetched less than 2 minutes ago
+            if (!force && lastFetched && now - Number(lastFetched) < 120000 && status) {
+                setLoading(false)
+                return
+            }
+
+            const res = await http.get('/api/client/maintenance-status')
             if (res.data?.data) {
                 const newStatus = res.data.data
                 setStatus(newStatus)
                 try {
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(newStatus))
+                    localStorage.setItem(STORAGE_TIME_KEY, String(now))
                 } catch {}
             }
         } catch (err) {
@@ -90,7 +100,7 @@ export const PageMaintenanceGuard: React.FC<Props> = ({ pageKey, children }) => 
 
                         <div className='flex items-center gap-3'>
                             <button
-                                onClick={checkStatus}
+                                onClick={() => checkStatus(true)}
                                 disabled={loading}
                                 className='bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white rounded-xl font-bold text-xs py-2.5 px-5 cursor-pointer transition inline-flex items-center justify-center gap-2 disabled:opacity-50'
                             >
@@ -143,7 +153,7 @@ export const PageMaintenanceGuard: React.FC<Props> = ({ pageKey, children }) => 
 
                     <div className='mt-6 flex items-center justify-center gap-3'>
                         <button
-                            onClick={checkStatus}
+                            onClick={() => checkStatus(true)}
                             disabled={loading}
                             className='bg-neutral-900 border border-neutral-800 text-gray-300 hover:text-white rounded-xl font-bold text-xs py-2.5 px-5 cursor-pointer transition inline-flex items-center justify-center gap-2 disabled:opacity-50'
                         >

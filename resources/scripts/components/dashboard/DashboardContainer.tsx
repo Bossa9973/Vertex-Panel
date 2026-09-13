@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, lazy, Suspense } from 'react'
 import { useStoreState, useStoreActions } from '@/state'
 import PageContentBlock from '@/components/elements/PageContentBlock'
 import http from '@/api/http'
 import ActiveServicesTable, { ServerItem } from '@/components/dashboard/ActiveServicesTable'
-import VpsDeployModal from '@/components/dashboard/VpsDeployModal'
 import PromoBannersRow from '@/components/dashboard/PromoBannersRow'
 import QuickServicesGrid from '@/components/dashboard/QuickServicesGrid'
 import PageMaintenanceGuard from '@/components/elements/PageMaintenanceGuard'
 import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
 import { RocketLaunchIcon } from '@heroicons/react/24/outline'
-import FreeServerRenewModal from '@/components/dashboard/FreeServerRenewModal'
-import SuspendedClaimBackModal from '@/components/dashboard/SuspendedClaimBackModal'
 import { AlertTriangle } from 'lucide-react'
+
+const VpsDeployModal = lazy(() => import('@/components/dashboard/VpsDeployModal'))
+const FreeServerRenewModal = lazy(() => import('@/components/dashboard/FreeServerRenewModal'))
+const SuspendedClaimBackModal = lazy(() => import('@/components/dashboard/SuspendedClaimBackModal'))
 
 const LOCATION_FLAGS: Record<string, string> = {
     'India': 'https://flagcdn.com/in.svg',
@@ -103,134 +104,112 @@ export const DashboardContainer: React.FC = () => {
             const res = await http.get('/api/client/servers')
             const rawItems = res.data?.data || res.data || []
 
-            const formatted = await Promise.all(
-                rawItems.map(async (item: any, idx: number) => {
-                    const srv = item.attributes || item
+            const formatted: ServerItem[] = rawItems.map((item: any, idx: number) => {
+                const srv = item.attributes || item
 
-                    let cpuUsage = 0
-                    let serverStatus: 'Active' | 'Expired' | 'Stopped' | 'Suspended' = 'Active'
+                const serverStatus: 'Active' | 'Expired' | 'Stopped' | 'Suspended' =
+                    srv.status === 'stopped' || srv.status === 'offline' ? 'Stopped' : 'Active'
 
-                    const serverId = srv.uuid || srv.id
-                    if (serverId) {
-                        try {
-                            const stateRes = await http.get(`/api/client/servers/${serverId}/state`, { timeout: 3000 })
-                            const sData = stateRes.data?.data?.attributes || stateRes.data?.data
-                            if (sData) {
-                                if (typeof sData.cpu_used === 'number') {
-                                    const rawCpu = sData.cpu_used
-                                    cpuUsage = Math.round(rawCpu <= 1 ? rawCpu * 100 : rawCpu)
-                                }
-                                if (sData.state === 'stopped' || sData.state === 'offline') {
-                                    serverStatus = 'Stopped'
-                                    cpuUsage = 0
-                                }
-                            }
-                        } catch (e) {
-                            cpuUsage = 0
-                        }
+                const nodeData = typeof srv.node === 'object' ? srv.node : null
+                const loc =
+                    nodeData?.location_name ||
+                    nodeData?.name ||
+                    (typeof srv.node === 'string' ? srv.node : null) ||
+                    (srv.description?.includes('Plan:')
+                        ? srv.description.split('(')[1]?.replace(')', '') || 'Node: DE-1'
+                        : ['Node: DE-1', 'London, UK', 'New York, USA', 'Tokyo, Japan'][idx % 4])
+
+                const flag =
+                    nodeData?.flag ||
+                    getFlagForLocationString(loc) ||
+                    getFlagForLocationString(nodeData?.name || '') ||
+                    'https://flagcdn.com/w40/de.png'
+                const expiresAt = srv.expires_at ? new Date(srv.expires_at) : new Date(Date.now() + (29 - (idx % 5) * 3) * 86400000)
+                const now = new Date()
+                const diffDays = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 3600 * 24))
+                const isExpired = diffDays <= 0
+
+                const planTier = srv.plan_tier ?? 'free'
+                const activityExpiresAt = srv.activity_expires_at ? new Date(srv.activity_expires_at) : null
+                const deletionDeadlineAt = srv.deletion_deadline_at ? new Date(srv.deletion_deadline_at) : null
+                const isSuspended = srv.status === 'suspended' || srv.is_suspended === true
+
+                const activityRemainingSecs = srv.activity_remaining_seconds !== undefined && srv.activity_remaining_seconds !== null
+                    ? srv.activity_remaining_seconds
+                    : (activityExpiresAt ? Math.max(0, Math.floor((activityExpiresAt.getTime() - now.getTime()) / 1000)) : null)
+
+                const deletionRemainingSecs = srv.deletion_remaining_seconds !== undefined && srv.deletion_remaining_seconds !== null
+                    ? srv.deletion_remaining_seconds
+                    : (deletionDeadlineAt ? Math.max(0, Math.floor((deletionDeadlineAt.getTime() - now.getTime()) / 1000)) : null)
+
+                const reactivationProgress = srv.reactivation_progress || {
+                    completed: srv.reactivation_codes_completed ?? 0,
+                    required: 3,
+                    remaining: Math.max(0, 3 - (srv.reactivation_codes_completed ?? 0)),
+                    display: `${srv.reactivation_codes_completed ?? 0}/3`,
+                }
+
+                let lifecyclePhase = srv.lifecycle_phase
+                if (!lifecyclePhase) {
+                    if (planTier === 'paid') {
+                        lifecyclePhase = 'paid'
+                    } else if (isSuspended) {
+                        lifecyclePhase = (deletionRemainingSecs !== null && deletionRemainingSecs <= 1800)
+                            ? 'pre_delete_critical'
+                            : 'suspended_recovery'
+                    } else if (activityRemainingSecs !== null && activityRemainingSecs <= 0) {
+                        lifecyclePhase = 'pre_suspend_critical'
+                    } else {
+                        lifecyclePhase = 'active'
                     }
+                }
 
-                    const nodeData = typeof srv.node === 'object' ? srv.node : null
-                    const loc =
-                        nodeData?.location_name ||
-                        nodeData?.name ||
-                        (typeof srv.node === 'string' ? srv.node : null) ||
-                        (srv.description?.includes('Plan:')
-                            ? srv.description.split('(')[1]?.replace(')', '') || 'Node: DE-1'
-                            : ['Node: DE-1', 'London, UK', 'New York, USA', 'Tokyo, Japan'][idx % 4])
+                const ip = extractIpAddress(srv, idx)
+                const cpuCores = srv.limits?.cpu ? Math.max(1, Math.round(srv.limits.cpu / 100)) : 1
+                const ramMb = srv.limits?.memory ? (srv.limits.memory > 100000 ? Math.round(srv.limits.memory / (1024 * 1024)) : srv.limits.memory) : 1024
+                const boltsPrice = srv.price !== undefined && srv.price !== null && Number(srv.price) > 0
+                    ? Number(srv.price)
+                    : (cpuCores >= 4 || ramMb >= 8192 ? 30.0 : (cpuCores >= 2 || ramMb >= 4096 ? 15.0 : 10.0))
 
-                    const flag =
-                        nodeData?.flag ||
-                        getFlagForLocationString(loc) ||
-                        getFlagForLocationString(nodeData?.name || '') ||
-                        'https://flagcdn.com/w40/de.png'
-                    const expiresAt = srv.expires_at ? new Date(srv.expires_at) : new Date(Date.now() + (29 - (idx % 5) * 3) * 86400000)
-                    const now = new Date()
-                    const diffDays = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 3600 * 24))
-                    const isExpired = diffDays <= 0
+                const osName =
+                    srv.template_name ||
+                    srv.template?.name ||
+                    srv.os_name ||
+                    srv.os ||
+                    srv.egg_name ||
+                    (srv.description?.includes('OS:') ? srv.description.split('OS:')[1]?.trim() : null) ||
+                    null
 
-                    const planTier = srv.plan_tier ?? 'free'
-                    const activityExpiresAt = srv.activity_expires_at ? new Date(srv.activity_expires_at) : null
-                    const deletionDeadlineAt = srv.deletion_deadline_at ? new Date(srv.deletion_deadline_at) : null
-                    const isSuspended = srv.status === 'suspended' || srv.is_suspended === true
+                const templateIcon =
+                    srv.template_icon ||
+                    srv.template?.icon ||
+                    srv.template?.icon_svg ||
+                    srv.os_icon ||
+                    srv.icon_svg ||
+                    null
 
-                    const activityRemainingSecs = srv.activity_remaining_seconds !== undefined && srv.activity_remaining_seconds !== null
-                        ? srv.activity_remaining_seconds
-                        : (activityExpiresAt ? Math.max(0, Math.floor((activityExpiresAt.getTime() - now.getTime()) / 1000)) : null)
-
-                    const deletionRemainingSecs = srv.deletion_remaining_seconds !== undefined && srv.deletion_remaining_seconds !== null
-                        ? srv.deletion_remaining_seconds
-                        : (deletionDeadlineAt ? Math.max(0, Math.floor((deletionDeadlineAt.getTime() - now.getTime()) / 1000)) : null)
-
-                    const reactivationProgress = srv.reactivation_progress || {
-                        completed: srv.reactivation_codes_completed ?? 0,
-                        required: 3,
-                        remaining: Math.max(0, 3 - (srv.reactivation_codes_completed ?? 0)),
-                        display: `${srv.reactivation_codes_completed ?? 0}/3`,
-                    }
-
-                    let lifecyclePhase = srv.lifecycle_phase
-                    if (!lifecyclePhase) {
-                        if (planTier === 'paid') {
-                            lifecyclePhase = 'paid'
-                        } else if (isSuspended) {
-                            lifecyclePhase = (deletionRemainingSecs !== null && deletionRemainingSecs <= 1800)
-                                ? 'pre_delete_critical'
-                                : 'suspended_recovery'
-                        } else if (activityRemainingSecs !== null && activityRemainingSecs <= 0) {
-                            lifecyclePhase = 'pre_suspend_critical'
-                        } else {
-                            lifecyclePhase = 'active'
-                        }
-                    }
-
-                    const ip = extractIpAddress(srv, idx)
-                    const cpuCores = srv.limits?.cpu ? Math.max(1, Math.round(srv.limits.cpu / 100)) : 1
-                    const ramMb = srv.limits?.memory ? (srv.limits.memory > 100000 ? Math.round(srv.limits.memory / (1024 * 1024)) : srv.limits.memory) : 1024
-                    const boltsPrice = srv.price !== undefined && srv.price !== null && Number(srv.price) > 0
-                        ? Number(srv.price)
-                        : (cpuCores >= 4 || ramMb >= 8192 ? 30.0 : (cpuCores >= 2 || ramMb >= 4096 ? 15.0 : 10.0))
-
-                    const osName =
-                        srv.template_name ||
-                        srv.template?.name ||
-                        srv.os_name ||
-                        srv.os ||
-                        srv.egg_name ||
-                        (srv.description?.includes('OS:') ? srv.description.split('OS:')[1]?.trim() : null) ||
-                        null
-
-                    const templateIcon =
-                        srv.template_icon ||
-                        srv.template?.icon ||
-                        srv.template?.icon_svg ||
-                        srv.os_icon ||
-                        srv.icon_svg ||
-                        null
-
-                    return {
-                        id: String(srv.id || srv.uuid),
-                        internal_id: srv.internal_id || srv.id || idx + 1,
-                        name: srv.name || `vps-instance-${idx + 1}`,
-                        hostname: srv.hostname || `${srv.name || 'vps-instance'}.vertex-vms.host`,
-                        location: loc,
-                        flag,
-                        ip,
-                        os_name: osName,
-                        template_icon: templateIcon,
-                        cpu_usage: cpuUsage,
-                        price: boltsPrice,
-                        due_date: expiresAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-                        days_left: Math.max(0, diffDays),
-                        status: isSuspended ? 'Suspended' : (isExpired ? 'Expired' : serverStatus),
-                        plan_tier: planTier,
-                        activity_remaining_seconds: activityRemainingSecs,
-                        deletion_remaining_seconds: deletionRemainingSecs,
-                        reactivation_progress: reactivationProgress,
-                        lifecycle_phase: lifecyclePhase,
-                    }
-                })
-            )
+                return {
+                    id: String(srv.id || srv.uuid),
+                    internal_id: srv.internal_id || srv.id || idx + 1,
+                    name: srv.name || `vps-instance-${idx + 1}`,
+                    hostname: srv.hostname || `${srv.name || 'vps-instance'}.vertex-vms.host`,
+                    location: loc,
+                    flag,
+                    ip,
+                    os_name: osName,
+                    template_icon: templateIcon,
+                    cpu_usage: 0,
+                    price: boltsPrice,
+                    due_date: expiresAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+                    days_left: Math.max(0, diffDays),
+                    status: isSuspended ? 'Suspended' : (isExpired ? 'Expired' : serverStatus),
+                    plan_tier: planTier,
+                    activity_remaining_seconds: activityRemainingSecs,
+                    deletion_remaining_seconds: deletionRemainingSecs,
+                    reactivation_progress: reactivationProgress,
+                    lifecycle_phase: lifecyclePhase,
+                }
+            })
 
             setServers(formatted)
         } catch (err) {
@@ -409,33 +388,45 @@ export const DashboardContainer: React.FC = () => {
                     onDeploy={handleOpenDeploy}
                 />
 
-                <VpsDeployModal
-                    opened={deployModalOpen}
-                    onClose={() => setDeployModalOpen(false)}
-                    onSuccess={() => {
-                        fetchServers()
-                    }}
-                />
+                {deployModalOpen && (
+                    <Suspense fallback={null}>
+                        <VpsDeployModal
+                            opened={deployModalOpen}
+                            onClose={() => setDeployModalOpen(false)}
+                            onSuccess={() => {
+                                fetchServers()
+                            }}
+                        />
+                    </Suspense>
+                )}
 
-                <FreeServerRenewModal
-                    server={freeRenewServer}
-                    opened={!!freeRenewServer}
-                    onClose={() => setFreeRenewServer(null)}
-                    onSuccess={() => {
-                        setFreeRenewServer(null)
-                        fetchServers()
-                    }}
-                />
+                {freeRenewServer && (
+                    <Suspense fallback={null}>
+                        <FreeServerRenewModal
+                            server={freeRenewServer}
+                            opened={!!freeRenewServer}
+                            onClose={() => setFreeRenewServer(null)}
+                            onSuccess={() => {
+                                setFreeRenewServer(null)
+                                fetchServers()
+                            }}
+                        />
+                    </Suspense>
+                )}
 
-                <SuspendedClaimBackModal
-                    server={suspendedServer}
-                    opened={!!suspendedServer}
-                    onClose={() => setSuspendedServer(null)}
-                    onSuccess={() => {
-                        setSuspendedServer(null)
-                        fetchServers()
-                    }}
-                />
+                {suspendedServer && (
+                    <Suspense fallback={null}>
+                        <SuspendedClaimBackModal
+                            server={suspendedServer}
+                            opened={!!suspendedServer}
+                            onClose={() => setSuspendedServer(null)}
+                            onSuccess={() => {
+                                setSuspendedServer(null)
+                                fetchServers()
+                            }}
+                        />
+                    </Suspense>
+                )}
             </div>
         </PageContentBlock>
         </PageMaintenanceGuard>

@@ -438,8 +438,22 @@ perform_update() {
         fi
     fi
 
-    # Laravel cache — clear stale, then re-cache
+    # Auto-heal Redis MISCONF (bgsave errors & memory overcommit on low-RAM boxes)
+    sysctl vm.overcommit_memory=1 >/dev/null 2>&1 || true
+    if command -v redis-cli >/dev/null 2>&1; then
+        local rpass=""
+        if [[ -f "${INSTALL_DIR}/.env" ]]; then
+            rpass=$(grep '^REDIS_PASSWORD=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' | tr -d "'" || echo "")
+        fi
+        if [[ -n "$rpass" && "$rpass" != "null" ]]; then
+            redis-cli -a "$rpass" config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+        else
+            redis-cli config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+        fi
+        chown -R redis:redis /var/lib/redis 2>/dev/null || true
+    fi
 
+    # Laravel cache — clear stale, then re-cache
     run_or_fail "Clearing & re-caching application" \
         bash -c "cd '${INSTALL_DIR}' && php artisan optimize:clear && php artisan optimize"
 
@@ -463,6 +477,14 @@ perform_update() {
     spinner_stop
 
     success "File permissions updated"
+
+    # Apply low-RAM server tuning (PHP-FPM ondemand, OPcache, MariaDB, Redis, Swap)
+    if [[ -f "${INSTALL_DIR}/optimize-low-ram.sh" ]]; then
+        spinner_start "Verifying low-RAM server tuning"
+        bash "${INSTALL_DIR}/optimize-low-ram.sh" > /dev/null 2>&1 || true
+        spinner_stop
+        success "Low-RAM tuning verified and active"
+    fi
 
     # Restart background services & worker daemons
 

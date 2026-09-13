@@ -20,7 +20,7 @@ class IndexController extends ApiController
         $user = $request->user();
 
         $builder = QueryBuilder::for(Server::query())
-                               ->with(['addresses'])
+                               ->with(['addresses', 'node'])
                                ->allowedFilters(['name']);
 
         $type = $request->input('type');
@@ -42,8 +42,10 @@ class IndexController extends ApiController
 
     public function announcementStatus()
     {
-        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'announcement_row_enabled')->first();
-        $enabled = $setting ? ($setting->value === 'true' || $setting->value === '1') : true;
+        $enabled = \Illuminate\Support\Facades\Cache::remember('setting.announcement_row_enabled', 300, function () {
+            $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'announcement_row_enabled')->first();
+            return $setting ? ($setting->value === 'true' || $setting->value === '1') : true;
+        });
 
         return response()->json([
             'success' => true,
@@ -55,8 +57,10 @@ class IndexController extends ApiController
 
     public function terminalMode()
     {
-        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'terminal_console_mode')->first();
-        $mode = $setting && in_array($setting->value, ['both', 'sshx']) ? $setting->value : 'both';
+        $mode = \Illuminate\Support\Facades\Cache::remember('setting.terminal_console_mode', 300, function () {
+            $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'terminal_console_mode')->first();
+            return $setting && in_array($setting->value, ['both', 'sshx']) ? $setting->value : 'both';
+        });
 
         return response()->json([
             'success' => true,
@@ -68,7 +72,6 @@ class IndexController extends ApiController
 
     public function maintenanceStatus()
     {
-        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'page_maintenance_settings')->first();
         $defaults = [
             'global' => false,
             'dashboard' => false,
@@ -83,21 +86,24 @@ class IndexController extends ApiController
             'downtimes' => [],
         ];
 
-        $data = $setting ? json_decode($setting->value, true) : $defaults;
-        if (!is_array($data)) {
-            $data = $defaults;
-        }
+        $data = \Illuminate\Support\Facades\Cache::remember('setting.page_maintenance_settings', 120, function () use ($defaults) {
+            $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'page_maintenance_settings')->first();
+            $decoded = $setting ? json_decode($setting->value, true) : null;
+            return is_array($decoded) ? array_merge($defaults, $decoded) : $defaults;
+        });
 
         return response()->json([
             'success' => true,
-            'data' => array_merge($defaults, $data),
+            'data' => $data,
         ]);
     }
 
     public function appInstallStatus()
     {
-        $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'app_installation_enabled')->first();
-        $enabled = $setting ? ($setting->value === 'true' || $setting->value === '1') : true;
+        $enabled = \Illuminate\Support\Facades\Cache::remember('setting.app_installation_enabled', 300, function () {
+            $setting = \Illuminate\Support\Facades\DB::table('settings')->where('key', 'app_installation_enabled')->first();
+            return $setting ? ($setting->value === 'true' || $setting->value === '1') : true;
+        });
 
         return response()->json([
             'success' => true,

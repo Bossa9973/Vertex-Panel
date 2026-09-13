@@ -1,0 +1,1 @@
+import{L as n}from"./vendor-react-76e6893f.js";import{a1 as s,P as m}from"./main-55923f71.js";const i=({title:e,children:t,...r})=>{const o=s.useStoreState(a=>a.server.data.name);return n(m,{title:`${e} | ${o}`,...r,children:t})};export{i as S};

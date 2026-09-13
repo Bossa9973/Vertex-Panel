@@ -16,6 +16,18 @@ class ServerTransformer extends TransformerAbstract
         'node',
     ];
 
+    private static ?\Illuminate\Database\Eloquent\Collection $cachedPlans = null;
+
+    private function getPlans()
+    {
+        if (static::$cachedPlans === null) {
+            static::$cachedPlans = \Illuminate\Support\Facades\Cache::remember('vps_plans_cached_list', 300, function () {
+                return \Convoy\Models\VpsPlan::orderBy('price', 'asc')->get();
+            });
+        }
+        return static::$cachedPlans;
+    }
+
     public function transform(Server $server)
     {
         $serverEloquentData = App::make(ServerDetailService::class)->getByEloquent($server);
@@ -26,18 +38,30 @@ class ServerTransformer extends TransformerAbstract
         $data['id'] = $data['uuid_short'];
         unset($data['uuid_short']);
 
-        // Calculate exact VPS Plan price for the server
+        // Attach eager-loaded node details if available
+        if ($server->relationLoaded('node') && $server->node) {
+            $data['node'] = [
+                'id' => $server->node->id,
+                'name' => $server->node->name,
+                'location_name' => $server->node->location_name ?? $server->node->name,
+                'fqdn' => $server->node->fqdn,
+                'flag' => $server->node->flag ?? null,
+            ];
+        }
+
+        // Calculate exact VPS Plan price for the server from cached plans (zero extra SQL queries)
         $price = 10.00;
+        $plans = $this->getPlans();
         if (!empty($server->description) && preg_match('/Plan:\s*([^|]+)/i', $server->description, $matches)) {
             $planName = trim($matches[1]);
-            $plan = \Convoy\Models\VpsPlan::where('name', $planName)->first();
+            $plan = $plans->first(fn($p) => strcasecmp($p->name, $planName) === 0);
             if ($plan) {
                 $price = (float) $plan->price;
             }
         } else {
             $ramMb = $server->memory > 100000 ? (int) round($server->memory / (1024 * 1024)) : (int) $server->memory;
             if ($ramMb > 0) {
-                $plan = \Convoy\Models\VpsPlan::where('ram', '>=', $ramMb)->orderBy('price', 'asc')->first();
+                $plan = $plans->first(fn($p) => $p->ram >= $ramMb);
                 if ($plan) {
                     $price = (float) $plan->price;
                 }

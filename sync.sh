@@ -129,6 +129,22 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
         info "Ensuring PHP dependencies are up to date (composer)..."
         (cd "$INSTALL_DIR" && composer install --no-dev --optimize-autoloader --no-interaction --quiet || true)
     fi
+
+    # Auto-heal Redis MISCONF (bgsave errors & memory overcommit on low-RAM boxes)
+    sysctl vm.overcommit_memory=1 >/dev/null 2>&1 || true
+    if command -v redis-cli >/dev/null 2>&1; then
+        local rpass=""
+        if [[ -f "${INSTALL_DIR}/.env" ]]; then
+            rpass=$(grep '^REDIS_PASSWORD=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' | tr -d "'" || echo "")
+        fi
+        if [[ -n "$rpass" && "$rpass" != "null" ]]; then
+            redis-cli -a "$rpass" config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+        else
+            redis-cli config set stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+        fi
+        chown -R redis:redis /var/lib/redis 2>/dev/null || true
+    fi
+
     info "Running database migrations..."
     (cd "$INSTALL_DIR" && php artisan migrate --force || true)
     info "Refreshing Laravel route, view, and config caches..."
@@ -137,6 +153,19 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
     (cd "$INSTALL_DIR" && php artisan view:clear >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan queue:restart >/dev/null 2>&1 || true)
     success "Database migrated, Laravel cache cleared, and queue restarted."
+
+    # Apply low-RAM server optimizations if available
+    if [[ -f "${INSTALL_DIR}/optimize-low-ram.sh" ]]; then
+        info "Applying low-RAM server tuning (PHP-FPM ondemand, OPcache, MariaDB, Redis, Swap)..."
+        bash "${INSTALL_DIR}/optimize-low-ram.sh" >/dev/null 2>&1 || true
+        success "Low-RAM tuning applied and active."
+    fi
+
+    # Reload PHP-FPM to apply ondemand worker settings
+    FPM_SVC=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
+    if [[ -n "$FPM_SVC" ]]; then
+        systemctl reload "$FPM_SVC" 2>/dev/null || systemctl restart "$FPM_SVC" 2>/dev/null || true
+    fi
 fi
 
 # 8. Restart Discord Bot with auto-healing

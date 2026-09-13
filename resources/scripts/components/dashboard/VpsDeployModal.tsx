@@ -1232,7 +1232,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                     <input
                                                         type='text'
                                                         value={serverName}
-                                                        onChange={e => handleServerNameChange(e.target.value)}
+                                                        onChange={e => setServerName(e.target.value)}
                                                         className='w-full px-4 py-2.5 rounded-xl border border-neutral-700 bg-black/60 text-white font-semibold text-xs focus:outline-none focus:border-blue-500 transition'
                                                         placeholder='vps-instance-1'
                                                     />

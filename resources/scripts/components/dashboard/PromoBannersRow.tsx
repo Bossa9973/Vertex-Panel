@@ -3,19 +3,28 @@ import { SparklesIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/reac
 import http from '@/api/http'
 
 const PromoBannersRow = () => {
-    const [enabled, setEnabled] = useState<boolean | null>(null)
+    const [enabled, setEnabled] = useState<boolean | null>(() => {
+        try {
+            const cached = sessionStorage.getItem('vertex_announcement_enabled')
+            return cached !== null ? cached === 'true' : null
+        } catch {
+            return null
+        }
+    })
 
     useEffect(() => {
-        http.get('/api/announcement-status')
+        if (enabled !== null) return
+
+        http.get('/api/client/announcement-status')
             .then(res => {
-                if (res.data?.data?.enabled !== undefined) {
-                    setEnabled(res.data.data.enabled)
-                } else {
-                    setEnabled(true)
-                }
+                const isEnabled = res.data?.data?.enabled !== undefined ? Boolean(res.data.data.enabled) : true
+                setEnabled(isEnabled)
+                try {
+                    sessionStorage.setItem('vertex_announcement_enabled', String(isEnabled))
+                } catch {}
             })
             .catch(() => setEnabled(true))
-    }, [])
+    }, [enabled])
 
     if (enabled === false) {
         return null

@@ -33,6 +33,13 @@ const UserBalanceFetcher = () => {
     const updateCredits = useStoreActions(actions => actions.user.updateCredits)
 
     useEffect(() => {
+        // ConvoyUser already supplies initial credits embedded from backend on load.
+        // Only fetch if credits aren't provided in window context.
+        const existingCredits = (window as ExtendedWindow).ConvoyUser?.credits
+        if (existingCredits !== undefined && existingCredits !== null) {
+            return
+        }
+
         getCredits()
             .then(res => {
                 if (typeof res.credits === 'number') {
