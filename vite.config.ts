@@ -40,20 +40,14 @@ export default defineConfig({
             output: {
                 manualChunks(id) {
                     if (id.includes('node_modules')) {
-                        if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom') || id.includes('easy-peasy')) {
+                        if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
                             return 'vendor-react'
                         }
-                        if (id.includes('@heroicons') || id.includes('lucide-react') || id.includes('react-icons')) {
+                        if (id.includes('@heroicons') || id.includes('lucide-react')) {
                             return 'vendor-icons'
                         }
-                        if (id.includes('framer-motion') || id.includes('motion') || id.includes('chart.js') || id.includes('react-chartjs-2')) {
-                            return 'vendor-motion-charts'
-                        }
-                        if (id.includes('@mantine') || id.includes('@emotion')) {
-                            return 'vendor-mantine'
-                        }
-                        if (id.includes('@tsparticles')) {
-                            return 'vendor-particles'
+                        if (id.includes('framer-motion') || id.includes('recharts')) {
+                            return 'vendor-ui-heavy'
                         }
                     }
                 },

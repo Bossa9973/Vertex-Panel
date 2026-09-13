@@ -1,1 +1,0 @@
-import{bR as t,L as m}from"./vendor-react-76e6893f.js";import{C as c}from"./Checkbox-c487f26e.js";const f=({control:r,...e})=>{const{field:{value:o,...a},fieldState:{error:s}}=t({name:e.name,control:r});return m(c,{checked:o,...a,...e,error:s?.message})};export{f as C};

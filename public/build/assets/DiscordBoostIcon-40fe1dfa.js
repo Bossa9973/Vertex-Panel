@@ -1,1 +1,0 @@
-import{L as s}from"./vendor-react-76e6893f.js";const t="/build/assets/discord-boost-51d132f4.png",e=({className:o="w-5 h-5"})=>s("img",{src:t,alt:"Discord Server Boost",className:`object-contain inline-block select-none ${o}`});export{e as D};

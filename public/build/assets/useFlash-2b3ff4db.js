@@ -1,1 +1,0 @@
-import{bN as d}from"./vendor-react-76e6893f.js";const l=()=>d(r=>r.flashes),n=r=>{const{addFlash:a,clearFlashes:e,clearAndAddHttpError:t}=l();return{addError:(s,o)=>a({key:r,message:s,title:o,type:"error"}),clearFlashes:()=>e(r),clearAndAddHttpError:s=>t({key:r,error:s})}};export{l as a,n as u};
