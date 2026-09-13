@@ -148,12 +148,21 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
 
     info "Running database migrations..."
     (cd "$INSTALL_DIR" && php artisan migrate --force || true)
-    info "Refreshing Laravel route, view, and config caches..."
+    info "Refreshing Laravel caches (clearing stale routes & views)..."
+    (cd "$INSTALL_DIR" && php artisan optimize:clear >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan route:clear >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan config:clear >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan view:clear >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan queue:restart >/dev/null 2>&1 || true)
-    success "Database migrated, Laravel cache cleared, and queue restarted."
+    (cd "$INSTALL_DIR" && php artisan up >/dev/null 2>&1 || true)
+    success "Database migrated, Laravel cache cleared, and panel live."
+
+    # Fix file permissions for web server
+    info "Setting web server directory permissions..."
+    SERVICE_USER="www-data"
+    id -u nginx >/dev/null 2>&1 && SERVICE_USER="nginx"
+    chown -R "${SERVICE_USER}:${SERVICE_USER}" "$INSTALL_DIR" 2>/dev/null || true
+    chmod -R 775 "${INSTALL_DIR}/storage" "${INSTALL_DIR}/bootstrap/cache" "${INSTALL_DIR}/public/build" 2>/dev/null || true
 
     # Apply low-RAM server optimizations if available
     if [[ -f "${INSTALL_DIR}/optimize-low-ram.sh" ]]; then
@@ -162,11 +171,12 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
         success "Low-RAM tuning applied and active."
     fi
 
-    # Reload PHP-FPM to apply ondemand worker settings
+    # Reload PHP-FPM and Nginx
     FPM_SVC=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
     if [[ -n "$FPM_SVC" ]]; then
-        systemctl reload "$FPM_SVC" 2>/dev/null || systemctl restart "$FPM_SVC" 2>/dev/null || true
+        systemctl restart "$FPM_SVC" 2>/dev/null || systemctl reload "$FPM_SVC" 2>/dev/null || true
     fi
+    systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
 fi
 
 # 8. Restart Discord Bot with auto-healing

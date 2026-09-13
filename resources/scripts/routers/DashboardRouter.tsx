@@ -15,6 +15,10 @@ export const routes: Route[] = [
         element: lazyLoad(lazy(() => import('@/routers/DashboardRouter'))),
     },
     {
+        path: 'dashboard',
+        element: lazyLoad(lazy(() => import('@/routers/DashboardRouter'))),
+    },
+    {
         path: 'credits',
         element: lazyLoad(lazy(() => import('@/components/dashboard/CreditsContainer'))),
     },
