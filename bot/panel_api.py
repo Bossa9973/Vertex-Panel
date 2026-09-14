@@ -32,7 +32,7 @@ def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
         limits = httpx.Limits(max_keepalive_connections=50, max_connections=200, keepalive_expiry=30.0)
-        _client = httpx.AsyncClient(timeout=20.0, limits=limits, verify=False)
+        _client = httpx.AsyncClient(timeout=10.0, limits=limits, verify=False, follow_redirects=True)
     return _client
 
 async def _post(path: str, payload: dict, timeout: float = 15.0) -> dict:

@@ -240,17 +240,23 @@ async def set_log_channel(interaction: discord.Interaction, channel: discord.Tex
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🚀 Vertex Helper | Command Center", color=0x5865F2)
     embed.add_field(
-        name="🛡️ Admin Commands",
+        name="🛡️ Admin Commands (Balance & Users)",
         value=(
-            "`/userinfo @user` — View full user balance, spending, owned servers & lifecycle history (Admin Only)\n"
-            "`/txinfo <ref_id>` — Inspect transaction, server creation/expiry date, price & specs (Admin Only)\n"
-            "`/add_balance @user amount [reason]` — Add BOLT balance directly to a user account (Admin Only)\n"
-            "`/deduct_balance @user amount [reason]` — Deduct BOLT balance directly from a user account (Admin Only)\n"
-            "`/set_balance @user amount [reason]` — Hard set a user's balance with multi-step safety warnings (Admin Only)\n"
-            "`/add_bolts @user` — Interactive Bolt Promo Code Generator with History & Presets (Admin Only)\n"
-            "`/revoke_promo [@user]` — Select and revoke active promo codes via dropdown menu (Admin Only)\n"
-            "`/vm-delete @user` — Staff VM deletion workflow with multi-step owner verification & HTML transcript (Admin Only)\n"
-            "`/set_log_channel #channel` — Configure the channel for admin action & redemption audit logs (Admin Only)\n"
+            "`/userinfo @user` — View full user balance, spending & servers (Admin Only)\n"
+            "`/txinfo <ref_id>` — Inspect transaction details & price (Admin Only)\n"
+            "`/add_balance @user amount [reason]` — Add BOLT balance directly (Admin Only)\n"
+            "`/deduct_balance @user amount [reason]` — Deduct BOLT balance directly (Admin Only)\n"
+            "`/set_balance @user amount [reason]` — Hard set user balance (Admin Only)\n"
+            "`/add_bolts @user` — Promo Code Generator with History (Admin Only)\n"
+            "`/revoke_promo [@user]` — Revoke active promo codes (Admin Only)"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="⚙️ Admin Commands (Management & Stats)",
+        value=(
+            "`/vm-delete @user` — Staff VM deletion workflow with verification (Admin Only)\n"
+            "`/set_log_channel #channel` — Set admin action & redemption audit channel (Admin Only)\n"
             "`/add_invites @user amount` — Manually add invites\n"
             "`/add_messages @user amount` — Manually add messages\n"
             "`/reset_user_stats @user` — Wipe a user's stats\n"
@@ -937,8 +943,13 @@ async def userinfo_cmd(
         )
         return await interaction.followup.send(embed=embed, ephemeral=True)
 
-    view = UserInfoView(admin_id=interaction.user.id, data=data, target_label=label)
-    await interaction.followup.send(embed=view.build_overview_embed(), view=view, ephemeral=True)
+    try:
+        view = UserInfoView(admin_id=interaction.user.id, data=data, target_label=label)
+        overview_embed = view.build_overview_embed()
+        await interaction.followup.send(embed=overview_embed, view=view, ephemeral=True)
+    except Exception as e:
+        print(f"[userinfo error] {e}")
+        await interaction.followup.send(f"❌ Error displaying user profile: `{e}`", ephemeral=True)
 
 
 @bot.tree.command(name="txinfo", description="Inspect detailed server info & price for a transaction ID (Admin Only)")
