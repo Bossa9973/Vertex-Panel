@@ -141,6 +141,10 @@ export const pingActivityLanding = async (
     session: string,
     sig: string
 ): Promise<{ landed: boolean; already_consumed?: boolean }> => {
-    const res = await http.post('/api/client/activity/landing-ping', { session, sig })
+    // document.referrer captures the page that redirected the browser here (e.g. shrinkme.io).
+    // The HTTP Referer header on this POST would be the panel domain itself, not shrinkme —
+    // so we pass the navigation referrer explicitly in the body for the backend to validate.
+    const navigationReferrer = typeof document !== 'undefined' ? (document.referrer || '') : ''
+    const res = await http.post('/api/client/activity/landing-ping', { session, sig, navigation_referrer: navigationReferrer })
     return res.data.data
 }

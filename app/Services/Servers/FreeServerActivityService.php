@@ -186,17 +186,25 @@ class FreeServerActivityService
             ?: config('services.shrinkme.api_key', '');
 
         if ($shrinkmeActive && !empty($shrinkmeApiKey)) {
-            $referer = strtolower((string) $request->header('referer', ''));
-            $isFromShrinkme = str_contains($referer, 'shrinkme.');
+            // Use the navigation_referrer sent from the frontend (document.referrer captured at page load).
+            // The HTTP Referer header of this POST is always the panel domain — not shrinkme —
+            // because by the time JS fires the ping, the "current page" is already /activity/claim.
+            // document.referrer is the URL that navigated the browser here (i.e. the shrinkme redirect),
+            // and is only spoofable from JS in the same origin, which is not the bypass attack vector.
+            $navigationReferrer = strtolower((string) $request->input('navigation_referrer', ''));
+            $httpReferer        = strtolower((string) $request->header('referer', ''));
+
+            $isFromShrinkme = str_contains($navigationReferrer, 'shrinkme.')
+                || str_contains($navigationReferrer, 'shrinkme.io');
 
             if (!$isFromShrinkme) {
                 // Burn the session immediately — the user did not arrive via Shrinkme.
                 $renewal->update([
                     'status'        => ServerActivityRenewal::STATUS_BYPASSED_REJECTED,
-                    'claim_referer' => substr($referer, 0, 512),
+                    'claim_referer' => substr($navigationReferrer ?: $httpReferer, 0, 512),
                 ]);
                 Log::warning(
-                    "Anti-Bypass [Landing Gate]: Non-Shrinkme referer '{$referer}' for user #{$user->id} session {$renewal->id}. " .
+                    "Anti-Bypass [Landing Gate]: Non-Shrinkme navigation_referrer '{$navigationReferrer}' for user #{$user->id} session {$renewal->id}. " .
                     "Session burned."
                 );
                 throw new Exception(
