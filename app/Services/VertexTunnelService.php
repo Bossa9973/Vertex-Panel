@@ -41,13 +41,20 @@ class VertexTunnelService
     {
         if (!$server->tunnel_token) return null;
 
-        $resp = Http::withHeaders([
-            'Host' => config('services.sish.domain'),
-        ])->get(config('services.sish.admin_console_url'), [
-            'x-authorization' => config('services.sish.admin_token'),
-        ]);
+        $adminUrl = config('services.sish.admin_console_url');
+        if (empty($adminUrl)) return null;
 
-        if (!$resp->successful()) return null;
+        try {
+            $resp = Http::timeout(3)->withHeaders([
+                'Host' => config('services.sish.domain'),
+            ])->get($adminUrl, [
+                'x-authorization' => config('services.sish.admin_token'),
+            ]);
+
+            if (!$resp->successful()) return null;
+        } catch (\Throwable $e) {
+            return null;
+        }
 
         foreach ($resp->json('clients', []) as $client) {
             if (!str_contains($client['pubKey'] ?? '', 'vm-' . $server->tunnel_token)) {

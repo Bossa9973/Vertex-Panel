@@ -169,8 +169,8 @@ return [
             'connection' => 'redis',
             'queue' => ['default', 'high', 'low', 'notifications', 'backups'],
             'balance' => 'simple',
-            'processes' => 4,
-            'maxProcesses' => 4,
+            'processes' => (int) env('HORIZON_PROCESSES', 2),
+            'maxProcesses' => (int) env('HORIZON_PROCESSES', 2),
             'maxTime' => 0,
             'maxJobs' => 0,
             'memory' => 128,
@@ -184,9 +184,9 @@ return [
         'production' => [
             'supervisor-1' => [
                 'balance' => 'simple',
-                'processes' => 4,
-                'minProcesses' => 4,
-                'maxProcesses' => 4,
+                'processes' => (int) env('HORIZON_PROCESSES', 2),
+                'minProcesses' => (int) env('HORIZON_MIN_PROCESSES', 1),
+                'maxProcesses' => (int) env('HORIZON_PROCESSES', 2),
             ],
         ],
 
@@ -194,7 +194,7 @@ return [
             'supervisor-1' => [
                 'balance' => 'simple',
                 'processes' => 2,
-                'minProcesses' => 2,
+                'minProcesses' => 1,
                 'maxProcesses' => 2,
             ],
         ],

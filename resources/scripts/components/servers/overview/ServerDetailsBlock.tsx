@@ -75,7 +75,7 @@ const ServerDetailsBlock = () => {
                 return
             }
 
-            setTimeout(update, 1000)
+            setTimeout(update, 4000)
         }
 
         update()

@@ -80,30 +80,34 @@ info "Step 2: Tuning PHP-FPM pool for minimal idle RAM footprint..."
 FPM_POOL_DIR=$(ls -d /etc/php/*/fpm/pool.d /etc/php-fpm.d 2>/dev/null | head -1 || echo "")
 
 if [[ -n "$FPM_POOL_DIR" ]]; then
-    # Use 'ondemand' process manager so PHP processes exit when idle (saving ~150-300MB RAM)
+    # Use tuned 'dynamic' process manager to prevent constant worker fork/kill CPU cycles
     cat > "${FPM_POOL_DIR}/zz-vertex-low-ram.conf" <<'EOF'
-; Vertex Panel — Low-RAM PHP-FPM Pool
-; ondemand mode frees all worker RAM when the panel is idle!
+; Vertex Panel — High-Efficiency PHP-FPM Pool
+; Keeps 1-2 warm workers to eliminate process spawn CPU spikes while capping max workers
 [www]
-pm = ondemand
-pm.max_children = 5
-pm.process_idle_timeout = 10s
-pm.max_requests = 200
+pm = dynamic
+pm.max_children = 6
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 2
+pm.process_idle_timeout = 30s
+pm.max_requests = 500
 EOF
 
     # OPcache & Memory limit
     PHP_CONF_D="$(dirname "$FPM_POOL_DIR")/conf.d"
     mkdir -p "$PHP_CONF_D" 2>/dev/null || true
     cat > "${PHP_CONF_D}/99-vertex-ram.ini" <<'EOF'
-; Vertex Panel — Optimized RAM & OPcache settings
+; Vertex Panel — Optimized CPU & OPcache settings
 memory_limit = 128M
 opcache.enable = 1
-opcache.enable_cli = 0
-opcache.memory_consumption = 48
-opcache.interned_strings_buffer = 8
-opcache.max_accelerated_files = 4000
-opcache.revalidate_freq = 60
+opcache.enable_cli = 1
+opcache.memory_consumption = 64
+opcache.interned_strings_buffer = 16
+opcache.max_accelerated_files = 30000
+opcache.revalidate_freq = 120
 opcache.fast_shutdown = 1
+opcache.save_comments = 1
 EOF
 
     # Propagate to all PHP conf.d directories found
@@ -116,7 +120,7 @@ EOF
     FPM_SVC=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
     if [[ -n "$FPM_SVC" ]]; then
         systemctl restart "$FPM_SVC" > /dev/null 2>&1 || systemctl reload "$FPM_SVC" > /dev/null 2>&1 || true
-        success "PHP-FPM reloaded in ondemand mode (max 5 workers, idle timeout 10s)"
+        success "PHP-FPM reloaded in high-efficiency dynamic mode (OPcache CLI enabled, max 6 workers)"
     fi
 else
     warn "Could not locate PHP-FPM pool directory."

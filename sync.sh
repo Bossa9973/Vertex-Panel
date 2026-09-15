@@ -148,14 +148,14 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
 
     info "Running database migrations..."
     (cd "$INSTALL_DIR" && php artisan migrate --force || true)
-    info "Refreshing Laravel caches (clearing stale routes & views)..."
+    info "Refreshing Laravel caches (compiling optimized routes, config & views)..."
     (cd "$INSTALL_DIR" && php artisan optimize:clear >/dev/null 2>&1 || true)
-    (cd "$INSTALL_DIR" && php artisan route:clear >/dev/null 2>&1 || true)
-    (cd "$INSTALL_DIR" && php artisan config:clear >/dev/null 2>&1 || true)
-    (cd "$INSTALL_DIR" && php artisan view:clear >/dev/null 2>&1 || true)
+    (cd "$INSTALL_DIR" && php artisan config:cache >/dev/null 2>&1 || true)
+    (cd "$INSTALL_DIR" && php artisan route:cache >/dev/null 2>&1 || true)
+    (cd "$INSTALL_DIR" && php artisan view:cache >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan queue:restart >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan up >/dev/null 2>&1 || true)
-    success "Database migrated, Laravel cache cleared, and panel live."
+    success "Database migrated, Laravel compiled to cache, and panel live."
 
     # Fix file permissions for web server
     info "Setting web server directory permissions..."

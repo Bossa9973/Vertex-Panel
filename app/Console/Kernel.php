@@ -37,8 +37,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('horizon:snapshot')->everyFiveMinutes();
         $schedule->command(ResetUsagesCommand::class)->daily();
         $schedule->command(PruneUsersCommand::class)->daily();
-        $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes();
-        $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes();
+        $schedule->command(UpdateUsagesCommand::class)->everyFiveMinutes()->withoutOverlapping();
+        $schedule->command(UpdateRateLimitsCommand::class)->everyTenMinutes()->withoutOverlapping();
 
         // Automated cloud backups for PAID servers: runs every round hour (:00).
         // --tier=paid    → only backs up servers marked as paid tier
@@ -49,9 +49,9 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->runInBackground();
 
-        // Cloud upload sweep: checks and immediately streams any un-uploaded archives to Google Drive at :00.
+        // Cloud upload sweep: staggered to :30 so it doesn't collide with ZSTD CPU compression during backup creation at :00.
         $schedule->command(UploadPendingBackupsCommand::class, ['--sync'])
-            ->cron('0 * * * *')
+            ->cron('30 * * * *')
             ->withoutOverlapping()
             ->runInBackground();
 
