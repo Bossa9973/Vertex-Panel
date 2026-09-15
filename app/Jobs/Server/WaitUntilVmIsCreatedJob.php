@@ -19,7 +19,10 @@ class WaitUntilVmIsCreatedJob implements ShouldQueue
 
     public function retryUntil(): Carbon
     {
-        return now()->addMinutes(30);
+        // Proxmox VM cloning can take a long time under heavy node load (high CPU/disk IO).
+        // 30 minutes was too short — clones were timing out even though Proxmox finished
+        // the operation eventually. 2 hours gives enough headroom for busy nodes.
+        return now()->addHours(2);
     }
 
     public function middleware(): array
