@@ -7,11 +7,13 @@ use Convoy\Enums\Server\Status;
 use Convoy\Exceptions\Service\Deployment\InvalidTemplateException;
 use Convoy\Exceptions\Service\Server\Allocation\NoUniqueUuidComboException;
 use Convoy\Exceptions\Service\Server\Allocation\NoUniqueVmidException;
+use Convoy\Models\Node;
 use Convoy\Models\Server;
 use Convoy\Models\Template;
 use Convoy\Repositories\Eloquent\ServerRepository;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 
 /**
  * Class ServerCreationService
@@ -19,7 +21,8 @@ use Illuminate\Support\Str;
 class ServerCreationService
 {
     public function __construct(
-        private NetworkService             $networkService, private ServerRepository $repository,
+        private NetworkService             $networkService,
+        private ServerRepository           $repository,
         private ServerBuildDispatchService $buildDispatchService,
     )
     {
@@ -90,6 +93,28 @@ class ServerCreationService
                 $reqGb = round($newDiskBytes / (1024 * 1024 * 1024), 1);
                 throw new \Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException(
                     "Free resource quota exceeded: Maximum SSD storage limit is 800 GB (Currently used: {$usedGb} GB, Requested: {$reqGb} GB)."
+                );
+            }
+        }
+
+        // Pre-flight: verify the target Proxmox node is reachable before creating
+        // the server record. This prevents servers from being stuck in install_failed
+        // due to node downtime that could have been caught at request time.
+        if ($shouldCreateServer) {
+            $node = Node::findOrFail($nodeId);
+            try {
+                \Illuminate\Support\Facades\Http::withOptions([
+                    'verify'          => $node->verify_tls,
+                    'timeout'         => config('convoy.guzzle.connect_timeout', 5),
+                    'connect_timeout' => config('convoy.guzzle.connect_timeout', 5),
+                ])->withHeaders([
+                    'Authorization' => "PVEAPIToken={$node->token_id}={$node->secret}",
+                    'Accept'        => 'application/json',
+                ])->get("https://{$node->fqdn}:{$node->port}/api2/json/nodes/{$node->cluster}/status")
+                    ->throw();
+            } catch (\Throwable $e) {
+                throw new ServiceUnavailableHttpException(
+                    message: "Node '{$node->name}' is currently unreachable. Please try again shortly or contact support."
                 );
             }
         }

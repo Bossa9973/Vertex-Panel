@@ -2,6 +2,7 @@
 
 namespace Convoy\Jobs\Server;
 
+use Convoy\Exceptions\Repository\Proxmox\ProxmoxConnectionException;
 use Convoy\Models\Server;
 use Convoy\Services\Servers\ServerBuildService;
 use Illuminate\Bus\Queueable;
@@ -35,13 +36,21 @@ class WaitUntilVmIsCreatedJob implements ShouldQueue
     {
         $server = Server::findOrFail($this->serverId);
 
-        if ($this->attempts() >= 100) {
-            throw new \RuntimeException("VM creation timed out on Proxmox hypervisor (VMID: {$server->vmid}). Proxmox did not complete disk cloning within 5 minutes.");
+        try {
+            $isCreated = $service->isVmCreated($server);
+        } catch (ProxmoxConnectionException $e) {
+            // The Proxmox node is unreachable (cURL error 7, timeout, auth failure, etc.)
+            // Fail immediately rather than silently re-queuing for up to 30 minutes.
+            // The build chain catch() handler will mark the server as install_failed.
+            throw new \RuntimeException(
+                "Cannot reach Proxmox node for Server ID {$this->serverId} (VMID: {$server->vmid}). " .
+                "Node connectivity must be restored before builds can succeed. " .
+                "Cause: {$e->getMessage()}"
+            );
         }
 
-        $isCreated = $service->isVmCreated($server);
-
         if (!$isCreated) {
+            // VM is still being cloned on Proxmox (lock key is set) — check again in 3s
             $this->release(3);
         }
     }

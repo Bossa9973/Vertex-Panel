@@ -31,16 +31,17 @@ class ServerBuildService
 
     public function isVmCreated(Server $server): bool
     {
-        try {
-            $config = collect($this->configRepository->setServer($server)->getConfig());
+        // NOTE: We intentionally do NOT catch ProxmoxConnectionException here.
+        // A network failure (cURL error 7, timeout, etc.) is NOT the same as
+        // "VM is still being cloned". If the node is unreachable, the exception
+        // will propagate to WaitUntilVmIsCreatedJob which will fail fast
+        // instead of silently re-queuing for up to 30 minutes.
+        $config = collect($this->configRepository->setServer($server)->getConfig());
 
-            $lock = $config->where('key', '=', 'lock')->first();
+        $lock = $config->where('key', '=', 'lock')->first();
 
-            if ($lock && !empty($lock['value'])) {
-                return false;
-            }
-        } catch (ProxmoxConnectionException $e) {
-            return false;
+        if ($lock && !empty($lock['value'])) {
+            return false; // VM is still being cloned on Proxmox (lock is set)
         }
 
         return true;
