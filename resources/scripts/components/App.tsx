@@ -17,6 +17,7 @@ interface ExtendedWindow extends Window {
         email: string
         credits?: number
         root_admin: boolean
+        is_super_admin?: boolean
         created_at: string
         updated_at: string
         admin_permissions?: string[] | null
@@ -61,6 +62,8 @@ const App = () => {
             email: ConvoyUser.email,
             credits: ConvoyUser.credits ?? 0,
             rootAdmin: ConvoyUser.root_admin,
+            isSuperAdmin: Boolean(ConvoyUser.is_super_admin),
+            is_super_admin: Boolean(ConvoyUser.is_super_admin),
             createdAt: ConvoyUser.created_at,
             updatedAt: ConvoyUser.updated_at,
             adminPermissions: ConvoyUser.admin_permissions ?? null,

@@ -12,15 +12,24 @@ use Illuminate\Support\Facades\Config;
 class AdminRoleController extends Controller
 {
     /** The CEO email that always has super-admin rights. */
-    private function superAdminEmail(): string
+    private function superAdminEmail(): ?string
     {
-        return Config::get('app.super_admin_email');
+        return Config::get('app.super_admin_email') ?: null;
     }
 
     /** Assert the request comes from the CEO. */
     private function assertCeo(Request $request): void
     {
-        if ($request->user()?->email !== $this->superAdminEmail()) {
+        $user = $request->user();
+        if (!$user || !$user->root_admin) {
+            abort(403, 'Only the Super Admin can manage roles.');
+        }
+
+        $superEmail = $this->superAdminEmail();
+        $isCeo = (!empty($superEmail) && $user->email === $superEmail)
+            || (empty($superEmail) && is_null($user->admin_role_id));
+
+        if (!$isCeo) {
             abort(403, 'Only the Super Admin can manage roles.');
         }
     }
@@ -136,18 +145,20 @@ class AdminRoleController extends Controller
      */
     public function adminUsers(): JsonResponse
     {
+        $superEmail = $this->superAdminEmail();
         $users = User::where('root_admin', true)
             ->with('adminRole')
             ->orderBy('name')
             ->get()
             ->map(fn ($u) => [
-                'id'             => $u->id,
-                'name'           => $u->name,
-                'email'          => $u->email,
-                'admin_role_id'  => $u->admin_role_id,
+                'id'               => $u->id,
+                'name'             => $u->name,
+                'email'            => $u->email,
+                'admin_role_id'    => $u->admin_role_id,
                 'admin_role_name'  => $u->adminRole?->name,
                 'admin_role_color' => $u->adminRole?->color,
-                'is_super_admin' => $u->email === $this->superAdminEmail(),
+                'is_super_admin'   => (!empty($superEmail) && $u->email === $superEmail)
+                    || (empty($superEmail) && is_null($u->admin_role_id)),
                 'hide_ip_in_audit' => (bool) $u->hide_ip_in_audit,
             ]);
 

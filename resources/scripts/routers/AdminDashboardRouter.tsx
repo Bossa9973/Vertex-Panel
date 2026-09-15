@@ -20,7 +20,7 @@ import { NavigationBarContext } from '@/components/elements/navigation/Navigatio
 export function getFirstAllowedAdminPath(user: any): string {
     if (!user) return '/admin/roles'
 
-    const isCeo = user.email === 'ceo@vertexnodes.top'
+    const isCeo = Boolean(user.isSuperAdmin || user.is_super_admin)
     const permissions = user.adminPermissions ?? null
 
     // CEO or null permissions = full access
@@ -48,7 +48,7 @@ export function getFirstAllowedAdminPath(user: any): string {
 
 export function RequireAdminPermission({ perm, children }: { perm?: string; children: React.ReactNode }) {
     const user = useStoreState(s => s.user.data)
-    const isCeo = user?.email === 'ceo@vertexnodes.top'
+    const isCeo = Boolean(user?.isSuperAdmin || user?.is_super_admin)
     const permissions = user?.adminPermissions ?? null
 
     if (!perm || isCeo || permissions === null) {
@@ -75,7 +75,7 @@ function wrapRoutesWithPerm(routesList: Route[], perm: string): Route[] {
 const OverviewComponent = lazy(() => import('@/components/admin/overview/OverviewContainer'))
 const OverviewRouteWrapper = () => {
     const user = useStoreState(s => s.user.data)
-    const isCeo = user?.email === 'ceo@vertexnodes.top'
+    const isCeo = Boolean(user?.isSuperAdmin || user?.is_super_admin)
     const permissions = user?.adminPermissions ?? null
 
     const hasOverview = isCeo || permissions === null || (Array.isArray(permissions) && permissions.includes('view_overview'))
@@ -208,7 +208,7 @@ const AdminDashboardRouter = () => {
 
     /** null = full access (CEO/no-role), array = restricted */
     const adminPermissions = user?.adminPermissions ?? null
-    const isCeo = user?.email === 'ceo@vertexnodes.top'
+    const isCeo = Boolean(user?.isSuperAdmin || user?.is_super_admin)
 
     const hasPerm = (perm: string) => isCeo || adminPermissions === null || (Array.isArray(adminPermissions) && adminPermissions.includes(perm))
 

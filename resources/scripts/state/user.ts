@@ -6,6 +6,8 @@ export interface UserData {
     credits: number
     rootAdmin: boolean
     root_admin?: boolean
+    isSuperAdmin?: boolean
+    is_super_admin?: boolean
     is_reseller?: boolean
     reseller_plan_type?: 'own_inventory' | 'zero_cost' | null
     createdAt: string

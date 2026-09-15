@@ -30,11 +30,8 @@ import {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const SUPER_ADMIN_EMAIL = 'ceo@vertexnodes.top'
-
 function useIsCeo() {
-    const email = useStoreState(s => s.user.data?.email)
-    return email === SUPER_ADMIN_EMAIL
+    return useStoreState(s => Boolean(s.user.data?.isSuperAdmin || s.user.data?.is_super_admin))
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────

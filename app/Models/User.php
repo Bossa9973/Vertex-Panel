@@ -105,6 +105,12 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
         $data['reseller_notes'] = $this->reseller_notes ?? null;
         $data['reseller_plan_type'] = $this->reseller_plan_type ?? null;
 
+        $superEmail = config('app.super_admin_email');
+        $data['is_super_admin'] = (bool) ($this->root_admin && (
+            (!empty($superEmail) && $this->email === $superEmail) ||
+            (empty($superEmail) && is_null($this->admin_role_id))
+        ));
+
         // Include admin role permissions safely
         if ($this->root_admin) {
             try {
@@ -144,8 +150,9 @@ class User extends Model implements AuthenticatableContract, AuthorizableContrac
             return false;
         }
 
+        $superEmail = config('app.super_admin_email');
         // CEO / no-role admins = full access
-        if ($this->email === config('app.super_admin_email') || is_null($this->admin_role_id)) {
+        if ((!empty($superEmail) && $this->email === $superEmail) || is_null($this->admin_role_id)) {
             return true;
         }
 
