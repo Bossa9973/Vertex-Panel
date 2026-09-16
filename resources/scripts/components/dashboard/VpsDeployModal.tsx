@@ -417,7 +417,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
     const selectedPlan = plans.find(p => p.id === selectedPlanId) || plans[0]
     const selectedNode = nodes.find(n => n.id === selectedNodeId) || nodes[0]
     const userCredits = user?.credits ?? 0
-    const rawPrice = selectedPlan?.price ?? 0
+    const rawPrice = Number(selectedPlan?.price) || 0
     const finalPrice = isYearly ? Math.round(rawPrice * 12 * 0.85) : rawPrice
 
     const handleDeploy = async () => {
@@ -719,14 +719,12 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                             )}
                         </AnimatePresence>
 
-                        <AnimatePresence mode='wait' custom={dir}>
+                        <div className='w-full'>
                             <motion.div
                                 key={step}
-                                custom={dir}
-                                variants={stepVariants}
-                                initial='enter'
-                                animate='center'
-                                exit='exit'
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.22, ease: 'easeOut' }}
                                 className='w-full'
                             >
                                 {step === 1 && (() => {
@@ -743,19 +741,17 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                         <div className='space-y-4 max-w-4xl mx-auto'>
                                             {/* Animated Cards Grid Container */}
                                             <div className='relative min-h-[360px] flex flex-col justify-center'>
-                                                <AnimatePresence initial={false} custom={planPageDir}>
-                                                    <motion.div
-                                                        key={planPage}
-                                                        custom={planPageDir}
-                                                        variants={planVariants}
-                                                        initial='enter'
-                                                        animate='center'
-                                                        exit='exit'
-                                                        className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'
-                                                    >
-                                                        {currentPlans.map((plan) => {
-                                                            const isSelected = selectedPlanId === plan.id
-                                                            const planPriceValue = isYearly ? Math.round(plan.price * 12 * 0.85) : plan.price
+                                                <motion.div
+                                                    key={planPage}
+                                                    initial={{ opacity: 0, x: planPageDir * 15 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                                                    className='grid grid-cols-1 sm:grid-cols-3 gap-4 py-2'
+                                                >
+                                                    {currentPlans.map((plan) => {
+                                                        const isSelected = selectedPlanId === plan.id
+                                                        const rawPlanPrice = Number(plan.price) || 0
+                                                        const planPriceValue = isYearly ? Math.round(rawPlanPrice * 12 * 0.85) : rawPlanPrice
 
                                                             return (
                                                                 <Card
@@ -834,7 +830,6 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                             )
                                                         })}
                                                     </motion.div>
-                                                </AnimatePresence>
                                             </div>
 
                                             {/* Pagination Controls Bar */}
@@ -1366,9 +1361,9 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
 
                                             <div className='grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-4'>
                                                 {[
-                                                    { label: 'Plan', val: selectedPlan.name },
-                                                    { label: 'vCPU', val: `${selectedPlan.cpu} Cores` },
-                                                    { label: 'RAM', val: selectedPlan.ram >= 1024 ? `${(selectedPlan.ram / 1024).toFixed(0)} GB` : `${selectedPlan.ram} MB` },
+                                                    { label: 'Plan', val: selectedPlan?.name ?? 'Standard Plan' },
+                                                    { label: 'vCPU', val: `${selectedPlan?.cpu ?? 1} Cores` },
+                                                    { label: 'RAM', val: (selectedPlan?.ram ?? 0) >= 1024 ? `${((selectedPlan?.ram ?? 0) / 1024).toFixed(0)} GB` : `${selectedPlan?.ram ?? 0} MB` },
                                                     { label: 'Node', val: selectedNode?.name ?? '—' },
                                                 ].map(item => (
                                                     <div key={item.label} className='bg-black/50 border border-neutral-800 rounded-xl p-3'>
@@ -1429,7 +1424,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                 )}
 
                             </motion.div>
-                        </AnimatePresence>
+                        </div>
                     </div>
                 </div>
             </div>

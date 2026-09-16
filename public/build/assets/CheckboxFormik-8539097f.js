@@ -1,0 +1,1 @@
+import{r as c,a as r}from"./vendor-react-b7faa8f1.js";import{a as f}from"./formik.esm-52875a42.js";import{C as d}from"./Checkbox-f3cdeff1.js";const h=c.forwardRef(({name:e,...o},a)=>r(f,{innerRef:a,name:e,children:({field:{value:i,...t},meta:{error:m,touched:s}})=>r(d,{checked:i,...t,...o,error:s?m:void 0})}));export{h as C};
