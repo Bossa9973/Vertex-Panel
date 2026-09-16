@@ -298,7 +298,8 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
     const [pteroShowToken, setPteroShowToken] = useState(false)
 
     // Node-filtered templates & Ubuntu 22.04 template detection for selected node
-    const nodeTemplates = templates.filter(t => t.node_id === null || t.node_id === selectedNodeId)
+    const effectiveNodeId = selectedNodeId ?? (nodes[0]?.id ?? null)
+    const nodeTemplates = templates.filter(t => t.node_id === null || t.node_id === effectiveNodeId)
     const selectedTemplate = nodeTemplates.find(t => t.id === selectedTemplateId) || nodeTemplates[0] || templates[0]
 
     const isUbuntu2204Name = (name: string) => /(ubuntu|ubutnu).?22.?04|22\.04|ubuntu-22/i.test(name || '')
@@ -413,7 +414,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
     const rawPrefix = (hostnamePrefix.trim() || serverName.trim() || 'vps-instance-1').toLowerCase().replace(/[^a-z0-9-]/g, '-')
     const computedFullHostname = `${rawPrefix}.vertex-vms.host`
 
-    const selectedPlan = plans.find(p => p.id === selectedPlanId)
+    const selectedPlan = plans.find(p => p.id === selectedPlanId) || plans[0]
     const selectedNode = nodes.find(n => n.id === selectedNodeId) || nodes[0]
     const userCredits = user?.credits ?? 0
     const rawPrice = selectedPlan?.price ?? 0
@@ -742,7 +743,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                         <div className='space-y-4 max-w-4xl mx-auto'>
                                             {/* Animated Cards Grid Container */}
                                             <div className='relative min-h-[360px] flex flex-col justify-center'>
-                                                <AnimatePresence mode='wait' custom={planPageDir}>
+                                                <AnimatePresence initial={false} custom={planPageDir}>
                                                     <motion.div
                                                         key={planPage}
                                                         custom={planPageDir}
@@ -949,28 +950,38 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                 Choose Operating System
                                             </h3>
                                             <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
-                                                {(nodeTemplates.length > 0 ? nodeTemplates : templates).map((tpl) => {
-                                                    const isSelected = selectedTemplateId === tpl.id
-                                                    return (
-                                                        <Card
-                                                            key={tpl.id}
-                                                            onClick={() => setSelectedTemplateId(tpl.id)}
-                                                            className={cn(
-                                                                'p-4 cursor-pointer transition-all duration-200 text-white border-neutral-800 flex items-center gap-3',
-                                                                isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-blue-500 shadow-[0px_0px_20px_0px_#0900ff] ring-1 ring-blue-500/50'
-                                                                    : 'bg-neutral-900/60 hover:bg-neutral-800/80 hover:border-neutral-700'
-                                                            )}
-                                                        >
-                                                            <img src={tpl.icon_svg} alt={tpl.name} className='w-8 h-8 object-contain shrink-0' />
-                                                            <div className='min-w-0 flex-1'>
-                                                                <span className='text-xs font-bold block truncate text-white'>{tpl.name}</span>
-                                                                <span className='text-[10px] text-gray-400 block truncate'>{tpl.category}</span>
+                                                {(() => {
+                                                    const availableTemplates = nodeTemplates.length > 0 ? nodeTemplates : templates
+                                                    if (availableTemplates.length === 0) {
+                                                        return (
+                                                            <div className='col-span-1 sm:col-span-3 text-center py-6 text-xs text-gray-400 bg-neutral-900/40 rounded-xl border border-neutral-800'>
+                                                                No operating system templates available.
                                                             </div>
-                                                            {isSelected && <CheckCircleIcon className='w-4 h-4 text-blue-400 shrink-0' />}
-                                                        </Card>
-                                                    )
-                                                })}
+                                                        )
+                                                    }
+                                                    return availableTemplates.map((tpl) => {
+                                                        const isSelected = selectedTemplateId === tpl.id
+                                                        return (
+                                                            <Card
+                                                                key={tpl.id}
+                                                                onClick={() => setSelectedTemplateId(tpl.id)}
+                                                                className={cn(
+                                                                    'p-4 cursor-pointer transition-all duration-200 text-white border-neutral-800 flex items-center gap-3',
+                                                                    isSelected
+                                                                        ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-blue-500 shadow-[0px_0px_20px_0px_#0900ff] ring-1 ring-blue-500/50'
+                                                                        : 'bg-neutral-900/60 hover:bg-neutral-800/80 hover:border-neutral-700'
+                                                                )}
+                                                            >
+                                                                <img src={tpl.icon_svg} alt={tpl.name} className='w-8 h-8 object-contain shrink-0' />
+                                                                <div className='min-w-0 flex-1'>
+                                                                    <span className='text-xs font-bold block truncate text-white'>{tpl.name}</span>
+                                                                    <span className='text-[10px] text-gray-400 block truncate'>{tpl.category}</span>
+                                                                </div>
+                                                                {isSelected && <CheckCircleIcon className='w-4 h-4 text-blue-400 shrink-0' />}
+                                                            </Card>
+                                                        )
+                                                    })
+                                                })()}
                                             </div>
                                         </div>
 
@@ -980,39 +991,45 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                                 Choose Datacenter Node
                                             </h3>
                                             <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
-                                                {nodes.map((node) => {
-                                                    const isSelected = selectedNodeId === node.id
-                                                    return (
-                                                        <Card
-                                                            key={node.id}
-                                                            onClick={() => {
-                                                                setSelectedNodeId(node.id)
-                                                                // Switch to valid template for new node if current selection belongs elsewhere
-                                                                const validForNode = templates.filter(t => t.node_id === null || t.node_id === node.id)
-                                                                if (validForNode.length > 0 && !validForNode.some(t => t.id === selectedTemplateId)) {
-                                                                    setSelectedTemplateId(validForNode[0].id)
-                                                                }
-                                                            }}
-                                                            className={cn(
-                                                                'p-4 cursor-pointer transition-all duration-200 text-white border-neutral-800 flex items-center justify-between',
-                                                                isSelected
-                                                                    ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-blue-500 shadow-[0px_0px_20px_0px_#0900ff] ring-1 ring-blue-500/50'
-                                                                    : 'bg-neutral-900/60 hover:bg-neutral-800/80 hover:border-neutral-700'
-                                                            )}
-                                                        >
-                                                            <div className='flex items-center gap-3'>
-                                                                <img src={node.flag} alt={node.name} className='w-6 h-4 rounded-sm object-cover shrink-0' />
-                                                                <div className='text-xs font-bold text-white flex items-center gap-2'>
-                                                                    {node.name}
-                                                                    <span className='text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold'>
-                                                                        Online
-                                                                    </span>
+                                                {nodes.length === 0 ? (
+                                                    <div className='col-span-1 sm:col-span-2 text-center py-6 text-xs text-gray-400 bg-neutral-900/40 rounded-xl border border-neutral-800'>
+                                                        No datacenter nodes available.
+                                                    </div>
+                                                ) : (
+                                                    nodes.map((node) => {
+                                                        const isSelected = selectedNodeId === node.id
+                                                        return (
+                                                            <Card
+                                                                key={node.id}
+                                                                onClick={() => {
+                                                                    setSelectedNodeId(node.id)
+                                                                    // Switch to valid template for new node if current selection belongs elsewhere
+                                                                    const validForNode = templates.filter(t => t.node_id === null || t.node_id === node.id)
+                                                                    if (validForNode.length > 0 && !validForNode.some(t => t.id === selectedTemplateId)) {
+                                                                        setSelectedTemplateId(validForNode[0].id)
+                                                                    }
+                                                                }}
+                                                                className={cn(
+                                                                    'p-4 cursor-pointer transition-all duration-200 text-white border-neutral-800 flex items-center justify-between',
+                                                                    isSelected
+                                                                        ? 'bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 border-blue-500 shadow-[0px_0px_20px_0px_#0900ff] ring-1 ring-blue-500/50'
+                                                                        : 'bg-neutral-900/60 hover:bg-neutral-800/80 hover:border-neutral-700'
+                                                                )}
+                                                            >
+                                                                <div className='flex items-center gap-3'>
+                                                                    <img src={node.flag} alt={node.name} className='w-6 h-4 rounded-sm object-cover shrink-0' />
+                                                                    <div className='text-xs font-bold text-white flex items-center gap-2'>
+                                                                        {node.name}
+                                                                        <span className='text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/30 font-semibold'>
+                                                                            Online
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                            {isSelected && <CheckCircleIcon className='w-4 h-4 text-blue-400 shrink-0' />}
-                                                        </Card>
-                                                    )
-                                                })}
+                                                                {isSelected && <CheckCircleIcon className='w-4 h-4 text-blue-400 shrink-0' />}
+                                                            </Card>
+                                                        )
+                                                    })
+                                                )}
                                             </div>
                                         </div>
 
@@ -1319,7 +1336,7 @@ const VpsDeployModal = ({ opened, onClose, onSuccess }: Props) => {
                                 )}
 
                                 {/* ── STEP 5: Review & Deploy ── */}
-                                {step === 5 && selectedPlan && (
+                                {step === 5 && (
                                     <div className='space-y-5 max-w-2xl mx-auto'>
                                         <h3 className='text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2'>
                                             <SparklesIcon className='w-4 h-4 text-blue-400' />
