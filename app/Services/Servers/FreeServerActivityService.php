@@ -194,23 +194,33 @@ class FreeServerActivityService
             $navigationReferrer = strtolower((string) $request->input('navigation_referrer', ''));
             $httpReferer        = strtolower((string) $request->header('referer', ''));
 
-            $isFromShrinkme = str_contains($navigationReferrer, 'shrinkme.')
-                || str_contains($navigationReferrer, 'shrinkme.io');
-
-            if (!$isFromShrinkme) {
-                // Burn the session immediately — the user did not arrive via Shrinkme.
-                $renewal->update([
-                    'status'        => ServerActivityRenewal::STATUS_BYPASSED_REJECTED,
-                    'claim_referer' => substr($navigationReferrer ?: $httpReferer, 0, 512),
-                ]);
-                Log::warning(
-                    "Anti-Bypass [Landing Gate]: Non-Shrinkme navigation_referrer '{$navigationReferrer}' for user #{$user->id} session {$renewal->id}. " .
-                    "Session burned."
-                );
-                throw new Exception(
-                    'Verification Failed: You must arrive at this page through the sponsored link, not directly. ' .
-                    'Please start a new link from your dashboard.'
-                );
+            // Known bypass tool domains — reject only explicit bypasser referrers.
+            // We do NOT reject on empty referrer because:
+            //   - Many Shrinkme redirect hops use Referrer-Policy: no-referrer
+            //   - Meta-refresh / JS location.replace() redirects also strip document.referrer
+            //   - Mobile browsers and some privacy-focused browsers strip referrers by default
+            // The authoritative check is Pillar 6 (shrinkme_landed_at stamp) in verifyCallback.
+            // Here we only burn sessions that positively identify as a known bypass tool.
+            $bypassDomains = [
+                'bypass.city', 'thebypasser.com', 'linkvertise-bypass', 'sub2unlock',
+                'bypass-links.com', 'adlinkfly-bypass', 'direct-bypass',
+            ];
+            $referrerToCheck = $navigationReferrer ?: $httpReferer;
+            foreach ($bypassDomains as $bypassDomain) {
+                if ($referrerToCheck && str_contains($referrerToCheck, $bypassDomain)) {
+                    $renewal->update([
+                        'status'        => ServerActivityRenewal::STATUS_BYPASSED_REJECTED,
+                        'claim_referer' => substr($referrerToCheck, 0, 512),
+                    ]);
+                    Log::warning(
+                        "Anti-Bypass [Landing Gate]: Known bypass tool referrer '{$referrerToCheck}' for user #{$user->id} session {$renewal->id}. " .
+                        "Session burned."
+                    );
+                    throw new Exception(
+                        'Verification Failed: Bypass tool access detected. ' .
+                        'Please complete the sponsored link naturally from your dashboard.'
+                    );
+                }
             }
         }
 
@@ -322,6 +332,10 @@ class FreeServerActivityService
         }
 
         // Pillar 4: Datacenter & Cloud Proxy ASN / Reverse DNS Inspection
+        // NOTE: We log suspicious IPs but do NOT burn the session here.
+        // Many legitimate users are on ISPs/networks whose rDNS contains cloud provider keywords
+        // (e.g. shared hosting ISPs, corporate networks, mobile carriers resolving via cloud infra).
+        // Pillar 6 (shrinkme_landed_at) is the authoritative gate — burning here causes false positives.
         $ip = $request->ip();
         if ($ip && !in_array($ip, ['127.0.0.1', '::1', 'localhost'])) {
             $host = @gethostbyaddr($ip);
@@ -330,9 +344,8 @@ class FreeServerActivityService
                 $lowerHost = strtolower($host);
                 foreach ($cloudKeywords as $kw) {
                     if (str_contains($lowerHost, $kw)) {
-                        $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
-                        Log::warning("Anti-Bypass: Cloud datacenter IP rejected ({$ip} -> {$host}) for user #{$user->id}");
-                        throw new Exception('Verification Failed: Security integrity validation failed. Datacenter proxies and automated scraping servers are prohibited.');
+                        Log::warning("Anti-Bypass [Pillar 4 - Soft]: Cloud-like rDNS detected ({$ip} -> {$host}) for user #{$user->id} — not burning session, Pillar 6 is authoritative.");
+                        break;
                     }
                 }
             }
@@ -362,11 +375,16 @@ class FreeServerActivityService
         }
 
         // Minimal Sanity Floor (5 seconds) — prevent microsecond spam attacks
-        $startedTimestamp = Carbon::parse($renewal->started_at)->getTimestamp();
-        $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $startedTimestamp);
+        // Use shrinkme_landed_at if available (time user arrived at claim page),
+        // otherwise fall back to started_at (time session was created).
+        $floorBase = $renewal->shrinkme_landed_at
+            ? Carbon::parse($renewal->shrinkme_landed_at)->getTimestamp()
+            : Carbon::parse($renewal->started_at)->getTimestamp();
+        $elapsed = (int) max(0, Carbon::now()->getTimestamp() - $floorBase);
         if ($elapsed < 5) {
-            $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
-            throw new Exception('Verification Failed: Security integrity validation failed.');
+            // Do NOT burn the session — a real human could just be fast on a short Shrinkme page.
+            // Just throw without updating status so they can retry in a few seconds.
+            throw new Exception('Verification Failed: Please wait a moment and try again.');
         }
 
         // ─── Pillar 6: Shrinkme Landing Stamp Gate ────────────────────────────────────
