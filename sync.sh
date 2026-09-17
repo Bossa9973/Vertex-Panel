@@ -155,6 +155,7 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
     (cd "$INSTALL_DIR" && php artisan view:cache >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan queue:restart >/dev/null 2>&1 || true)
     (cd "$INSTALL_DIR" && php artisan up >/dev/null 2>&1 || true)
+    rm -f "${INSTALL_DIR}/storage/framework/down" 2>/dev/null || true
     success "Database migrated, Laravel compiled to cache, and panel live."
 
     # Fix file permissions for web server

@@ -520,6 +520,7 @@ perform_update() {
     spinner_start "Bringing panel back online"
 
     php artisan up --no-interaction > /dev/null 2>&1 || true
+    rm -f storage/framework/down 2>/dev/null || true
 
     spinner_stop
 
