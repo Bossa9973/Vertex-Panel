@@ -172,6 +172,18 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
         success "Low-RAM tuning applied and active."
     fi
 
+    # Apply CPU optimizations (kills Oracle gomon, duplicate queue workers, fwupd, tunes Horizon)
+    if [[ -f "${INSTALL_DIR}/optimize-cpu.sh" ]]; then
+        info "Applying CPU optimizations (stopping duplicate workers, disabling Oracle gomon, tuning Horizon)..."
+        bash "${INSTALL_DIR}/optimize-cpu.sh" >/dev/null 2>&1 || true
+        success "CPU optimizations applied and active."
+    fi
+
+    # Restart Horizon workers cleanly
+    if command -v supervisorctl >/dev/null 2>&1; then
+        supervisorctl restart vertex-horizon >/dev/null 2>&1 || true
+    fi
+
     # Reload PHP-FPM and Nginx
     FPM_SVC=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
     if [[ -n "$FPM_SVC" ]]; then

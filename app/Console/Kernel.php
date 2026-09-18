@@ -50,7 +50,8 @@ class Kernel extends ConsoleKernel
             ->runInBackground();
 
         // Cloud upload sweep: staggered to :30 so it doesn't collide with ZSTD CPU compression during backup creation at :00.
-        $schedule->command(UploadPendingBackupsCommand::class, ['--sync'])
+        // Dispatches upload jobs asynchronously to Horizon queue to prevent 100% CPU lockups from synchronous SFTP streaming.
+        $schedule->command(UploadPendingBackupsCommand::class)
             ->cron('30 * * * *')
             ->withoutOverlapping()
             ->runInBackground();
@@ -66,9 +67,9 @@ class Kernel extends ConsoleKernel
         })->everyFiveMinutes()->name('poll-tunnel-ports')->withoutOverlapping();
 
         // Automated Free VPS Activity & Recovery Lifecycle check:
-        // Runs every minute to enforce 72h+30m auto-suspension and 48h permanent auto-deletion ("GG").
+        // Runs every 5 minutes to enforce 72h+30m auto-suspension and 48h permanent auto-deletion without churning CPU every minute.
         $schedule->command(\Convoy\Console\Commands\Server\CheckFreeServerActivityCommand::class)
-            ->everyMinute()
+            ->everyFiveMinutes()
             ->withoutOverlapping()
             ->runInBackground();
     }

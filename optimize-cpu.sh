@@ -72,30 +72,61 @@ printf "\n"
 # -----------------------------------------------------------------------------
 info "Step 2: Checking for runaway processes, rogue dev servers, or duplicate workers..."
 
-# A. Check for 'next dev' running on host instead of production build
+# A. Disable Oracle Cloud Agent (OCI 'gomon' & 'updater' burn 50-70% CPU on small instances)
+if pgrep -f "oracle-cloud-agent|gomon" >/dev/null 2>&1 || systemctl list-unit-files 2>/dev/null | grep -q "oracle-cloud-agent"; then
+    info "Oracle Cloud Agent detected (gomon plugin consumes 50-70% CPU on small instances)..."
+    snap stop oracle-cloud-agent >/dev/null 2>&1 || true
+    snap disable oracle-cloud-agent >/dev/null 2>&1 || true
+    systemctl stop snap.oracle-cloud-agent.oracle-cloud-agent.service >/dev/null 2>&1 || true
+    systemctl disable snap.oracle-cloud-agent.oracle-cloud-agent.service >/dev/null 2>&1 || true
+    systemctl mask snap.oracle-cloud-agent.oracle-cloud-agent.service >/dev/null 2>&1 || true
+    pkill -9 -f "gomon" >/dev/null 2>&1 || true
+    success "Oracle Cloud Agent disabled and rogue gomon monitoring killed."
+fi
+
+# B. Disable cloud VPS firmware updater (fwupd is unnecessary on a virtual machine)
+if systemctl is-active --quiet fwupd.service 2>/dev/null || systemctl is-active --quiet fwupd-refresh.timer 2>/dev/null || pgrep -f "fwupd" >/dev/null 2>&1; then
+    info "Disabling fwupd daemon (hardware firmware checks are unnecessary on a cloud VM)..."
+    systemctl stop fwupd.service fwupd-refresh.timer fwupd-refresh.service >/dev/null 2>&1 || true
+    systemctl disable fwupd.service fwupd-refresh.timer fwupd-refresh.service >/dev/null 2>&1 || true
+    systemctl mask fwupd.service >/dev/null 2>&1 || true
+    pkill -9 -f "fwupd" >/dev/null 2>&1 || true
+    success "Disabled fwupd background checks."
+fi
+
+# C. Check for 'next dev' running on host instead of production build
 if pgrep -f "next-server.*dev|next dev" >/dev/null 2>&1; then
     warn "Detected Next.js running in DEVELOPMENT mode ('next dev')!"
     warn "Development mode causes high CPU usage from constant hot-reload watchers."
     warn "Consider running: npm run build && npm run start (or PM2 in production mode)."
 fi
 
-# B. Check for duplicate queue workers: if both vertex-queue AND vertex-horizon exist
+# D. Stop and disable duplicate queue workers (pteroq.service, old supervisor configs, and orphan queue:work)
+if systemctl is-active --quiet pteroq 2>/dev/null || systemctl is-enabled --quiet pteroq 2>/dev/null; then
+    warn "Found active systemd service 'pteroq' running standalone queue:work!"
+    systemctl stop pteroq >/dev/null 2>&1 || true
+    systemctl disable pteroq >/dev/null 2>&1 || true
+    success "Disabled systemd pteroq service."
+fi
+
 if command -v supervisorctl >/dev/null 2>&1; then
-    if supervisorctl status 2>/dev/null | grep -q "vertex-queue.*RUNNING"; then
-        warn "Duplicate queue workers detected: 'vertex-queue' is active alongside Horizon!"
-        info "Stopping 'vertex-queue' to prevent double worker spawning..."
-        supervisorctl stop vertex-queue:* >/dev/null 2>&1 || true
-        supervisorctl stop vertex-queue >/dev/null 2>&1 || true
-        # Remove vertex-queue configuration if separated
-        for f in /etc/supervisor/conf.d/*vertex-queue*.conf /etc/supervisord.d/*vertex-queue*.conf; do
-            if [[ -f "$f" ]]; then
-                mv "$f" "${f}.disabled" 2>/dev/null || true
-                supervisorctl reread >/dev/null 2>&1 || true
-                supervisorctl update >/dev/null 2>&1 || true
-            fi
-        done
-        success "Duplicate worker pool stopped. Horizon will manage queues cleanly."
-    fi
+    for prog in $(supervisorctl status 2>/dev/null | grep -E "vertex-queue|pteroq" | awk '{print $1}' || true); do
+        warn "Stopping duplicate supervisor worker: $prog..."
+        supervisorctl stop "$prog" >/dev/null 2>&1 || true
+    done
+    for f in /etc/supervisor/conf.d/*vertex-queue*.conf /etc/supervisor/conf.d/*pteroq*.conf /etc/supervisord.d/*vertex-queue*.conf; do
+        if [[ -f "$f" ]]; then
+            mv "$f" "${f}.disabled" 2>/dev/null || true
+            supervisorctl reread >/dev/null 2>&1 || true
+            supervisorctl update >/dev/null 2>&1 || true
+        fi
+    done
+fi
+
+if pgrep -f "artisan queue:work" >/dev/null 2>&1; then
+    info "Terminating orphaned 'artisan queue:work' processes..."
+    pkill -9 -f "artisan queue:work" >/dev/null 2>&1 || true
+    success "Orphaned queue workers terminated (Horizon will manage queues cleanly)."
 fi
 
 # -----------------------------------------------------------------------------
@@ -211,9 +242,9 @@ fi
 # Give Horizon workers slightly lower CPU priority than Nginx and PHP-FPM
 if pgrep -f "horizon:work" >/dev/null 2>&1; then
     for pid in $(pgrep -f "horizon:work" 2>/dev/null || true); do
-        renice -n 5 -p "$pid" >/dev/null 2>&1 || true
+        renice -n 10 -p "$pid" >/dev/null 2>&1 || true
     done
-    success "Horizon workers niceness adjusted (+5 priority)."
+    success "Horizon workers niceness adjusted (+10 polite priority)."
 fi
 
 # -----------------------------------------------------------------------------
