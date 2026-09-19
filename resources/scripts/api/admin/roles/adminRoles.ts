@@ -58,3 +58,6 @@ export const assignRole = (userId: number, roleId: number | null): Promise<void>
 
 export const toggleUserIpPrivacy = (userId: number, hideIp: boolean): Promise<void> =>
     http.post('/api/admin/roles/toggle-ip-privacy', { user_id: userId, hide_ip_in_audit: hideIp })
+
+export const revokeAdminUser = (userId: number): Promise<{ message: string }> =>
+    http.post('/api/admin/roles/revoke-admin', { user_id: userId }).then(r => r.data)

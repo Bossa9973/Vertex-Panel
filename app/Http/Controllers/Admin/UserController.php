@@ -74,12 +74,14 @@ class UserController extends ApiController
             $requestRootAdmin = $request->boolean('root_admin');
             if ($user->root_admin !== $requestRootAdmin && ! $requestRootAdmin) {
                 $user->tokens()->delete();
+                $user->admin_role_id = null;
             }
 
             $user->update([
                 'name' => $request->name,
                 'email' => $request->email,
-                'root_admin' => $request->root_admin,
+                'root_admin' => $requestRootAdmin,
+                'admin_role_id' => $requestRootAdmin ? $user->admin_role_id : null,
                 ...(is_null($request->password) ? [] : ['password' => Hash::make($request->password)]),
             ]);
         });

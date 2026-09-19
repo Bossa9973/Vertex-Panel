@@ -15,6 +15,7 @@ use Illuminate\Foundation\Auth\Access\Authorizable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Model as IlluminateModel;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Sanctum\NewAccessToken;
 use Convoy\Models\ResellerCoinBalance;
@@ -25,6 +26,24 @@ use Convoy\Models\ResellerCoinBalance;
 class User extends Model implements AuthenticatableContract, AuthorizableContract
 {
     use Authenticatable, Authorizable, HasApiTokens, HasFactory, Notifiable;
+
+    /**
+     * Rules specifically for updating the User model.
+     * When updating an existing user whose password was not modified,
+     * do not validate the existing database hash against the plaintext complexity regex.
+     */
+    public static function getRulesForUpdate(
+        IlluminateModel|int|string $model,
+        string $column = 'id',
+    ): array {
+        $rules = parent::getRulesForUpdate($model, $column);
+
+        if ($model instanceof self && ! $model->isDirty('password')) {
+            $rules['password'] = ['nullable', 'string'];
+        }
+
+        return $rules;
+    }
 
     /**
      * The attributes that are mass assignable.

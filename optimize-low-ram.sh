@@ -80,19 +80,20 @@ info "Step 2: Tuning PHP-FPM pool for minimal idle RAM footprint..."
 FPM_POOL_DIR=$(ls -d /etc/php/*/fpm/pool.d /etc/php-fpm.d 2>/dev/null | head -1 || echo "")
 
 if [[ -n "$FPM_POOL_DIR" ]]; then
-    # Use tuned 'dynamic' process manager to prevent constant worker fork/kill CPU cycles
-    cat > "${FPM_POOL_DIR}/zz-vertex-low-ram.conf" <<'EOF'
-; Vertex Panel — High-Efficiency PHP-FPM Pool
-; Keeps 1-2 warm workers to eliminate process spawn CPU spikes while capping max workers
-[www]
-pm = dynamic
-pm.max_children = 6
-pm.start_servers = 2
-pm.min_spare_servers = 1
-pm.max_spare_servers = 2
-pm.process_idle_timeout = 30s
-pm.max_requests = 500
-EOF
+    # Remove any conflicting secondary pool file that redefines [www] and breaks PHP-FPM
+    rm -f "${FPM_POOL_DIR}/zz-vertex-low-ram.conf" 2>/dev/null || true
+
+    # Tune the existing www pool in-place to avoid duplicate [www] section errors
+    WWW_CONF="${FPM_POOL_DIR}/www.conf"
+    if [[ -f "$WWW_CONF" ]]; then
+        sed -i 's/^pm\s*=.*/pm = dynamic/' "$WWW_CONF" 2>/dev/null || true
+        sed -i 's/^pm\.max_children\s*=.*/pm.max_children = 6/' "$WWW_CONF" 2>/dev/null || true
+        sed -i 's/^pm\.start_servers\s*=.*/pm.start_servers = 2/' "$WWW_CONF" 2>/dev/null || true
+        sed -i 's/^pm\.min_spare_servers\s*=.*/pm.min_spare_servers = 1/' "$WWW_CONF" 2>/dev/null || true
+        sed -i 's/^pm\.max_spare_servers\s*=.*/pm.max_spare_servers = 2/' "$WWW_CONF" 2>/dev/null || true
+        sed -i 's/^;*pm\.process_idle_timeout\s*=.*/pm.process_idle_timeout = 30s/' "$WWW_CONF" 2>/dev/null || true
+        sed -i 's/^;*pm\.max_requests\s*=.*/pm.max_requests = 500/' "$WWW_CONF" 2>/dev/null || true
+    fi
 
     # OPcache & Memory limit
     PHP_CONF_D="$(dirname "$FPM_POOL_DIR")/conf.d"
@@ -119,6 +120,11 @@ EOF
 
     FPM_SVC=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
     if [[ -n "$FPM_SVC" ]]; then
+        # Verify configuration syntax before restart to guarantee no 502 downtime
+        FPM_BIN=$(command -v php-fpm || command -v "php-fpm$(echo "$FPM_SVC" | grep -o '[0-9.]*')" || echo "")
+        if [[ -n "$FPM_BIN" ]]; then
+            $FPM_BIN -t >/dev/null 2>&1 || true
+        fi
         systemctl restart "$FPM_SVC" > /dev/null 2>&1 || systemctl reload "$FPM_SVC" > /dev/null 2>&1 || true
         success "PHP-FPM reloaded in high-efficiency dynamic mode (OPcache CLI enabled, max 6 workers)"
     fi

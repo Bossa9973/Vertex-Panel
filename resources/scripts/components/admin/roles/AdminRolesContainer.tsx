@@ -13,6 +13,7 @@ import {
     UserCircleIcon,
     EyeIcon,
     EyeSlashIcon,
+    UserMinusIcon,
 } from '@heroicons/react/24/outline'
 import {
     getRoles,
@@ -22,6 +23,7 @@ import {
     updateRole,
     deleteRole,
     assignRole,
+    revokeAdminUser,
     toggleUserIpPrivacy,
     type AdminRole,
     type PermissionMeta,
@@ -348,6 +350,23 @@ const AdminRolesContainer = () => {
         }
     }
 
+    const [confirmRevoke, setConfirmRevoke] = useState<AdminUser | null>(null)
+    const [revoking, setRevoking] = useState(false)
+
+    const handleRevokeAdmin = async (user: AdminUser) => {
+        setRevoking(true)
+        try {
+            const res = await revokeAdminUser(user.id)
+            await load()
+            setConfirmRevoke(null)
+            alert(res.message || `Admin privileges revoked from ${user.name}.`)
+        } catch (e: any) {
+            alert(e.response?.data?.message || 'Failed to revoke administrator access.')
+        } finally {
+            setRevoking(false)
+        }
+    }
+
     return (
         <PageContentBlock title='Admin › Roles'>
             {/* Page header */}
@@ -539,17 +558,30 @@ const AdminRolesContainer = () => {
                                                 <span className='text-[11px] text-gray-500 italic'>Full access (no role)</span>
                                             )}
                                             {isCeo && (
-                                                <select
-                                                    value={u.admin_role_id ?? ''}
-                                                    disabled={assigning[u.id]}
-                                                    onChange={e => handleAssign(u.id, e.target.value ? Number(e.target.value) : null)}
-                                                    className='px-3 py-1.5 rounded-xl text-[11px] font-bold bg-neutral-800 border border-white/10 text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer disabled:opacity-50'
-                                                >
-                                                    <option value=''>— No role (full access)</option>
-                                                    {roles.map(r => (
-                                                        <option key={r.id} value={r.id}>{r.name}</option>
-                                                    ))}
-                                                </select>
+                                                <div className='flex items-center gap-2'>
+                                                    <select
+                                                        value={u.admin_role_id ?? ''}
+                                                        disabled={assigning[u.id] || revoking}
+                                                        onChange={e => handleAssign(u.id, e.target.value ? Number(e.target.value) : null)}
+                                                        className='px-3 py-1.5 rounded-xl text-[11px] font-bold bg-neutral-800 border border-white/10 text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer disabled:opacity-50'
+                                                        title='Select an admin role or leave unassigned for full admin access'
+                                                    >
+                                                        <option value=''>— No role (full access)</option>
+                                                        {roles.map(r => (
+                                                            <option key={r.id} value={r.id}>{r.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <button
+                                                        type='button'
+                                                        onClick={() => setConfirmRevoke(u)}
+                                                        disabled={revoking}
+                                                        title={`Revoke administrator permissions from ${u.name} and demote to client`}
+                                                        className='flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-400 hover:text-rose-300 transition cursor-pointer active:scale-95 disabled:opacity-50'
+                                                    >
+                                                        <UserMinusIcon className='w-3.5 h-3.5' />
+                                                        <span className='hidden sm:inline'>Revoke Admin</span>
+                                                    </button>
+                                                </div>
                                             )}
                                         </>
                                     )}
@@ -605,6 +637,52 @@ const AdminRolesContainer = () => {
                                 className='flex-1 py-2.5 rounded-xl text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 hover:text-rose-300 transition cursor-pointer disabled:opacity-50'
                             >
                                 {deletingId === confirmDelete.id ? 'Deleting...' : 'Delete Role'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Revoke Admin confirmation modal */}
+            <Modal
+                opened={!!confirmRevoke}
+                onClose={() => setConfirmRevoke(null)}
+                title={null}
+                size='sm'
+                centered
+                withCloseButton={false}
+                padding={0}
+                radius={16}
+                styles={{
+                    modal: { backgroundColor: '#0a0c12', border: '1px solid rgba(255,255,255,0.08)' },
+                    body: { padding: 0 },
+                    overlay: { backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' },
+                }}
+            >
+                {confirmRevoke && (
+                    <div className='p-6'>
+                        <div className='w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mb-4'>
+                            <UserMinusIcon className='w-6 h-6 text-rose-400' />
+                        </div>
+                        <h3 className='text-base font-extrabold text-white mb-1'>Revoke Admin Permissions?</h3>
+                        <p className='text-xs text-gray-400 leading-relaxed mb-5'>
+                            Revoke all administrator permissions from <strong className='text-white'>{confirmRevoke.name}</strong> ({confirmRevoke.email})?
+                            They will be immediately demoted back to a standard client account and their admin API tokens will be revoked.
+                        </p>
+                        <div className='flex gap-3'>
+                            <button
+                                onClick={() => setConfirmRevoke(null)}
+                                disabled={revoking}
+                                className='flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/8 transition cursor-pointer'
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleRevokeAdmin(confirmRevoke)}
+                                disabled={revoking}
+                                className='flex-1 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/40 transition cursor-pointer active:scale-95 disabled:opacity-50'
+                            >
+                                {revoking ? 'Revoking...' : 'Revoke Admin'}
                             </button>
                         </div>
                     </div>

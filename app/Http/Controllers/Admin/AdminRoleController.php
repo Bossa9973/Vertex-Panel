@@ -238,6 +238,45 @@ class AdminRoleController extends Controller
         ]);
     }
 
+    /**
+     * POST /api/admin/roles/revoke-admin
+     * Body: { user_id: int }
+     * Revokes root_admin privileges from a user and clears their role, demoting them to a client.
+     */
+    public function revokeAdmin(Request $request): JsonResponse
+    {
+        $this->assertCeo($request);
+
+        $validated = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $user = User::findOrFail($validated['user_id']);
+
+        if ($user->email === $this->superAdminEmail()) {
+            abort(422, 'The Super Admin cannot be demoted.');
+        }
+
+        if ($request->user() && $request->user()->id === $user->id) {
+            abort(422, 'You cannot revoke your own administrator access.');
+        }
+
+        $user->tokens()->delete();
+        $user->root_admin = false;
+        $user->admin_role_id = null;
+        $user->save();
+
+        \Convoy\Facades\Activity::event('admin:role-revoke')
+            ->subject($user)
+            ->property(['user' => $user->email])
+            ->log("Revoked admin permissions and demoted user {$user->name} to client");
+
+        return response()->json([
+            'success' => true,
+            'message' => "Administrator access revoked from {$user->name}. User has been demoted to a regular client.",
+        ]);
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
     private function formatRole(AdminRole $role): array
     {

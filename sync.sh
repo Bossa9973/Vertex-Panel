@@ -184,9 +184,14 @@ if command -v php >/dev/null 2>&1 && [[ -f "${INSTALL_DIR}/artisan" ]]; then
         supervisorctl restart vertex-horizon >/dev/null 2>&1 || true
     fi
 
-    # Reload PHP-FPM and Nginx
+    # Reload PHP-FPM and Nginx (cleaning up any broken pool re-definitions first)
+    rm -f /etc/php/*/fpm/pool.d/zz-vertex-low-ram.conf /etc/php-fpm.d/zz-vertex-low-ram.conf 2>/dev/null || true
     FPM_SVC=$(systemctl list-unit-files 2>/dev/null | grep -E -o 'php[0-9.]*-fpm\.service|php-fpm\.service' | head -1 | sed 's/\.service//' || echo "")
     if [[ -n "$FPM_SVC" ]]; then
+        FPM_BIN=$(command -v php-fpm || command -v "php-fpm$(echo "$FPM_SVC" | grep -o '[0-9.]*')" || echo "")
+        if [[ -n "$FPM_BIN" ]]; then
+            $FPM_BIN -t >/dev/null 2>&1 || true
+        fi
         systemctl restart "$FPM_SVC" 2>/dev/null || systemctl reload "$FPM_SVC" 2>/dev/null || true
     fi
     systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
