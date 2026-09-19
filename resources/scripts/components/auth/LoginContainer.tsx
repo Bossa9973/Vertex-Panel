@@ -70,6 +70,10 @@ const LoginContainer = () => {
         window.location.href = '/auth/social/google/redirect'
     }
 
+    const handleDiscordSignIn = () => {
+        window.location.href = '/auth/social/discord/redirect'
+    }
+
     const handleCreateAccount = () => {
         navigate('/auth/register')
     }
@@ -82,6 +86,7 @@ const LoginContainer = () => {
             testimonials={sampleTestimonials}
             onSignIn={handleSignIn}
             onGoogleSignIn={handleGoogleSignIn}
+            onDiscordSignIn={handleDiscordSignIn}
             onCreateAccount={handleCreateAccount}
             loading={loading}
             error={errorMessage}

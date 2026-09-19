@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import DiscordSvgIcon from '@/components/elements/DiscordSvgIcon';
 
 // --- HELPER COMPONENTS (ICONS) ---
 
@@ -28,6 +29,7 @@ interface SignInPageProps {
   testimonials?: Testimonial[];
   onSignIn?: (event: React.FormEvent<HTMLFormElement>) => void;
   onGoogleSignIn?: () => void;
+  onDiscordSignIn?: () => void;
   onResetPassword?: () => void;
   onCreateAccount?: () => void;
   loading?: boolean;
@@ -43,12 +45,14 @@ const GlassInputWrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 const TestimonialCard = ({ testimonial, delay }: { testimonial: Testimonial, delay: string }) => (
-  <div className={`${delay} flex items-start gap-3 rounded-3xl bg-stone-900/70 backdrop-blur-xl border border-white/10 p-5 w-64 shadow-2xl`}>
-    <img src={testimonial.avatarSrc} className="h-10 w-10 object-cover rounded-2xl" alt="avatar" />
-    <div className="text-sm leading-snug">
-      <p className="flex items-center gap-1 font-medium text-white">{testimonial.name}</p>
-      <p className="text-stone-400 text-xs">{testimonial.handle}</p>
-      <p className="mt-1 text-stone-300 text-xs">{testimonial.text}</p>
+  <div className={`animate-element ${delay} flex items-center gap-3 p-4 rounded-2xl bg-stone-900/80 backdrop-blur-md border border-stone-800 max-w-xs shadow-lg`}>
+    <img src={testimonial.avatarSrc} alt={testimonial.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+    <div className="overflow-hidden">
+      <div className="flex items-center gap-1.5">
+        <span className="font-medium text-xs text-white truncate">{testimonial.name}</span>
+        <span className="text-[10px] text-stone-400 truncate">{testimonial.handle}</span>
+      </div>
+      <p className="text-[11px] text-stone-300 mt-1 line-clamp-2 leading-tight">{testimonial.text}</p>
     </div>
   </div>
 );
@@ -56,12 +60,13 @@ const TestimonialCard = ({ testimonial, delay }: { testimonial: Testimonial, del
 // --- MAIN COMPONENT ---
 
 export const SignInPage: React.FC<SignInPageProps> = ({
-  title = <span className="font-light text-white tracking-tighter">Welcome</span>,
-  description = "Access your account and continue your journey with us",
+  title = <span className="font-light text-white tracking-tighter">Sign in</span>,
+  description = "Access your account and manage your services.",
   heroImageSrc,
   testimonials = [],
   onSignIn,
   onGoogleSignIn,
+  onDiscordSignIn,
   onResetPassword,
   onCreateAccount,
   loading = false,
@@ -70,13 +75,16 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#0c0d0e] text-stone-100 font-sans w-full overflow-hidden">
-      {/* Left column: sign-in form */}
-      <section className="flex-1 flex items-center justify-center p-6 md:p-12 z-10">
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#0c0d0e] font-sans">
+      {/* Left column: form */}
+      <section className="flex-1 flex flex-col justify-center items-center p-6 sm:p-12 md:p-16 z-10">
         <div className="w-full max-w-md">
           <div className="flex flex-col gap-6">
             <div>
-              <h1 className="animate-element animate-delay-100 text-3xl md:text-4xl font-bold tracking-tight text-white mb-2">{title}</h1>
+              <div className="animate-element flex items-center gap-2 mb-8">
+                <span className="font-bold text-white tracking-tight text-xl">Vertex</span>
+              </div>
+              <h1 className="animate-element animate-delay-100 text-2xl sm:text-3xl font-bold tracking-tight text-white mb-2">{title}</h1>
               <p className="animate-element animate-delay-200 text-stone-400 text-sm">{description}</p>
             </div>
 
@@ -126,10 +134,28 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               <span className="px-4 text-xs text-stone-500 bg-[#0c0d0e] absolute">Or continue with</span>
             </div>
 
-            <button type="button" onClick={onGoogleSignIn} className="animate-element animate-delay-800 w-full flex items-center justify-center gap-3 border border-stone-800 hover:border-stone-700 bg-stone-900/50 rounded-2xl py-3.5 text-sm font-medium text-white hover:bg-stone-800/50 transition-all">
-                <GoogleIcon />
-                Continue with Google
-            </button>
+            <div className="animate-element animate-delay-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {onGoogleSignIn && (
+                <button
+                  type="button"
+                  onClick={onGoogleSignIn}
+                  className="w-full flex items-center justify-center gap-2.5 border border-stone-800 hover:border-stone-700 bg-stone-900/50 rounded-2xl py-3 px-4 text-xs font-semibold text-white hover:bg-stone-800/50 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                >
+                  <GoogleIcon />
+                  <span>Google</span>
+                </button>
+              )}
+              {onDiscordSignIn && (
+                <button
+                  type="button"
+                  onClick={onDiscordSignIn}
+                  className="w-full flex items-center justify-center gap-2.5 border border-indigo-500/30 hover:border-indigo-500/50 bg-indigo-600/10 hover:bg-indigo-600/20 rounded-2xl py-3 px-4 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                >
+                  <DiscordSvgIcon className="w-4 h-4 fill-current text-[#5865F2]" />
+                  <span>Discord</span>
+                </button>
+              )}
+            </div>
 
             <p className="animate-element animate-delay-900 text-center text-xs text-stone-400 mt-2">
               New to Vertex? <a href="#" onClick={(e) => { e.preventDefault(); onCreateAccount?.(); }} className="text-blue-400 font-semibold hover:underline transition-colors">Create Account</a>
