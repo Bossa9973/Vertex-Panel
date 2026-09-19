@@ -239,9 +239,9 @@ class FreeServerActivityService
      *
      * Security Pillars:
      *   1. Two-Tab Active Browser Handshake (client_nonce)
-     *   2. Hardware Physical Interaction (isTrusted + cursor trajectory)
-     *   3. Known Bypass Source Referer Blacklist
-     *   4. Datacenter / Cloud Proxy ASN Blocker
+     *   2. Hardware Physical Interaction (isTrusted — synthetic click detection only; trajectory is logged but does not burn)
+     *   3. [REMOVED] HTTP Referer check — the verify POST Referer is always the panel domain, never a bypass tool
+     *   4. Datacenter / Cloud Proxy ASN Blocker (soft log only, does not burn)
      *   5. Browser Client Integrity (webdriver / headless)
      *   6. Shrinkme Landing Stamp Gate — shrinkme_landed_at must be set by recordLanding() (unless Shrinkme is disabled)
      *
@@ -297,6 +297,10 @@ class FreeServerActivityService
         }
 
         // Pillar 2: Hardware Physical Interaction Check (isTrusted & Cursor Trajectory)
+        // NOTE: We only hard-reject on isTrusted=false (definitive bot signal).
+        // Trajectory point count is NOT used to burn sessions — many legitimate desktop
+        // users click quickly without moving the mouse, causing consistent false positives.
+        // Pillar 6 (shrinkme_landed_at) is the authoritative gate for human verification.
         $gesture = $request->input('gesture');
         if (is_array($gesture)) {
             if (empty($gesture['is_trusted'])) {
@@ -305,31 +309,21 @@ class FreeServerActivityService
                 throw new Exception('Verification Failed: Hardware interaction validation failed. Synthetic clicks and automated userscripts are prohibited.');
             }
 
+            // Log trajectory count for monitoring but do NOT burn sessions on low counts.
             $points = $gesture['points'] ?? [];
-            if (!is_array($points) || count($points) < 4) {
-                $isTouch = !empty($gesture['is_touch']);
-                if (!$isTouch) {
-                    $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
-                    Log::warning("Anti-Bypass: Insufficient cursor trajectory points (" . count($points) . ") for user #{$user->id}");
-                    throw new Exception('Verification Failed: Physical interaction validation failed. Automated scripts are prohibited.');
-                }
+            $pointCount = is_array($points) ? count($points) : 0;
+            if ($pointCount < 2 && empty($gesture['is_touch'])) {
+                Log::info("Anti-Bypass [Pillar 2 Soft]: Low cursor trajectory ({$pointCount} pts) for user #{$user->id} — not burning, Pillar 6 is authoritative.");
             }
         }
 
         // Pillar 3: Referer / Known Bypass Source Blocking
-        $referer = strtolower((string) $request->header('referer', ''));
-        $blacklistedReferers = [
-            'bypass.city', 'thebypasser', 'linkvertise-bypass', 'sub2unlock',
-            'greasyfork', 'tampermonkey', 'violentmonkey', 'free-bypasser',
-            'bypass-links', 'direct-link', 'adlinkfly-bypass', 'bypasser',
-        ];
-        foreach ($blacklistedReferers as $blocked) {
-            if (str_contains($referer, $blocked)) {
-                $renewal->update(['status' => ServerActivityRenewal::STATUS_BYPASSED_REJECTED]);
-                Log::warning("Anti-Bypass Triggered: Blacklisted referer '{$referer}' for user #{$user->id}");
-                throw new Exception('Verification Failed: Security integrity validation failed. Bypasser sources are strictly prohibited.');
-            }
-        }
+        // NOTE: The HTTP Referer header on this verify POST is ALWAYS the panel domain
+        // (e.g. https://panel.example.com/activity/claim?session=...) because the
+        // request originates from within the SPA. It can never be a bypass tool URL.
+        // Checking it here is noise and was causing false positives.
+        // The authoritative bypass gate is Pillar 6 (shrinkme_landed_at stamp).
+        // We intentionally skip this check and rely on the landing-ping gate instead.
 
         // Pillar 4: Datacenter & Cloud Proxy ASN / Reverse DNS Inspection
         // NOTE: We log suspicious IPs but do NOT burn the session here.
